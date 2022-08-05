@@ -1,0 +1,5 @@
+triton
+torch
+numpy
+jupyter
+ipykernel
