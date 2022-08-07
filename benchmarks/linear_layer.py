@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import time
 from typing import Optional
-
+from time import perf_counter_ns
 import torch
 import triton
 import triton.language as tl
@@ -216,44 +216,56 @@ print("Torch output shape:", torch_output.shape)
 assert torch.allclose(torch_output, triton_output)
 cache = torch.empty(int(256e6), dtype=torch.int8, device='cuda')
 nb_repeat = 10
-start_event = [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
-end_event = [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
+timings = list() # [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
+end_event = list() # [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
 for _ in range(nb_repeat):
     fused_matmul(x=a, weight=layer_weight, bias=None)
 
 torch.cuda.synchronize()
-for start, end in zip(start_event, end_event):
+for _ in range(nb_repeat):
     cache.zero_()
-    start.record()
+    s = perf_counter_ns()
     fused_matmul(x=a, weight=layer_weight, bias=None)
-    end.record()
+    timings.append((perf_counter_ns() - s) * 1e-6)
 torch.cuda.synchronize()
 
-times = torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)])
+times = torch.tensor(timings)
 triton_time = torch.median(times).tolist()
 print(f"Triton time: {triton_time:.2f} ms")
+timings.clear()
 
 for _ in range(nb_repeat):
     linear_layer(a)
 
 
 torch.cuda.synchronize()
-for start, end in zip(start_event, end_event):
+for _ in range(nb_repeat):
     cache.zero_()
-    start.record()
+    s = perf_counter_ns()
     linear_layer(a)
-    end.record()
+    timings.append((perf_counter_ns() - s) * 1e-6)
 torch.cuda.synchronize()
 
-times = torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)])
+times = torch.tensor(timings)
 torch_time = torch.median(times).tolist()
 print(f"Torch time: {torch_time:.4f} ms")
 print(f"speedup: {torch_time / triton_time:.4f}")
 
-#
-# t0 = benchmark.Timer(
-#     stmt='fused_matmul(x=a, weight=layer_weight, bias=None); torch.cuda.synchronize()',
-#     setup='from __main__ import fused_matmul',
-#     globals={'a': a, 'layer_weight': layer_weight})
-#
-# print(t0.timeit(10))
+
+t0 = benchmark.Timer(
+    stmt='fused_matmul(x=a, weight=layer_weight, bias=None)',
+    setup='from __main__ import fused_matmul',
+    globals={'a': a, 'layer_weight': layer_weight},
+    description="triton fused matmul")
+
+print(t0.timeit(10))
+print("----")
+t1 = benchmark.Timer(
+    stmt='linear_layer(a)',
+    setup='from __main__ import linear_layer',
+    globals={'a': a, 'linear_layer': linear_layer},
+    description="linear_layer")
+
+print(t1.timeit(10))
+
+
