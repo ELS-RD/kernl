@@ -1,19 +1,8 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
-#
-# This source code is licensed under the BSD license found in the
-# LICENSE file in the root directory of this source tree.
-import time
 from typing import Optional
 from time import perf_counter_ns
 import torch
 import triton
 import triton.language as tl
-
-# CREDITS: Initially inspired by the Triton tutorial on matrix multiplications
-
-
-# fmt: off
-from torch.utils import benchmark
 
 
 @triton.autotune(
@@ -190,18 +179,25 @@ def fused_matmul(
     return outputs, act_inputs if save_act_inputs else None
 
 
-batch = 8
-M = 512
-K = 256
+def get_mean(measures: list[float]) -> float:
+    assert len(measures) == nb_repeat  # check we have not forgot to clear data
+    return sum(measures) / nb_repeat
 
 
-print("batch M K", batch, M, K)
+nb_repeat = 10
+batch = 1
+M = 768
+N = 256
+K = 512
+
+print("batch M N K", batch, M, N, K)
 
 torch.manual_seed(0)
 a = torch.randn((batch, M, K), device='cuda', dtype=torch.float16, requires_grad=False)
-layer_weight = torch.randn((K*4, K), device='cuda', dtype=torch.float16, requires_grad=False)
+b = torch.randn_like(a)
+layer_weight = torch.randn((N, K), device='cuda', dtype=torch.float16, requires_grad=False)
 
-linear_layer = torch.nn.Linear(K, K*4, bias=False, device="cuda", dtype=torch.float16)
+linear_layer = torch.nn.Linear(K, N, bias=False, device="cuda", dtype=torch.float16)
 linear_layer.weight.data = layer_weight
 
 print("a", a.shape)
@@ -213,15 +209,16 @@ triton_output, _ = fused_matmul(x=a, weight=layer_weight, bias=None)
 print("Triton output shape:", triton_output.shape)
 print("Torch output shape:", torch_output.shape)
 
-assert torch.allclose(torch_output, triton_output)
+print(torch.max(torch.abs(triton_output - torch_output)))
+assert torch.allclose(torch_output, triton_output, atol=1e-1)
 cache = torch.empty(int(256e6), dtype=torch.int8, device='cuda')
-nb_repeat = 10
-timings = list() # [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
-end_event = list() # [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
+
+timings = list()
+end_event = list()
 for _ in range(nb_repeat):
     fused_matmul(x=a, weight=layer_weight, bias=None)
-
 torch.cuda.synchronize()
+
 for _ in range(nb_repeat):
     cache.zero_()
     s = perf_counter_ns()
@@ -229,16 +226,14 @@ for _ in range(nb_repeat):
     timings.append((perf_counter_ns() - s) * 1e-6)
 torch.cuda.synchronize()
 
-times = torch.tensor(timings)
-triton_time = torch.median(times).tolist()
+triton_time = get_mean(timings)
 print(f"Triton time: {triton_time:.2f} ms")
 timings.clear()
 
 for _ in range(nb_repeat):
     linear_layer(a)
-
-
 torch.cuda.synchronize()
+
 for _ in range(nb_repeat):
     cache.zero_()
     s = perf_counter_ns()
@@ -246,26 +241,39 @@ for _ in range(nb_repeat):
     timings.append((perf_counter_ns() - s) * 1e-6)
 torch.cuda.synchronize()
 
-times = torch.tensor(timings)
-torch_time = torch.median(times).tolist()
+torch_time = get_mean(timings)
 print(f"Torch time: {torch_time:.4f} ms")
 print(f"speedup: {torch_time / triton_time:.4f}")
+timings.clear()
 
 
-t0 = benchmark.Timer(
-    stmt='fused_matmul(x=a, weight=layer_weight, bias=None)',
-    setup='from __main__ import fused_matmul',
-    globals={'a': a, 'layer_weight': layer_weight},
-    description="triton fused matmul")
+s = torch.cuda.Stream()
+s.wait_stream(torch.cuda.current_stream())
+with torch.cuda.stream(s):
+    for _ in range(nb_repeat):
+        fused_matmul(x=a, weight=layer_weight, bias=None)
+torch.cuda.current_stream().wait_stream(s)
 
-print(t0.timeit(10))
-print("----")
-t1 = benchmark.Timer(
-    stmt='linear_layer(a)',
-    setup='from __main__ import linear_layer',
-    globals={'a': a, 'linear_layer': linear_layer},
-    description="linear_layer")
-
-print(t1.timeit(10))
+g = torch.cuda.CUDAGraph()
+with torch.cuda.graph(g):
+    output_cuda_graph, _ = fused_matmul(x=a, weight=layer_weight, bias=None)
 
 
+a.copy_(b)
+g.replay()
+assert torch.allclose(output_cuda_graph, linear_layer(b), atol=1e-1)
+
+torch.cuda.synchronize()
+
+for _ in range(nb_repeat):
+    cache.zero_()
+    s = perf_counter_ns()
+    a.copy_(b)
+    g.replay()
+    timings.append((perf_counter_ns() - s) * 1e-6)
+torch.cuda.synchronize()
+
+triton_time = get_mean(timings)
+print(f"Triton + cuda graphs time: {triton_time:.4f} ms")
+print(f"speedup: {torch_time / triton_time:.4f}")
+timings.clear()
