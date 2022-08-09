@@ -133,7 +133,7 @@ def kernel_fma(
 
 
 # Activation needs to be a triton kernel
-def fused_matmul(
+def linear_layer(
         x: torch.Tensor,
         weight: torch.Tensor,
         bias: Optional[torch.Tensor],
@@ -188,72 +188,3 @@ def fused_matmul(
     outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
 
     return outputs, act_inputs if save_act_inputs else None
-
-
-batch = 8
-M = 512
-K = 256
-
-
-print("batch M K", batch, M, K)
-
-torch.manual_seed(0)
-a = torch.randn((batch, M, K), device='cuda', dtype=torch.float16, requires_grad=False)
-layer_weight = torch.randn((K*4, K), device='cuda', dtype=torch.float16, requires_grad=False)
-
-linear_layer = torch.nn.Linear(K, K*4, bias=False, device="cuda", dtype=torch.float16)
-linear_layer.weight.data = layer_weight
-
-print("a", a.shape)
-print("linear_layer.weight", linear_layer.weight.shape)
-torch_output = linear_layer(a)
-
-triton_output, _ = fused_matmul(x=a, weight=layer_weight, bias=None)
-
-print("Triton output shape:", triton_output.shape)
-print("Torch output shape:", torch_output.shape)
-
-assert torch.allclose(torch_output, triton_output)
-cache = torch.empty(int(256e6), dtype=torch.int8, device='cuda')
-nb_repeat = 10
-start_event = [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
-end_event = [torch.cuda.Event(enable_timing=True) for _ in range(nb_repeat)]
-for _ in range(nb_repeat):
-    fused_matmul(x=a, weight=layer_weight, bias=None)
-
-torch.cuda.synchronize()
-for start, end in zip(start_event, end_event):
-    cache.zero_()
-    start.record()
-    fused_matmul(x=a, weight=layer_weight, bias=None)
-    end.record()
-torch.cuda.synchronize()
-
-times = torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)])
-triton_time = torch.median(times).tolist()
-print(f"Triton time: {triton_time:.2f} ms")
-
-for _ in range(nb_repeat):
-    linear_layer(a)
-
-
-torch.cuda.synchronize()
-for start, end in zip(start_event, end_event):
-    cache.zero_()
-    start.record()
-    linear_layer(a)
-    end.record()
-torch.cuda.synchronize()
-
-times = torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)])
-torch_time = torch.median(times).tolist()
-print(f"Torch time: {torch_time:.4f} ms")
-print(f"speedup: {torch_time / triton_time:.4f}")
-
-#
-# t0 = benchmark.Timer(
-#     stmt='fused_matmul(x=a, weight=layer_weight, bias=None); torch.cuda.synchronize()',
-#     setup='from __main__ import fused_matmul',
-#     globals={'a': a, 'layer_weight': layer_weight})
-#
-# print(t0.timeit(10))
