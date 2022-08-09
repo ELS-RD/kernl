@@ -199,9 +199,7 @@ class CudaGraph:
     def compile(self, inputs: torch.Tensor) -> torch.cuda.graphs.CUDAGraph:
         self.static_input.resize_as_(inputs)
         self.static_input.copy_(inputs)
-        print("inputs.shape", inputs.shape)
-        self.static_output.resize_((inputs.shape[1], self.weights.shape[0]))
-        print("self.static_output.shape", self.static_output.shape)
+        self.static_output.resize_((inputs.size()[1], self.weights.size()[0]))
         # change CUDA stream
         s = torch.cuda.Stream()
         s.wait_stream(torch.cuda.current_stream())
@@ -217,7 +215,7 @@ class CudaGraph:
                                                 bias=None)
         return g
 
-    def rebuild(self):
+    def rebuild_all_graphs(self):
         logging.info("rebuild all graphs")
         for shape in self.graphs.keys():
             self.graphs[shape] = self.compile(
@@ -229,15 +227,19 @@ class CudaGraph:
             self.static_input = torch.empty(new_shape, device=inputs.device, dtype=inputs.dtype, requires_grad=False)
             self.static_output = torch.empty(new_shape, device=inputs.device, dtype=inputs.dtype,
                                              requires_grad=False)
-            self.rebuild()
-        self.static_output.resize_((inputs.shape[1], self.weights.shape[0]))
-        self.static_input.resize_as_(inputs)
-        self.static_input.copy_(inputs)
-        if inputs.shape in self.graphs:
-            g = self.graphs[inputs.shape]
+            self.rebuild_all_graphs()
+        inputs_ = inputs.flatten(0, 1)
+        M, K = inputs_.size()
+        N, K = self.weights.size()
+        self.static_input.resize_as_(inputs_)
+        self.static_input.copy_(inputs_)
+        self.static_output.resize_((M, N))
+        if inputs.size() in self.graphs:
+            g = self.graphs[inputs.size()]
         else:
-            logging.info(f"compiling graph for shape {inputs.shape}")
+            logging.info(f"compiling graph for shape {inputs.size()}")
             g = self.compile(inputs)
-            self.graphs[inputs.shape] = g
+            self.graphs[inputs.size()] = g
         g.replay()
+        self.static_output.resize_(inputs.size()[0], inputs.size()[1], N)
         return self.static_output
