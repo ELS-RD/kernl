@@ -139,9 +139,11 @@ class BenchmarkFixture(object):
         start_event = [torch.cuda.Event(enable_timing=True) for i in range(n_repeat)]
         end_event = [torch.cuda.Event(enable_timing=True) for i in range(n_repeat)]
         cache = torch.empty(int(256e6), dtype=torch.int8, device='cuda')
+
+        return_value = None
         # Warm-up
         for _ in range(n_warmup):
-            function_to_benchmark(*args, **kwargs)
+            return_value = function_to_benchmark(*args, **kwargs)
         # Benchmark
         for i in range(n_repeat):
             # we don't want `fn` to accumulate gradient values
@@ -181,6 +183,7 @@ class BenchmarkFixture(object):
 
         self.add_result(BenchmarkResult(self, gpu_data, cpu_data))
 
+        return return_value
 
 class BenchmarkSession(object):
     def __init__(self, config):
