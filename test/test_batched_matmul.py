@@ -12,9 +12,11 @@ def test_benchmark(benchmark, m, n, k, batch, implementation):
 
     a = torch.randn((batch, m, k), device='cuda', dtype=torch.float16, requires_grad=False)
     b = torch.randn((batch, k, n), device='cuda', dtype=torch.float16, requires_grad=False)
+    expected = torch.matmul(a, b)
     if implementation == "cublas":
-        benchmark(torch.matmul, a, b)
-    if implementation == "triton":
+        value = benchmark(torch.matmul, a, b)
+    elif implementation == "triton":
         value = benchmark(batched_matmul, a, b)
-        expected = torch.matmul(a, b)
-        torch.allclose(value, expected, 1e-2)
+    else:
+        raise ValueError(f"Unknown implementation: {implementation}")
+    torch.allclose(value, expected, atol=1e-2)

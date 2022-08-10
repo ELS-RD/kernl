@@ -32,4 +32,4 @@ def test_benchmark(benchmark, size, batch, implementation):
         value = benchmark(torch_linear_layer, input=a)
     else:
         raise ValueError(f"Unknown implementation {implementation}")
-    assert torch.allclose(value, expected)
+    assert torch.allclose(value, expected, atol=1e-2)
