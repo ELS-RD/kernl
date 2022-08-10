@@ -18,8 +18,13 @@ pytest
 
 ### Compare benchmarks
 
-You can group benchmark results to compare them
+You can group benchmark results to compare them.  
+Check that the field you are requesting is used in the benchmark you want.
+
+```python
 
 ```shell
-pytest --benchmark-group-by fullfunc,param:batch,param:size
+pytest test/test_linear_layer.py --benchmark-group-by fullfunc,param:batch,param:size
+# or for all tests (at the time of writing)
+pytest --benchmark-group-by fullfunc,param:batch
 ```
