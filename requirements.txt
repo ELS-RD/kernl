@@ -3,3 +3,6 @@ torch
 numpy
 jupyter
 ipykernel
+pytest
+tabulate
+termcolor
