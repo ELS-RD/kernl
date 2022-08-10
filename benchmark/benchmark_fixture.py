@@ -1,4 +1,8 @@
+from typing import Callable, Optional, Iterable
+
 import torch
+from _pytest.python import Function
+
 from benchmark.benchmark_data import BenchmarkData
 from benchmark.benchmark_result import BenchmarkResult
 from time import perf_counter_ns
@@ -7,7 +11,7 @@ from time import perf_counter_ns
 class BenchmarkFixture(object):
     _precisions = {}
 
-    def __init__(self, node, add_result, warmup=25, rep=100, grad_to_none=None, group=None):
+    def __init__(self, node: Function, add_result: Callable, warmup: int = 25, rep: int = 100, grad_to_none: Optional[Iterable[torch.Tensor]]=None):
         self.name = node.name
         self.fullname = node._nodeid
         self.warmup = warmup
@@ -20,9 +24,8 @@ class BenchmarkFixture(object):
         else:
             self.param = None
             self.params = None
-        self.group = group
 
-    def __call__(self, function_to_benchmark, *args, **kwargs):
+    def __call__(self, function_to_benchmark: Callable, *args, **kwargs):
         # Estimate the runtime of the function
         function_to_benchmark(*args, **kwargs)
         torch.cuda.synchronize()
