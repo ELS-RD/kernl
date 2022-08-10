@@ -22,16 +22,14 @@ def test_benchmark(benchmark, size, batch, implementation):
     expected = torch_linear_layer(a)
 
     if implementation == "cublas":
-        benchmark(torch_linear_layer, a)
-    if implementation == "triton":
-        benchmark(linear_layer, x=a, weight=layer_weight, bias=None)
-        value, _ = linear_layer(x=a, weight=layer_weight, bias=None)
-        assert torch.allclose(value, expected)
-    if implementation == "triton_cuda_graph":
+        value = benchmark(torch_linear_layer, a)
+    elif implementation == "triton":
+        value, _ = benchmark(linear_layer, x=a, weight=layer_weight, bias=None)
+    elif implementation == "triton_cuda_graph":
         cg = CudaGraph(weights=layer_weight)
-        benchmark(cg.run, inputs=a)
-        value = cg.run(inputs=a)
-        assert value.shape == expected.shape
-        assert torch.allclose(value, expected)
-    if implementation == "pytorch":
-        benchmark(torch_linear_layer, input=a)
+        value = benchmark(cg.run, inputs=a)
+    elif implementation == "pytorch":
+        value = benchmark(torch_linear_layer, input=a)
+    else:
+        raise ValueError(f"Unknown implementation {implementation}")
+    assert torch.allclose(value, expected)
