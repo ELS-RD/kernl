@@ -49,12 +49,12 @@ def _fwd_kernel(
     t_ptrs = TMP + head_idx * seq_length + offs_m
 
     # initialize pointer to m and d used to compute normalizer for softmax
-    l_i = tl.zeros([BLOCK_M], dtype=tl.float32) - float("inf")
-    d_i = tl.zeros([BLOCK_M], dtype=tl.float32)
+    l_i = tl.zeros((BLOCK_M,), dtype=tl.float32) - float("inf")
+    d_i = tl.zeros((BLOCK_M,), dtype=tl.float32)
 
     # initialize the main loop accumulator, it is the size of a block of full rows, written to the output for the
     # current head
-    acc = tl.zeros([BLOCK_M, BLOCK_DHEAD], dtype=tl.float32)
+    acc = tl.zeros((BLOCK_M, BLOCK_DHEAD), dtype=tl.float32)
 
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
