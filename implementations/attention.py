@@ -2,6 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
+
 @triton.jit
 def _fwd_kernel(
         batch,
@@ -22,6 +23,39 @@ def _fwd_kernel(
         BLOCK_DHEAD: tl.constexpr,
         BLOCK_N: tl.constexpr,
 ):
+    """
+    Computes attention
+    Each head is size (seq_length, BLOCK_DHEAD)
+
+    @param batch: Batch size
+    @param heads: Number of heads per batch
+    @param seq_length: Sequence length
+    @param Q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param K: Key matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param V: Value matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param sm_scale: Scaling factor applied after operation QxK
+    @param TMP: Temporary variable to fix a compiler bug
+    @param output: Output matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param stride_qz: matrix q stride for batch dimension
+    @param stride_qh: matrix q stride for head dimension
+    @param stride_qm: matrix q stride for rows, called "dimension m"
+    @param stride_qk: matrix q stride for columns
+    @param stride_kz: matrix k stride for batch dimension
+    @param stride_kh: matrix k stride for head dimension
+    @param stride_kn: matrix k stride for rows, called "dimension n"
+    @param stride_kk: matrix k stride for columns
+    @param stride_vz: matrix v stride for batch dimension
+    @param stride_vh: matrix v stride for head dimension
+    @param stride_vk: matrix v stride for columns
+    @param stride_vn: matrix v stride for rows
+    @param stride_oz: output matrix stride for batch dimension
+    @param stride_oh: output matrix stride for head dimension
+    @param stride_om: output matrix stride for rows
+    @param stride_on: output matrix stride for columns
+    @param BLOCK_M: number of rows computed in a single instance for matrix Q
+    @param BLOCK_DHEAD: number of columns per head
+    @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
+    """
     # Index of the block on M axis (M axis is the rows of matrix K)
     m_block_idx = tl.program_id(0)
     # Global index of the current head
@@ -78,7 +112,7 @@ def _fwd_kernel(
         # We start with the current block qk
         l_j = tl.max(qk, 1)
 
-        p = tl.exp(qk - l_j[:, None]) # CHANGE !!! Current numerators
+        p = tl.exp(qk - l_j[:, None])  # CHANGE !!! Current numerators
         d_j = tl.sum(p, 1)
 
         l_new = tl.maximum(l_i, l_j)
@@ -126,6 +160,15 @@ def _fwd_kernel(
 
 
 def attention_forward(q, k, v, sm_scale):
+    """
+    Computes attention
+
+    @param q: Query matrix size (batch, heads, seq_length, dhead)
+    @param k: Key matrix size (batch, heads, seq_length, dhead)
+    @param v: Value matrix size (batch, heads, seq_length, dhead)
+    @param sm_scale: Scaling factor applied after operation QxK
+    @return:
+    """
     # Constraints
     # Queries and keys have the same d_k size
     assert q.shape[-1] == k.shape[-1]
