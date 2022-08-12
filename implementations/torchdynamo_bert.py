@@ -56,8 +56,22 @@ def get_model_dynamo_nvfuser_ofi():
     base = get_model_baseline()
 
     def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        cudagraphs_compiled = BACKENDS["nvfuser_ofi"](gm, example_inputs)
-        return cudagraphs_compiled
+        compiled = BACKENDS["nvfuser_ofi"](gm, example_inputs)
+        return compiled
+
+    def run(*args, **kwargs):
+        with torchdynamo.optimize(my_compiler):
+            return base(*args, **kwargs)
+
+    return run
+
+
+def get_model_dynamo_cudagraphs():
+    base = get_model_baseline()
+
+    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+        compiled = BACKENDS["cudagraphs"](gm, example_inputs)
+        return compiled
 
     def run(*args, **kwargs):
         with torchdynamo.optimize(my_compiler):
@@ -81,9 +95,7 @@ def get_model_dynamo_droput_removed():
     return run
 
 
-def get_model_dynamo_fused_attention(is_causal=False):
-    base = get_model_baseline()
-
+def attention_fusion(gm: torch.fx.GraphModule, is_causal: bool):
     def pattern(permute_42, permute_40, attention_mask, permute_41):
         transpose_10 = permute_40.transpose(-1, -2)
         matmul_20 = torch.matmul(permute_42, transpose_10)
@@ -96,11 +108,32 @@ def get_model_dynamo_fused_attention(is_causal=False):
     def replace(permute_42, permute_40, attention_mask, permute_41):
         return attention_wrapper(permute_42, permute_40, permute_41, 1 / 8.0, is_causal, attention_mask)
 
+    remove_dropout(gm)
+    replace_pattern(gm, pattern, replace)
+    gm.recompile()
+
+
+def get_model_dynamo_fused_attention(is_causal=False):
+    base = get_model_baseline()
+
     def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        remove_dropout(gm)
-        replace_pattern(gm, pattern, replace)
-        gm.recompile()
-        return gm.forward  # return a python callable
+        attention_fusion(gm, is_causal)
+        return gm  # return a python callable
+
+    def run(*args, **kwargs):
+        with torchdynamo.optimize(my_compiler):
+            return base(*args, **kwargs)
+
+    return run
+
+
+def get_model_dynamo_fused_attention_plus_dynamo_cudagraphs(is_causal=False):
+    base = get_model_baseline()
+
+    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+        attention_fusion(gm, is_causal)
+        compiled = BACKENDS["cudagraphs"](gm, example_inputs)
+        return compiled  # return a python callable
 
     def run(*args, **kwargs):
         with torchdynamo.optimize(my_compiler):

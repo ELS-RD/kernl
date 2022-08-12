@@ -3,7 +3,8 @@ from typing import Tuple, Dict
 import torch
 import pytest
 from implementations.torchdynamo_bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
-    get_model_dynamo_droput_removed, get_model_dynamo_fused_attention
+    get_model_dynamo_droput_removed, get_model_dynamo_fused_attention, get_model_dynamo_cudagraphs, \
+    get_model_dynamo_fused_attention_plus_dynamo_cudagraphs
 
 
 def get_pytorch_input(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
@@ -11,6 +12,7 @@ def get_pytorch_input(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
         "input_ids": torch.randint(2, 1000, size=size, dtype=torch.int32, device="cuda"),
         "attention_mask": None,
     }
+
 
 def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     batch, seq_length = size
@@ -28,7 +30,9 @@ def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     "torchdynamo",
     "torchdynamo_nvfuser_ofi",
     "torchdynamo_no_dropout",
-    "torchdynamo_fused_attention"
+    "torchdynamo_fused_attention",
+    "torchdynamo_cudagraphs",
+    "torchdynamo_fused_attention+dynamo_cudagraphs"
 ])
 def test_benchmark(benchmark, batch, seq_length, implementation):
     with torch.inference_mode():
@@ -59,6 +63,16 @@ def test_benchmark(benchmark, batch, seq_length, implementation):
             value = benchmark(model, **input)
             # WARNING PRECISION CHANGED HERE !!!!
             assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
+        if implementation == "torchdynamo_cudagraphs":
+            model = get_model_dynamo_cudagraphs()
+            value = benchmark(model, **input)
+            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-2)
+        if implementation == "torchdynamo_fused_attention+dynamo_cudagraphs":
+            model = get_model_dynamo_fused_attention_plus_dynamo_cudagraphs()
+            value = benchmark(model, **input)
+            # WARNING PRECISION CHANGED HERE !!!!
+            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
+
 
 @pytest.mark.parametrize("batch", [1, 8, 16])
 @pytest.mark.parametrize("seq_length", [512])
