@@ -18,7 +18,7 @@ def _fwd_kernel(
         stride_kz, stride_kh, stride_kn, stride_kk,
         stride_vz, stride_vh, stride_vk, stride_vn,
         stride_oz, stride_oh, stride_om, stride_on,
-
+        IS_CAUSAL: tl.constexpr,
         BLOCK_M: tl.constexpr,
         BLOCK_DHEAD: tl.constexpr,
         BLOCK_N: tl.constexpr,
@@ -94,10 +94,13 @@ def _fwd_kernel(
     # it will stay in SRAM throughout
     q = tl.load(q_ptrs)
 
+    n_end = seq_length
+    if IS_CAUSAL:
+        n_end = (m_block_idx + 1) * BLOCK_M,
     # loop over k, v and update accumulator
     # n_row_offset is the row offset on dimension N of the current block
     # It's used for booth the N dimension of K and V because they are handled at the same time
-    for n_row_offset in range(0, seq_length, BLOCK_N):
+    for n_row_offset in range(0, n_end, BLOCK_N):
         n_row_offset = tl.multiple_of(n_row_offset, BLOCK_N)
         # We load the current block in K in SRAM
         # We do the first multiplication between the block in Q and the current block in K
@@ -106,6 +109,8 @@ def _fwd_kernel(
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
+        if IS_CAUSAL:
+            qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions
@@ -159,7 +164,7 @@ def _fwd_kernel(
     tl.store(out_ptrs, acc)
 
 
-def attention_forward(q, k, v, sm_scale):
+def attention_forward(q, k, v, sm_scale, is_causal=False):
     """
     Computes attention
 
@@ -167,6 +172,7 @@ def attention_forward(q, k, v, sm_scale):
     @param k: Key matrix size (batch, heads, seq_length, dhead)
     @param v: Value matrix size (batch, heads, seq_length, dhead)
     @param sm_scale: Scaling factor applied after operation QxK
+    @param is_causal: Autoregressive decoder attention
     @return:
     """
     # Constraints
@@ -194,6 +200,7 @@ def attention_forward(q, k, v, sm_scale):
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         v.stride(0), v.stride(1), v.stride(2), v.stride(3),
         output.stride(0), output.stride(1), output.stride(2), output.stride(3),
+        IS_CAUSAL=is_causal,
         BLOCK_M=BLOCK_M,
         BLOCK_N=BLOCK_N,
         BLOCK_DHEAD=dhead,

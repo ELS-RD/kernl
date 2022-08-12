@@ -9,11 +9,11 @@ from torchdynamo.optimizations import BACKENDS
 from implementations.attention import attention_forward
 
 
-def attention_wrapper(q, k, v, sm_scale, *args):
+def attention_wrapper(q, k, v, sm_scale, is_causal, *args):
     q = q.contiguous()
     k = k.contiguous()
     v = v.contiguous()
-    return attention_forward(q, k, v, sm_scale)
+    return attention_forward(q, k, v, sm_scale, is_causal=is_causal)
 
 
 torch.fx.wrap('attention_wrapper')
@@ -52,7 +52,7 @@ def remove_dropout(gm: torch.fx.GraphModule):
     gm.recompile()
 
 
-def get_model_dynamo_nvfuser_wofi():
+def get_model_dynamo_nvfuser_ofi():
     base = get_model_baseline()
 
     def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
@@ -81,7 +81,7 @@ def get_model_dynamo_droput_removed():
     return run
 
 
-def get_model_dynamo_fused_attention():
+def get_model_dynamo_fused_attention(is_causal=False):
     base = get_model_baseline()
 
     def pattern(permute_42, permute_40, attention_mask, permute_41):
@@ -94,7 +94,7 @@ def get_model_dynamo_fused_attention():
         return matmul_21
 
     def replace(permute_42, permute_40, attention_mask, permute_41):
-        return attention_wrapper(permute_42, permute_40, permute_41, 1 / 8.0, attention_mask)
+        return attention_wrapper(permute_42, permute_40, permute_41, 1 / 8.0, is_causal, attention_mask)
 
     def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         remove_dropout(gm)

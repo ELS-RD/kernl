@@ -88,15 +88,11 @@ def _fwd_kernel_original(
 
 
 def masked_attention_reference(q, k, v, sm_scale):
-    Z = q.size(0)
-    H = q.size(1)
-    N_CTX = q.size(2)
+    seq_length = q.size(2)
     # reference implementation
-    M = torch.tril(torch.ones((N_CTX, N_CTX), device="cuda"))
+    M = torch.tril(torch.ones((seq_length, seq_length), device="cuda"))
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
-    for z in range(Z):
-        for h in range(H):
-            p[:, :, M == 0] = float("-inf")
+    p = torch.where(M == 0, float("-inf"), p)
     p = torch.softmax(p.float(), dim=-1).half()
     ref_out = torch.matmul(p, v)
     return ref_out
