@@ -66,13 +66,18 @@ def _fwd_kernel(
     offs_n = tl.arange(0, BLOCK_N)  # First block on N dimension
     offs_d = tl.arange(0, BLOCK_DHEAD)  # Full head
 
+    current_batch = head_idx // heads
+    current_head = head_idx % heads
     # memory offsets matrices on whole Q, K, V matrices
     # Offsets for the current block on matrix Q
-    off_q = head_idx * stride_qh + offs_m[:, None] * stride_qm + offs_d[None, :] * stride_qk
+    off_q = current_batch * stride_qz + current_head * stride_qh + offs_m[:, None] * stride_qm + offs_d[None,
+                                                                                                 :] * stride_qk
     # Offsets for the first block on matrix K
-    off_k = head_idx * stride_kh + offs_n[:, None] * stride_kn + offs_d[None, :] * stride_kk
+    off_k = current_batch * stride_kz + current_head * stride_kh + offs_n[:, None] * stride_kn + offs_d[None,
+                                                                                                 :] * stride_kk
     # Offsets for the first block on matrix V
-    off_v = head_idx * stride_vh + offs_n[:, None] * stride_qm + offs_d[None, :] * stride_qk
+    off_v = current_batch * stride_vz + current_head * stride_vh + offs_n[:, None] * stride_qm + offs_d[None,
+                                                                                                 :] * stride_qk
 
     # pointers to blocks in Q, K, V
     q_ptrs = Q + off_q
@@ -129,7 +134,7 @@ def _fwd_kernel(
         # divide by the normalization. It's strange to do it this way instead of simply computing the softmax for qk,
         # but since all needed operations are already done for updating m and d, it seems faster
         p_scale = beta / d_new
-        
+
         qk_softmax = numerators * p_scale[:, None]
 
         # From here, qk_softmax is correct related to all over previously done block
@@ -160,9 +165,11 @@ def _fwd_kernel(
     # For some reason we need to re-init this variable
     # The other variables in the original implementations seem not needed
     offs_n = tl.arange(0, BLOCK_DHEAD)
-    off_o = head_idx * stride_oh + offs_m[:, None] * stride_om + offs_n[None, :] * stride_on
+    off_o = current_batch * stride_oz + current_head * stride_oh + offs_m[:, None] * stride_om + offs_n[None,
+                                                                                                 :] * stride_on
     out_ptrs = output + off_o
     tl.store(out_ptrs, acc)
+
 
 def attention_forward(q, k, v, sm_scale, is_causal=False):
     """
@@ -185,6 +192,8 @@ def attention_forward(q, k, v, sm_scale, is_causal=False):
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
+    # The output matrix will have the same memory layout as Q, is it always a good idea ? Should we move this outside
+    # this func ?
     output = torch.empty_like(q)
     _fwd_kernel[grid](
         batch,

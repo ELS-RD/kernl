@@ -41,37 +41,30 @@ def test_benchmark(benchmark, batch, seq_length, implementation):
 
         model_baseline = get_model_baseline()
         expected = model_baseline(**input)["last_hidden_state"]
+        value = None
         if implementation == "baseline":
             model_baseline(**input)
             value = benchmark(model_baseline, **input)
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-2)
         if implementation == "torchdynamo":
             model = get_model_dynamo()
             value = benchmark(model, **input)
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-2)
         if implementation == "torchdynamo_nvfuser_ofi":
             model = get_model_dynamo_nvfuser_ofi()
             value = benchmark(model, **input)
-            # WARNING PRECISION CHANGED HERE !!!!
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
         if implementation == "torchdynamo_no_dropout":
             model = get_model_dynamo_droput_removed()
             value = benchmark(model, **input)
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-2)
         if implementation == "torchdynamo_fused_attention":
             model = get_model_dynamo_fused_attention()
             value = benchmark(model, **input)
-            # WARNING PRECISION CHANGED HERE !!!!
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
         if implementation == "torchdynamo_cudagraphs":
             model = get_model_dynamo_cudagraphs()
             value = benchmark(model, **input)
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-2)
         if implementation == "torchdynamo_fused_attention+dynamo_cudagraphs":
             model = get_model_dynamo_fused_attention_plus_dynamo_cudagraphs()
             value = benchmark(model, **input)
-            # WARNING PRECISION CHANGED HERE !!!!
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
+
+        assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
 
 
 @pytest.mark.parametrize("batch", [1, 8, 16])
@@ -87,12 +80,11 @@ def test_benchmark_causal_mask(benchmark, batch, seq_length, implementation):
 
         model_baseline = get_model_baseline()
         expected = model_baseline(**input)["last_hidden_state"]
+        value = None
         if implementation == "baseline":
             model_baseline(**input)
             value = benchmark(model_baseline, **input)
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-2)
         if implementation == "torchdynamo_fused_attention":
             model = get_model_dynamo_fused_attention(is_causal=True)
             value = benchmark(model, **input)
-            # WARNING PRECISION CHANGED HERE !!!!
-            assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
+        assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)

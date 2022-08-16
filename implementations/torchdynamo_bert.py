@@ -10,9 +10,6 @@ from implementations.attention import attention_forward
 
 
 def attention_wrapper(q, k, v, sm_scale, is_causal, *args):
-    q = q.contiguous()
-    k = k.contiguous()
-    v = v.contiguous()
     return attention_forward(q, k, v, sm_scale, is_causal=is_causal)
 
 
@@ -41,7 +38,7 @@ def get_model_dynamo():
 def remove_dropout(gm: torch.fx.GraphModule):
     for n in gm.graph.nodes:
         # If the target matches one of the patterns
-        if "attention_self_dropout" in n.name:
+        if "_dropout" in n.name:
             # Set the insert point, add the new node, and replace all uses
             # of `n` with the new node
             with gm.graph.inserting_after(n):
