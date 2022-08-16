@@ -3,7 +3,7 @@ from typing import Tuple, Dict
 import torch
 import pytest
 from implementations.torchdynamo_bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
-    get_model_dynamo_droput_removed, get_model_dynamo_fused_attention, get_model_dynamo_cudagraphs, \
+    get_model_dynamo_dropout_removed, get_model_dynamo_fused_attention, get_model_dynamo_cudagraphs, \
     get_model_dynamo_fused_attention_plus_dynamo_cudagraphs
 
 
@@ -52,7 +52,7 @@ def test_benchmark(benchmark, batch, seq_length, implementation):
             model = get_model_dynamo_nvfuser_ofi()
             value = benchmark(model, **input)
         if implementation == "torchdynamo_no_dropout":
-            model = get_model_dynamo_droput_removed()
+            model = get_model_dynamo_dropout_removed()
             value = benchmark(model, **input)
         if implementation == "torchdynamo_fused_attention":
             model = get_model_dynamo_fused_attention()

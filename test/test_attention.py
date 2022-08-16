@@ -40,7 +40,8 @@ def test_benchmark(benchmark, implementation):
     if implementation == "triton_original":
         value = benchmark(attention_forward_original, q, k, v, sm_scale)
     if implementation == "triton":
-        value = benchmark(attention_forward, q, k, v, sm_scale)
+        output = torch.empty_like(q)
+        value = benchmark(attention_forward, q, k, v, output, sm_scale)
     if implementation == "torch":
         value = benchmark(attention_reference, q, k, v, sm_scale)
 
@@ -57,5 +58,6 @@ def test_mixed_stride(benchmark):
     sm_scale = 0.3
 
     expected = attention_reference(q, k, v, sm_scale)
-    value = attention_forward(q, k, v, sm_scale)
-    assert torch.allclose(value, expected, atol=1e-2)
+    output = torch.empty_like(q)
+    attention_forward(q, k, v, output, sm_scale)
+    assert torch.allclose(output, expected, atol=1e-2)

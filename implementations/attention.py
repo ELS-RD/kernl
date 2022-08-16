@@ -171,13 +171,14 @@ def _fwd_kernel(
     tl.store(out_ptrs, acc)
 
 
-def attention_forward(q, k, v, sm_scale, is_causal=False):
+def attention_forward(q, k, v, output, sm_scale, is_causal=False):
     """
     Computes attention
 
     @param q: Query matrix size (batch, heads, seq_length, dhead)
     @param k: Key matrix size (batch, heads, seq_length, dhead)
     @param v: Value matrix size (batch, heads, seq_length, dhead)
+    @param output: Output matrix size (batch, heads, seq_length, dhead)
     @param sm_scale: Scaling factor applied after operation QxK
     @param is_causal: Autoregressive decoder attention
     @return:
@@ -192,9 +193,6 @@ def attention_forward(q, k, v, sm_scale, is_causal=False):
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
-    # The output matrix will have the same memory layout as Q, is it always a good idea ? Should we move this outside
-    # this func ?
-    output = torch.empty_like(q)
     _fwd_kernel[grid](
         batch,
         heads,

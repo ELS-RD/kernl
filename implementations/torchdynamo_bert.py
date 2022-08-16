@@ -9,8 +9,8 @@ from torchdynamo.optimizations import BACKENDS
 from implementations.attention import attention_forward
 
 
-def attention_wrapper(q, k, v, sm_scale, is_causal, *args):
-    return attention_forward(q, k, v, sm_scale, is_causal=is_causal)
+def attention_wrapper(q, k, v, output, sm_scale, is_causal, *args):
+    return attention_forward(q, k, v, output, sm_scale, is_causal=is_causal)
 
 
 torch.fx.wrap('attention_wrapper')
@@ -77,7 +77,7 @@ def get_model_dynamo_cudagraphs():
     return run
 
 
-def get_model_dynamo_droput_removed():
+def get_model_dynamo_dropout_removed():
     base = get_model_baseline()
 
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
@@ -103,7 +103,9 @@ def attention_fusion(gm: torch.fx.GraphModule, is_causal: bool):
         return matmul_21
 
     def replace(permute_42, permute_40, attention_mask, permute_41):
-        return attention_wrapper(permute_42, permute_40, permute_41, 1 / 8.0, is_causal, attention_mask)
+        output = torch.empty_like(permute_42)
+        output = attention_wrapper(permute_42, permute_40, permute_41, output, 1 / 8.0, is_causal, attention_mask)
+        return output
 
     remove_dropout(gm)
     replace_pattern(gm, pattern, replace)
