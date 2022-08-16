@@ -28,11 +28,11 @@ def get_model_baseline():
 def get_model_dynamo():
     base = get_model_baseline()
 
-    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         return gm.forward  # return a python callable
 
     def run(*args, **kwargs):
-        with torchdynamo.optimize(my_compiler):
+        with torchdynamo.optimize(compiler):
             return base(*args, **kwargs)
 
     return run
@@ -55,12 +55,12 @@ def remove_dropout(gm: torch.fx.GraphModule):
 def get_model_dynamo_nvfuser_ofi():
     base = get_model_baseline()
 
-    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         compiled = BACKENDS["nvfuser_ofi"](gm, example_inputs)
         return compiled
 
     def run(*args, **kwargs):
-        with torchdynamo.optimize(my_compiler):
+        with torchdynamo.optimize(compiler):
             return base(*args, **kwargs)
 
     return run
@@ -69,12 +69,12 @@ def get_model_dynamo_nvfuser_ofi():
 def get_model_dynamo_cudagraphs():
     base = get_model_baseline()
 
-    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         compiled = BACKENDS["cudagraphs"](gm, example_inputs)
         return compiled
 
     def run(*args, **kwargs):
-        with torchdynamo.optimize(my_compiler):
+        with torchdynamo.optimize(compiler):
             return base(*args, **kwargs)
 
     return run
@@ -83,13 +83,13 @@ def get_model_dynamo_cudagraphs():
 def get_model_dynamo_droput_removed():
     base = get_model_baseline()
 
-    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         remove_dropout(gm)
 
         return gm.forward  # return a python callable
 
     def run(*args, **kwargs):
-        with torchdynamo.optimize(my_compiler):
+        with torchdynamo.optimize(compiler):
             return base(*args, **kwargs)
 
     return run
@@ -116,12 +116,12 @@ def attention_fusion(gm: torch.fx.GraphModule, is_causal: bool):
 def get_model_dynamo_fused_attention(is_causal=False):
     base = get_model_baseline()
 
-    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         attention_fusion(gm, is_causal)
         return gm  # return a python callable
 
     def run(*args, **kwargs):
-        with torchdynamo.optimize(my_compiler):
+        with torchdynamo.optimize(compiler):
             return base(*args, **kwargs)
 
     return run
@@ -130,13 +130,13 @@ def get_model_dynamo_fused_attention(is_causal=False):
 def get_model_dynamo_fused_attention_plus_dynamo_cudagraphs(is_causal=False):
     base = get_model_baseline()
 
-    def my_compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         attention_fusion(gm, is_causal)
         compiled = BACKENDS["cudagraphs"](gm, example_inputs)
         return compiled  # return a python callable
 
     def run(*args, **kwargs):
-        with torchdynamo.optimize(my_compiler):
+        with torchdynamo.optimize(compiler):
             return base(*args, **kwargs)
 
     return run
