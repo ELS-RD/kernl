@@ -112,8 +112,8 @@ def _fwd_kernel(
         # We start with the current block qk
         l_j = tl.max(qk, 1)
 
-        p = tl.exp(qk - l_j[:, None])  # CHANGE !!! Current numerators
-        d_j = tl.sum(p, 1)
+        numerators = tl.exp(qk - l_j[:, None])
+        d_j = tl.sum(numerators, 1)
 
         l_new = tl.maximum(l_i, l_j)
         alpha = tl.exp(l_i - l_new)
@@ -124,7 +124,7 @@ def _fwd_kernel(
         # divide by the normalization. It's strange to do it this way instead of simply computing the softmax for qk,
         # but since all needed operations are already done for updating m and d, it seems faster
         p_scale = beta / d_new
-        qk_softmax = p * p_scale[:, None]
+        qk_softmax = numerators * p_scale[:, None]
 
         # From here, qk_softmax is correct related to all over previously done block
         # However it is wrong related to the full output row if the qk isn't the last block

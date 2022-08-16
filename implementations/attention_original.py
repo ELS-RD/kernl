@@ -3,7 +3,7 @@ import triton
 import triton.language as tl
 
 
-# Unedited implementation for benchmarking and reference purpose
+# Original implementation with masking removed for benchmarking and reference purpose
 
 @triton.jit
 def _fwd_kernel_original(
