@@ -15,6 +15,8 @@ import triton.language as tl
 # fmt: off
 from torch.utils import benchmark
 
+from implementations import activation_func
+
 
 @triton.autotune(
     configs=[
@@ -124,9 +126,8 @@ def kernel_fma(
         tl.store(act_in_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
 
     # optional: fused activation (while the data is in shared memory)
-    if ACTIVATION:
-        acc = ACTIVATION(acc)
-
+    if ACTIVATION == "tanh":
+        acc = activation_func.tanh(acc)
     # write back result
     out_ptrs = OUT + rm[:, None] * stride_om + rn[None, :]
     tl.store(out_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
@@ -137,7 +138,7 @@ def linear_layer(
         x: torch.Tensor,
         weight: torch.Tensor,
         bias: Optional[torch.Tensor],
-        activation=None,
+        activation="",
         save_act_inputs: bool = False
 ):
     """

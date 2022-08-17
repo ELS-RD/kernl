@@ -3,7 +3,9 @@ from typing import List
 import torch
 from transformers import AutoModel, PreTrainedModel
 import torchdynamo
-from torch.fx import replace_pattern
+
+from implementations.linear_layer import linear_layer
+from utils.extended_matcher import replace_pattern
 from torchdynamo.optimizations import BACKENDS
 
 from implementations.attention import attention_forward
@@ -14,6 +16,7 @@ def attention_wrapper(q, k, v, output, sm_scale, is_causal, *args):
 
 
 torch.fx.wrap('attention_wrapper')
+torch.fx.wrap('linear_layer')
 
 
 def get_model_baseline():
@@ -109,8 +112,57 @@ def attention_fusion(gm: torch.fx.GraphModule, is_causal: bool):
 
     remove_dropout(gm)
     replace_pattern(gm, pattern, replace)
+    replace_linear(gm)
     gm.recompile()
 
+
+def replace_linear(gm: torch.fx.GraphModule):
+    class Pattern2(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.Linear(1, 1)
+            self.activation = torch.nn.Tanh()
+
+        def forward(self, v):
+            return self.activation(self.linear(v))
+
+    class Replacement2(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.Linear(1, 1)
+            self.activation = torch.nn.Tanh()
+        def forward(self, v):
+            linear = linear_layer(v, self.linear.weight.data, self.linear.bias.data, activation="tanh")
+            out = linear[0]
+            return out
+
+    try:
+        replace_pattern(gm, Pattern2(), Replacement2())
+    except Exception as err:
+        print(err)
+    class Pattern(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.Linear(1, 1)
+
+        def forward(self, v):
+            return self.linear(v)
+
+    class Replacement(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.Linear(1, 1)
+
+        def forward(self, v):
+            output, _ = linear_layer(v, self.linear.weight.data, self.linear.bias.data)
+            return output
+
+    try:
+        replace_pattern(gm, Pattern(), Replacement())
+    except Exception as err:
+        print(err)
+
+    gm.graph.print_tabular()
 
 def get_model_dynamo_fused_attention(is_causal=False):
     base = get_model_baseline()

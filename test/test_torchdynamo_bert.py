@@ -6,7 +6,6 @@ from implementations.torchdynamo_bert import get_model_baseline, get_model_dynam
     get_model_dynamo_dropout_removed, get_model_dynamo_fused_attention, get_model_dynamo_cudagraphs, \
     get_model_dynamo_fused_attention_plus_dynamo_cudagraphs
 
-
 def get_pytorch_input(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     return {
         "input_ids": torch.randint(2, 1000, size=size, dtype=torch.int32, device="cuda"),
@@ -40,7 +39,7 @@ def test_benchmark(benchmark, batch, seq_length, implementation):
         input = get_pytorch_input((batch, seq_length))
 
         model_baseline = get_model_baseline()
-        expected = model_baseline(**input)["last_hidden_state"]
+        expected = model_baseline(**input)
         value = None
         if implementation == "baseline":
             model_baseline(**input)
@@ -64,7 +63,8 @@ def test_benchmark(benchmark, batch, seq_length, implementation):
             model = get_model_dynamo_fused_attention_plus_dynamo_cudagraphs()
             value = benchmark(model, **input)
 
-        assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
+        assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
+        assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
 
 
 @pytest.mark.parametrize("batch", [1, 8, 16])
@@ -79,7 +79,7 @@ def test_benchmark_causal_mask(benchmark, batch, seq_length, implementation):
         input = get_pytorch_input_causal((batch, seq_length))
 
         model_baseline = get_model_baseline()
-        expected = model_baseline(**input)["last_hidden_state"]
+        expected = model_baseline(**input)
         value = None
         if implementation == "baseline":
             model_baseline(**input)
@@ -87,4 +87,5 @@ def test_benchmark_causal_mask(benchmark, batch, seq_length, implementation):
         if implementation == "torchdynamo_fused_attention":
             model = get_model_dynamo_fused_attention(is_causal=True)
             value = benchmark(model, **input)
-        assert torch.allclose(value["last_hidden_state"], expected, atol=1e-1)
+        assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
+        assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
