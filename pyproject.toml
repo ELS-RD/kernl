@@ -1,0 +1,56 @@
+[project]
+name = ""
+version = ""
+description = ""
+authors = [
+    {name = "Lefebvre-Sarrut R&D", email = "rd-feedback@lefebvre-sarrut.eu"},
+]
+dependencies = [
+    "cuda-python==11.6.1",
+    "torch",
+    "numpy",
+    "matplotlib",
+    "pandas",
+    "transformers",
+    "jupyter",
+    "ipykernel",
+    "pytest",
+    "tabulate",
+    "termcolor",
+    "triton>=2.0.0.dev20220816",
+]
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["pdm-pep517>=1.0.0"]
+build-backend = "pdm.pep517.api"
+
+[tool]
+[tool.pdm]
+
+[[tool.pdm.source]]
+url = "https://download.pytorch.org/whl/cu116"
+name = "torch"
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+ensure_newline_before_comments = true
+force_grid_wrap = 0
+include_trailing_comma = true
+known_first_party = "triton-xps"
+known_third_party = [ "torch", "numpy", "matplotlib", "pandas", "transformers", "triton", "pytest", "tabulate", "termcolor" ]
+line_length = 120
+lines_after_imports = 2
+multi_line_output = 3
+use_parentheses = true
+
+[tool.mypy]
+python_version = 3.8
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
