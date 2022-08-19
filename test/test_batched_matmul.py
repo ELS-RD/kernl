@@ -19,4 +19,4 @@ def test_benchmark(benchmark, m, n, k, batch, implementation):
         value = benchmark(batched_matmul, a, b)
     else:
         raise ValueError(f"Unknown implementation: {implementation}")
-    torch.allclose(value, expected, atol=1e-2)
+    assert torch.allclose(value, expected, atol=1e-2)
