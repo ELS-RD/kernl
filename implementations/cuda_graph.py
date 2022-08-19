@@ -4,6 +4,8 @@ import torch
 
 from implementations.linear_layer import kernel_fma
 
+from typing import Dict
+
 
 class CudaGraph:
     """
@@ -14,7 +16,7 @@ class CudaGraph:
     """
     def __init__(self, weights: torch.Tensor, container_size: int = 30000, warmup: int = 10):
         assert weights.is_contiguous()
-        self.graphs: dict[torch.Size, torch.cuda.graphs.CUDAGraph] = dict()
+        self.graphs: Dict[torch.Size, torch.cuda.graphs.CUDAGraph] = dict()
         self.mempool = torch.cuda.graph_pool_handle()
         self.weights: torch.Tensor = weights
         self.static_input: torch.Tensor = torch.empty((container_size,), device=weights.device, dtype=weights.dtype)

@@ -85,9 +85,9 @@ class BenchmarkFixture(object):
             start = perf_counter_ns()
             function_to_benchmark(*args, **kwargs)
             torch.cuda.synchronize()
-            cpu_times.append((perf_counter_ns() - start) / 1e-6)
+            cpu_times.append((perf_counter_ns() - start) * 1e-6)
         cpu_data = BenchmarkData(torch.Tensor(cpu_times))
 
-        self.add_result(BenchmarkResult(self, gpu_data, cpu_data))
+        self.add_result(BenchmarkResult(fixture=self, data_gpu=gpu_data, data_full=cpu_data))
 
         return return_value

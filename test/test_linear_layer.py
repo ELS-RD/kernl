@@ -1,12 +1,17 @@
-import torch
 import pytest
+import torch
 
 from implementations.cuda_graph import CudaGraph
+from implementations.cudagraph.linear_wrapper import CudaGraphLinearWrapper
+from implementations.cudagraph.runner import CudaGraphRunner
 from implementations.linear_layer import linear_layer
+
 
 @pytest.mark.parametrize("size", [128 * i for i in range(2, 10)])
 @pytest.mark.parametrize("batch", [8])
-@pytest.mark.parametrize("implementation", ["cublas", "triton", "triton_cuda_graph", "pytorch"])
+@pytest.mark.parametrize(
+    "implementation", ["cublas", "triton", "triton_cuda_graph", "triton_cuda_graph_new", "pytorch"]
+)
 def test_benchmark(benchmark, size, batch, implementation):
     torch.manual_seed(0)
 
@@ -14,10 +19,10 @@ def test_benchmark(benchmark, size, batch, implementation):
     N = size
     K = size
 
-    a = torch.randn((batch, M, K), device='cuda', dtype=torch.float16, requires_grad=False)
-    layer_weight = torch.randn((K * 4, K), device='cuda', dtype=torch.float16, requires_grad=False)
+    a = torch.randn((batch, M, K), device="cuda", dtype=torch.float16, requires_grad=False)
+    layer_weight = torch.randn((K * 4, K), device="cuda", dtype=torch.float16, requires_grad=False)
 
-    torch_linear_layer = torch.nn.Linear(K, K*4, bias=False, device="cuda", dtype=torch.float16)
+    torch_linear_layer = torch.nn.Linear(K, K * 4, bias=False, device="cuda", dtype=torch.float16)
     torch_linear_layer.weight.data = layer_weight
     expected = torch_linear_layer(a)
 
@@ -28,8 +33,14 @@ def test_benchmark(benchmark, size, batch, implementation):
     elif implementation == "triton_cuda_graph":
         cg = CudaGraph(weights=layer_weight)
         value = benchmark(cg.run, inputs=a)
+    elif implementation == "triton_cuda_graph_new":
+        kernel = CudaGraphLinearWrapper()
+        tensors = kernel.declare_tensors(a, layer_weight)
+        cg = CudaGraphRunner(kernel, tensors)
+        output = benchmark(cg.run, {"input": a})
+        value = output["output"]
     elif implementation == "pytorch":
         value = benchmark(torch_linear_layer, input=a)
     else:
         raise ValueError(f"Unknown implementation {implementation}")
-    assert torch.allclose(value, expected, atol=1e-2)
+    assert torch.allclose(value, expected, atol=1.0)
