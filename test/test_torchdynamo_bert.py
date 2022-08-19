@@ -2,9 +2,10 @@ from typing import Tuple, Dict
 
 import torch
 import pytest
-from implementations.torchdynamo_bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
-    get_model_dynamo_dropout_removed, get_model_dynamo_fused_attention, get_model_dynamo_cudagraphs, \
-    get_model_dynamo_fused_attention_plus_dynamo_cudagraphs
+from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
+    get_model_dynamo_dropout_removed, get_model_optimized, get_model_dynamo_cudagraphs, \
+    get_model_optimized_without_cudagraph, get_model_optimized_causal
+
 
 def get_pytorch_input(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     return {
@@ -26,14 +27,14 @@ def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
 @pytest.mark.parametrize("seq_length", [512])
 @pytest.mark.parametrize("implementation", [
     "baseline",
-    "torchdynamo",
-    "torchdynamo_nvfuser_ofi",
-    "torchdynamo_no_dropout",
-    "torchdynamo_fused_attention",
-    "torchdynamo_cudagraphs",
-    "torchdynamo_fused_attention+dynamo_cudagraphs"
+    "dynamo",
+    "dynamo_nvfuser_ofi",
+    "dynamo_no_dropout",
+    "dynamo_optimized_without_cudagraph",
+    "dynamo_cudagraphs",
+    "dynamo_optimized"
 ])
-def test_benchmark(benchmark, batch, seq_length, implementation):
+def test_benchmark_bert(benchmark, batch, seq_length, implementation):
     with torch.inference_mode():
         torch.manual_seed(0)
         input = get_pytorch_input((batch, seq_length))
@@ -44,23 +45,23 @@ def test_benchmark(benchmark, batch, seq_length, implementation):
         if implementation == "baseline":
             model_baseline(**input)
             value = benchmark(model_baseline, **input)
-        if implementation == "torchdynamo":
+        if implementation == "dynamo":
             model = get_model_dynamo()
             value = benchmark(model, **input)
-        if implementation == "torchdynamo_nvfuser_ofi":
+        if implementation == "dynamo_nvfuser_ofi":
             model = get_model_dynamo_nvfuser_ofi()
             value = benchmark(model, **input)
-        if implementation == "torchdynamo_no_dropout":
+        if implementation == "dynamo_no_dropout":
             model = get_model_dynamo_dropout_removed()
             value = benchmark(model, **input)
-        if implementation == "torchdynamo_fused_attention":
-            model = get_model_dynamo_fused_attention()
+        if implementation == "dynamo_optimized_without_cudagraph":
+            model = get_model_optimized_without_cudagraph()
             value = benchmark(model, **input)
-        if implementation == "torchdynamo_cudagraphs":
+        if implementation == "dynamo_cudagraphs":
             model = get_model_dynamo_cudagraphs()
             value = benchmark(model, **input)
-        if implementation == "torchdynamo_fused_attention+dynamo_cudagraphs":
-            model = get_model_dynamo_fused_attention_plus_dynamo_cudagraphs()
+        if implementation == "dynamo_optimized":
+            model = get_model_optimized()
             value = benchmark(model, **input)
 
         assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
@@ -71,9 +72,9 @@ def test_benchmark(benchmark, batch, seq_length, implementation):
 @pytest.mark.parametrize("seq_length", [512])
 @pytest.mark.parametrize("implementation", [
     "baseline",
-    "torchdynamo_fused_attention"
+    "dynamo_optimizer"
 ])
-def test_benchmark_causal_mask(benchmark, batch, seq_length, implementation):
+def test_benchmark_bert_causal_mask(benchmark, batch, seq_length, implementation):
     with torch.inference_mode():
         torch.manual_seed(0)
         input = get_pytorch_input_causal((batch, seq_length))
@@ -84,8 +85,8 @@ def test_benchmark_causal_mask(benchmark, batch, seq_length, implementation):
         if implementation == "baseline":
             model_baseline(**input)
             value = benchmark(model_baseline, **input)
-        if implementation == "torchdynamo_fused_attention":
-            model = get_model_dynamo_fused_attention(is_causal=True)
+        if implementation == "dynamo_optimizer":
+            model = get_model_optimized_causal()
             value = benchmark(model, **input)
         assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
         assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
