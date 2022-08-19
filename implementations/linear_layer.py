@@ -128,6 +128,8 @@ def kernel_fma(
     # optional: fused activation (while the data is in shared memory)
     if ACTIVATION == "tanh":
         acc = activation_func.tanh(acc)
+    if ACTIVATION == "gelu":
+        acc = activation_func.gelu(acc)
     # write back result
     out_ptrs = OUT + rm[:, None] * stride_om + rn[None, :]
     tl.store(out_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
