@@ -63,6 +63,7 @@ class _SubgraphMatcher:
                 gn_mod = dict(gn.graph.owning_module.named_modules())
                 pn_mod_type = type(pn_mod[pn.target])
                 gn_mod_type = type(gn_mod[gn.target])
+
                 if pn_mod_type == gn_mod_type:
                     self.module_map[pn.target] = gn.target
                     return True
@@ -287,8 +288,11 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
                     if n.op == "placeholder":
                         continue
                     # Pattern output (acts as a container)
-                    if lookup[n].op == "output":
+
+                    # WARNING: MODIFIED HERE, NOT SURE
+                    if lookup[n].op == "output" or lookup[n].op == "placeholder":
                         continue
+
                     # Result contained by pattern output (what we'll
                     # hook in to the new Graph, thus what we'll
                     # potentially use in other areas of the Graph as

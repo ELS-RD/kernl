@@ -162,7 +162,28 @@ def replace_linear(gm: torch.fx.GraphModule):
     except Exception as err:
         print(err)
 
-    gm.graph.print_tabular()
+    class Pattern4(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.modules.linear.Linear(1, 1)
+
+        def forward(self, v):
+            return self.linear(v)
+
+    class Replacement4(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.modules.linear.Linear(1, 1)
+
+        def forward(self, v):
+            output, _ = linear_layer(v, self.linear.weight.data, self.linear.bias.data)
+            return output
+
+    try:
+        replace_pattern(gm, Pattern4(), Replacement4())
+    except Exception as err:
+        print(err)
+
 
 def get_model_dynamo_fused_attention(is_causal=False):
     base = get_model_baseline()
