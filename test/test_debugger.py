@@ -5,13 +5,13 @@ from utils.debugger import TritonDebugger
 torch.random.manual_seed(123)
 
 
-def test_launch():
-    vec_len = 256
-    block_size = 64
+def test_add():
+    vec_len = 250
+    block_size = 64  # not a vec len multiple to test masks
     x = torch.rand(vec_len)
     y = torch.rand_like(x)
     o = torch.zeros_like(x)
-    tl = TritonDebugger([vec_len // block_size], inputs=[x, y, o])
+    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, y, o])
 
     def add_kernel(
             x_ptr,  # *Pointer* to first input vector
@@ -50,3 +50,47 @@ def test_launch():
             BLOCK_SIZE=block_size,
         )
     assert torch.allclose(o, x + y)
+
+
+def test_softmax():
+    vec_len = 250
+    x = torch.rand((16, vec_len))
+    o = torch.zeros_like(x)
+    block_size = 256  # not a vec len multiple to test masks
+    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, o])
+
+    def softmax_kernel(
+            output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols,
+            BLOCK_SIZE: tl.constexpr
+    ):
+        # The rows of the softmax are independent, so we parallelize across those
+        row_idx = tl.program_id(0)
+        # The stride represents how much we need to increase the pointer to advance 1 row
+        row_start_ptr = input_ptr + row_idx * input_row_stride
+        # The block size is the next power of two greater than n_cols, so we can fit each
+        # row in a single block
+        col_offsets = tl.arange(0, BLOCK_SIZE)
+        input_ptrs = row_start_ptr + col_offsets
+        # Load the row into SRAM, using a mask since BLOCK_SIZE may be > than n_cols
+        row = tl.load(input_ptrs, mask=col_offsets < n_cols, other=-float('inf'))
+        # Substract maximum for numerical stability
+        row_minus_max = row - tl.max(row, axis=0)
+        # Note that exponentials in Triton are fast but approximate (i.e., think __expf in CUDA)
+        numerator = tl.exp(row_minus_max)
+        denominator = tl.sum(numerator, axis=0)
+        softmax_output = numerator / denominator
+        # Write back output to DRAM
+        output_row_start_ptr = output_ptr + row_idx * output_row_stride
+        output_ptrs = output_row_start_ptr + col_offsets
+        tl.store(output_ptrs, softmax_output, mask=col_offsets < n_cols)
+
+    while tl.has_next():
+        softmax_kernel(
+            output_ptr=tl.tensor_ptr[o],
+            input_ptr=tl.tensor_ptr[x],
+            input_row_stride=x.stride(0),
+            output_row_stride=o.stride(0),
+            n_cols=vec_len,
+            BLOCK_SIZE=block_size,
+        )
+    assert torch.allclose(o, torch.softmax(x, dim=1)), f"{o} != {torch.softmax(x, dim=1)}"
