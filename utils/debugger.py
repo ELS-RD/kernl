@@ -1,3 +1,5 @@
+import random
+from itertools import product
 from typing import Optional, List
 
 import torch
@@ -35,9 +37,12 @@ class RangeKeyDict:
 
 class TritonDebugger:
 
-    def __init__(self, grid: list[int], inputs: list[torch.Tensor]):
-        self.grid = grid
-        self.current_grid_position = [0] * len(grid)
+    def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = True):
+        self.grid_positions = list(product(*(range(axis) for axis in grid)))
+        if shuffle:
+            random.shuffle(self.grid_positions)
+
+        self.current_grid_position = None
         self.constexpr = int
         previous_boundary = 0
 
@@ -49,16 +54,14 @@ class TritonDebugger:
         self.inputs = RangeKeyDict(d)
         self.tensor_ptr: dict[torch.Tensor, int] = {v: k[0] for k, v in d.items()}
 
-    def program_id(self, axis: int) -> torch.Tensor:
-        if self.current_grid_position[axis] > self.grid[axis]:
-            raise Exception("Program id out of bounds")
+    def increment(self):
+        self.current_grid_position = self.grid_positions.pop(0)
 
-        current_position = self.current_grid_position[axis]
-        self.current_grid_position[axis] += 1
-        return torch.tensor(current_position)
+    def program_id(self, axis: int) -> torch.Tensor:
+        return torch.tensor(self.current_grid_position[axis])
 
     def has_next(self) -> bool:
-        return self.current_grid_position[0] < self.grid[0]
+        return len(self.grid_positions) > 0
 
     @staticmethod
     def arange(start: int, end: int) -> torch.Tensor:
@@ -91,7 +94,7 @@ class TritonDebugger:
         indexes = self.get_indexes(tensor=tensor, ptr=ptr, mask=mask)
         block = torch.full_like(ptr, fill_value=other, dtype=tensor.dtype)
         block[mask] = tensor[indexes]
-        return block.clone()
+        return block
 
     def store(self, ptr: torch.Tensor, data: torch.Tensor, mask: torch.Tensor) -> None:
         tensor = self.get_tensor(ptr)

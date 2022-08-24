@@ -42,6 +42,7 @@ def test_add():
         tl.store(output_ptr + offsets, output, mask=mask)
 
     while tl.has_next():
+        tl.increment()
         add_kernel(
             x_ptr=tl.tensor_ptr[x],
             y_ptr=tl.tensor_ptr[y],
@@ -85,6 +86,7 @@ def test_softmax():
         tl.store(output_ptrs, softmax_output, mask=col_offsets < n_cols)
 
     while tl.has_next():
+        tl.increment()
         softmax_kernel(
             output_ptr=tl.tensor_ptr[o],
             input_ptr=tl.tensor_ptr[x],
