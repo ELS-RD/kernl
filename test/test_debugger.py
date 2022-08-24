@@ -6,7 +6,7 @@ torch.random.manual_seed(123)
 
 
 def test_add():
-    vec_len = 250
+    vec_len = 25
     block_size = 64  # not a vec len multiple to test masks
     x = torch.rand(vec_len)
     y = torch.rand_like(x)
