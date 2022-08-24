@@ -24,14 +24,14 @@ def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     }
 
 
-@pytest.mark.parametrize("batch", [1])
+@pytest.mark.parametrize("batch", [1, 8, 16])
 @pytest.mark.parametrize("seq_length", [512])
 @pytest.mark.parametrize("implementation", [
     "baseline",
     "dynamo",
     "dynamo_nvfuser_ofi",
     "dynamo_no_dropout",
-    "dynamo_onnx2tensorrt",
+    # "dynamo_onnx2tensorrt",
     "dynamo_cudagraphs",
     "dynamo_optimized_without_cudagraph",
     "dynamo_optimized",

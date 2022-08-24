@@ -149,7 +149,6 @@ def linear_layer(
     """
 
     if not x.is_contiguous():
-        print("make it contiguous")
         x = x.contiguous()
 
     x_ = x if x.ndim == 2 else x.flatten(0, 1)

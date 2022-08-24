@@ -7,6 +7,8 @@ from torch.fx import symbolic_trace, Node, GraphModule
 from dataclasses import dataclass, field
 from collections import defaultdict
 
+from utils.fx import static_args_are_equal
+
 
 @dataclass
 class InternalMatch:
@@ -14,6 +16,8 @@ class InternalMatch:
     anchors: List[Node]
     # Maps nodes in the pattern subgraph to nodes in the larger graph
     nodes_map: Dict[Node, Node] = field(default_factory=dict)
+
+    module_map: Dict[str, str] = field(default_factory=dict)
 
     # nodes in target graph that are matched placeholder in pattern
     placeholder_nodes: List[Node] = field(default_factory=list)
@@ -81,6 +85,20 @@ class SubgraphMatcher:
         if pn.op == gn.op:
             if pn.op == "placeholder" or pn.op == "output":
                 return True
+            # CHANGE HERE
+            # We check arguments
+            if not static_args_are_equal(pn, gn):
+                return False
+            # If it's call_module we only compare the type
+            # We will replace the module from the replacement pattern with the old one
+            if pn.op == "call_module":
+                pn_mod = dict(pn.graph.owning_module.named_modules())
+                gn_mod = dict(gn.graph.owning_module.named_modules())
+                pn_mod_type = type(pn_mod[pn.target])
+                gn_mod_type = type(gn_mod[gn.target])
+                if pn_mod_type == gn_mod_type:
+                    return True
+
             return pn.target == gn.target
         return False
 
@@ -138,6 +156,9 @@ class SubgraphMatcher:
 
         # Optimistically mark `pn` as a match for `gn`
         match.nodes_map[pn] = gn
+
+        if pn.op == "call_module":
+            match.module_map[pn.target] = gn.target
 
         if pn.op == "placeholder":
             return True
@@ -368,19 +389,28 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
     # Get the graphs for `gm`, `pattern`, `replacement`
     original_graph: Graph = gm.graph
     pattern_graph: Graph = symbolic_trace(pattern).graph
-    replacement_graph: Graph = symbolic_trace(replacement).graph
 
     matcher = SubgraphMatcher(pattern_graph, match_output=False, match_placeholder=False,
                               remove_overlapping_matches=True)
     _matches: List[InternalMatch] = matcher.match(original_graph)
 
-    replacement_placeholders = [n for n in replacement_graph.nodes if n.op == "placeholder"]
-
     # As we progressively replace nodes, we'll need to keep track of how the match results should change
     match_changed_node: Dict[Node, Node] = {}
 
     for match in _matches:
+        replacement_graph: Graph = symbolic_trace(replacement).graph
+        replacement_placeholders = [n for n in replacement_graph.nodes if n.op == "placeholder"]
 
+        # CHANGE HERE
+        # We ensure we use the original modules
+        for node in replacement_graph.nodes:
+            if node.op == "call_module" or node.op == "get_attr":
+                submodule_name = node.target
+                if node.op == "get_attr":
+                    submodule_name = node.target.split(".")[0]
+                if submodule_name in match.module_map:
+                    to_replace = match.module_map[submodule_name]
+                    node.target = node.target.replace(submodule_name, to_replace, 1)
         # Build connecting between replacement graph's input and original graph input producer node
 
         # Initialize `val_map` with mappings from placeholder nodes in
