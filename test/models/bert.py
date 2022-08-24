@@ -40,7 +40,21 @@ def get_model_dynamo_nvfuser_ofi():
             return base(*args, **kwargs)
 
     return run
+def get_model_dynamo_inductor():
+    base = get_model_baseline()
+    @torchdynamo.optimize("inductor")
+    def run(*args, **kwargs):
+        return base(*args, **kwargs)
 
+    return run
+
+def get_model_dynamo_onnx2tensorrt():
+    base = get_model_baseline()
+    @torchdynamo.optimize("onnx2tensorrt")
+    def run(*args, **kwargs):
+        return base(*args, **kwargs)
+
+    return run
 
 def get_model_dynamo_cudagraphs():
     base = get_model_baseline()
@@ -75,36 +89,25 @@ def get_model_optimized_without_cudagraph():
 
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         dynamo_backend_ofi(gm, example_inputs, enable_cudagraph=False)
-        return gm  # return a python callable
+        return gm.forward # return a python callable
 
-    def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
-
-    return run
+    return torchdynamo.optimize(compiler)(base)
 
 
 def get_model_optimized():
     base = get_model_baseline()
 
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        return dynamo_backend_ofi(gm, example_inputs)  # return a python callable
+        dynamo_backend_ofi(gm, example_inputs)
+        return gm.forward  # return a python callable
 
-    def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
-
-    return run
-
+    return torchdynamo.optimize(compiler)(base)
 
 def get_model_optimized_causal():
     base = get_model_baseline()
 
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        return dynamo_backend_ofi(gm, example_inputs, assume_causal=True)  # return a python callable
+        dynamo_backend_ofi(gm, example_inputs, assume_causal=True)
+        return gm.forward
 
-    def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
-
-    return run
+    return torchdynamo.optimize(compiler)(base)
