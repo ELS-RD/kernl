@@ -57,7 +57,7 @@ def test_softmax():
     x = torch.rand((16, vec_len))
     o = torch.zeros_like(x)
     block_size = 256  # not a vec len multiple to test masks
-    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, o])
+    tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_size)], inputs=[x, o])
 
     def softmax_kernel(
             output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols,

@@ -1,3 +1,4 @@
+from copy import copy
 from typing import Optional
 
 import torch
@@ -77,16 +78,16 @@ class TritonDebugger:
         first_ptr = self.tensor_ptr[tensor]
         tensor_flat = tensor.flatten()
         assert tensor_flat.data_ptr() == tensor.data_ptr()
-        indexes = ptr - first_ptr
+        offsets = ptr - first_ptr
         if mask is not None:
             if other is None:
-                indexes = indexes[mask]
-                return tensor_flat[indexes]
+                offsets = offsets[mask]
+                return tensor_flat[offsets]
             else:
                 block = torch.full_like(ptr, fill_value=other, dtype=tensor_flat.dtype)
-                indexes = indexes[mask]
-                data = tensor_flat[indexes]
-                selection = [slice(0, s) for s in indexes.size()]
+                offsets = offsets[mask]
+                data = tensor_flat[offsets]
+                selection = [slice(0, s) for s in offsets.size()]
                 block[selection] = data
                 return block
 
@@ -94,12 +95,10 @@ class TritonDebugger:
         first_elem_ptr = ptr.flatten()[0].item()
         t = self.inputs[first_elem_ptr]
         first_ptr = self.tensor_ptr[t]
-        ptr = ptr - first_ptr
-        ptr = ptr[mask]
-        t_flat = t.flatten()
-        assert t_flat.data_ptr() == t.data_ptr()
-        t_flat[ptr] = data
-        t_flat.resize_(t.shape)
+        offsets = ptr - first_ptr
+        offsets = offsets[mask]
+        indexes = self.offset_to_indexes(offset=offsets, tensor=t)
+        t[indexes] = data[mask].flatten()
 
     @staticmethod
     def cdiv(x: int, y: int) -> int:
@@ -119,4 +118,16 @@ class TritonDebugger:
     @staticmethod
     def sum(x: torch.Tensor, axis=0) -> torch.Tensor:
         return torch.sum(x, dim=axis)
+
+    @staticmethod
+    def offset_to_indexes(offset: torch.Tensor, tensor: torch.Tensor) -> torch.Tensor:
+        indexes = list()
+        offset_cp = copy(offset)
+        for dim in range(0, tensor.ndim):
+            stride = tensor.stride(dim)
+            dim_index = torch.div(offset_cp, stride, rounding_mode='floor')
+            indexes.append(dim_index.tolist())
+            offset_cp -= dim_index * stride
+
+        return indexes
 
