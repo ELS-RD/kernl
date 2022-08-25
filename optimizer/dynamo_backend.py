@@ -4,10 +4,9 @@ from optimizer.attention import fuse_attention
 from optimizer.dropout import remove_dropout
 from optimizer.layer_norm import replace_layer_norm
 from optimizer.linear import replace_all_linear
-from torchdynamo.optimizations import BACKENDS
 
 
-def dynamo_backend_ofi(gm: torch.fx.GraphModule, example_inputs, enable_cudagraph = True, assume_causal = False):
+def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     remove_dropout(gm)
     fuse_attention(gm, assume_causal)
 
@@ -20,8 +19,5 @@ def dynamo_backend_ofi(gm: torch.fx.GraphModule, example_inputs, enable_cudagrap
         replace_layer_norm(gm)
     except Exception as err:
         print(err)
-
-    if enable_cudagraph:
-        gm = BACKENDS["cudagraphs"](gm, example_inputs)
 
     return gm

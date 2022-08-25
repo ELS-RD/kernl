@@ -8,6 +8,7 @@ from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dyn
     get_model_dynamo_onnx2tensorrt
 import torchdynamo
 
+
 def get_pytorch_input(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     return {
         "input_ids": torch.randint(2, 1000, size=size, dtype=torch.int32, device="cuda"),
@@ -24,8 +25,8 @@ def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     }
 
 
-@pytest.mark.parametrize("batch", [1, 8, 16])
-@pytest.mark.parametrize("seq_length", [512])
+@pytest.mark.parametrize("batch", [1, 8, 16, 32])
+@pytest.mark.parametrize("seq_length", [128, 256, 512])
 @pytest.mark.parametrize("implementation", [
     "baseline",
     "dynamo",
@@ -76,6 +77,7 @@ def test_benchmark_bert(benchmark, batch, seq_length, implementation):
         torchdynamo.reset()
         assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
         assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
+
 
 @pytest.mark.parametrize("batch", [1, 8, 16])
 @pytest.mark.parametrize("seq_length", [512])
