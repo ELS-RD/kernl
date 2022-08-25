@@ -1,6 +1,6 @@
 import random
 from itertools import product
-from typing import Optional, List
+from typing import Optional
 
 import torch
 from torch import Tensor
@@ -36,6 +36,8 @@ class RangeKeyDict:
 
 
 class TritonDebugger:
+    float32 = torch.float32
+    float16 = torch.float32  # to run on torch cpu which has a low support for fp16
 
     def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = True):
         self.grid_positions = list(product(*(range(axis) for axis in grid)))
@@ -43,7 +45,7 @@ class TritonDebugger:
             random.shuffle(self.grid_positions)
 
         self.current_grid_position = None
-        self.constexpr = int
+        self.constexpr = int | str
         previous_boundary = 0
 
         d = dict()
@@ -130,3 +132,15 @@ class TritonDebugger:
             offsets -= dim_index * dim_stride
 
         return coordinates
+
+    @staticmethod
+    def zeros(shape: (int, int), dtype: torch.dtype) -> torch.Tensor:
+        return torch.zeros(size=shape, dtype=dtype)
+
+    @staticmethod
+    def dot(input: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
+        return torch.matmul(input=input, other=other)
+
+    @staticmethod
+    def where(condition: torch.BoolTensor, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return torch.where(condition, x, y)
