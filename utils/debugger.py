@@ -144,3 +144,7 @@ class TritonDebugger:
     @staticmethod
     def where(condition: torch.BoolTensor, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return torch.where(condition, x, y)
+
+    @staticmethod
+    def rand(seed: int, offset: torch.Tensor, n_rounds: int = 10):
+        return torch.rand(offset.shape)

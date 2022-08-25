@@ -1,8 +1,11 @@
+import random
+
 import torch
 
 from utils.debugger import TritonDebugger
 
 torch.random.manual_seed(123)
+random.seed(123)
 
 
 def test_add():
@@ -222,3 +225,47 @@ def test_matmul():
         x = x + 1
         return torch.where(x >= 0, x, 0.01 * x)
     assert torch.allclose(C, leaky_relu_pytorch(A @ B))
+
+
+def test_dropout():
+    p = 0.5
+    x = torch.randn(size=(10, 1000))
+    o = torch.zeros_like(x)
+    block_m = 32
+    tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], inputs=[x, o])
+
+    def _seeded_dropout(
+            x_ptr,
+            output_ptr,
+            n_elements,
+            p,
+            seed,
+            BLOCK_SIZE: tl.constexpr,
+    ):
+        # compute memory offsets of elements handled by this instance
+        pid = tl.program_id(axis=0)
+        block_start = pid * BLOCK_SIZE
+        offsets = block_start + tl.arange(0, BLOCK_SIZE)
+        # load data from x
+        mask = offsets < n_elements
+        x = tl.load(x_ptr + offsets, mask=mask)
+        # randomly prune it
+        random = tl.rand(seed, offsets)
+        x_keep = random > p
+        # write-back
+        output = tl.where(x_keep, x / (1 - p), 0.0)
+        tl.store(output_ptr + offsets, output, mask=mask)
+
+    while tl.has_next():
+        tl.increment()
+        _seeded_dropout(x_ptr=tl.tensor_ptr[x],
+                        output_ptr=tl.tensor_ptr[o],
+                        n_elements=x.numel(),
+                        p=p,
+                        seed=123,
+                        BLOCK_SIZE=block_m,
+                        )
+
+    assert torch.allclose(torch.sum(o == 0) / x.numel(), torch.tensor(p), atol=0.1)
+    # check L1 norm
+    assert torch.allclose(torch.linalg.norm(x, dim=1, ord=1), torch.linalg.norm(o, dim=1, ord=1), rtol=0.1)
