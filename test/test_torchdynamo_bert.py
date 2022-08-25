@@ -26,7 +26,7 @@ def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
 
 
 @pytest.mark.parametrize("batch", [1, 8, 16, 32])
-@pytest.mark.parametrize("seq_length", [128, 256, 512])
+@pytest.mark.parametrize("seq_length", [16, 64, 128, 256])
 @pytest.mark.parametrize("implementation", [
     "baseline",
     "dynamo",
@@ -34,7 +34,7 @@ def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
     "dynamo_no_dropout",
     # "dynamo_onnx2tensorrt",
     "dynamo_cudagraphs",
-    "dynamo_optimized_without_cudagraph",
+    # "dynamo_optimized_without_cudagraph",
     "dynamo_optimized",
     # "dynamo_inductor",
 ])

@@ -188,8 +188,11 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False):
     assert q.shape[-1] == k.shape[-1]
     batch, heads, seq_length, dhead = q.size()
 
-    BLOCK_M = 128
-    BLOCK_N = 128
+    # Todo: Ensure 2^n only ?
+    BLOCK_M = min(128, seq_length)
+    BLOCK_N = min(128, seq_length)
+    assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
+
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 

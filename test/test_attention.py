@@ -55,6 +55,22 @@ def test_benchmark(benchmark, batch, implementation):
     assert torch.allclose(value, expected, atol=1e-2)
 
 
+@pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512])
+@pytest.mark.parametrize("batch", [1, 8, 16, 32, 64, 128])
+def test_optimized(batch, seq_length):
+    torch.manual_seed(0)
+    # batch, heads, seqlength, dhead
+    q = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
+    k = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
+    v = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
+    sm_scale = 0.3
+
+    expected = attention_reference(q, k, v, sm_scale)
+    output = torch.empty_like(q)
+    attention_forward(q, k, v, output, sm_scale)
+    assert torch.allclose(output, expected, atol=1e-2)
+
+
 def test_mixed_stride(benchmark):
     torch.manual_seed(0)
     # Column major
