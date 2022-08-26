@@ -10,10 +10,11 @@ def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     remove_dropout(gm)
     fuse_attention(gm, assume_causal)
 
-    try:
-        replace_all_linear(gm)
-    except Exception as err:
-        print(err)
+    # The kernel causes performance issues for small sizes
+    # try:
+    #     replace_all_linear(gm)
+    # except Exception as err:
+    #     print(err)
 
     try:
         replace_layer_norm(gm)

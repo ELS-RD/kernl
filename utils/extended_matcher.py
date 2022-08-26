@@ -266,10 +266,18 @@ def _replace_submodules(gm: GraphModule, replacement: torch.nn.Module) -> None:
 
     for node in gm.graph.nodes:
         if node.op == "call_module" or node.op == "get_attr":
+            # CHANGE HERE
+            module_name = node.target
+            if node.op == "get_attr":
+                if "." in module_name:
+                    mod, attr = module_name.split(".")
+                    module_name = mod
+                else:
+                    module_name = ""
 
-            gm_submod = try_get_submodule(gm, node.target)
+            gm_submod = try_get_submodule(gm, module_name)
 
-            replacement_submod = try_get_submodule(replacement, node.target)
+            replacement_submod = try_get_submodule(replacement, module_name)
 
             # CASE 1: This target already exists as a submodule in our
             # result GraphModule. Whether or not it exists in
@@ -280,8 +288,8 @@ def _replace_submodules(gm: GraphModule, replacement: torch.nn.Module) -> None:
             # CASE 2: The target exists as a submodule in `replacement`
             # only, so we need to copy it over.
             elif replacement_submod is not None:
-                new_submod = copy.deepcopy(getattr(replacement, node.target))
-                gm.add_submodule(node.target, new_submod)
+                new_submod = copy.deepcopy(getattr(replacement, module_name))
+                gm.add_submodule(module_name, new_submod)
 
             # CASE 3: The target doesn't exist as a submodule in `gm`
             # or `replacement`
