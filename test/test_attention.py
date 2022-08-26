@@ -71,7 +71,7 @@ def test_optimized(batch, seq_length):
     assert torch.allclose(output, expected, atol=1e-2)
 
 
-def test_mixed_stride(benchmark):
+def test_mixed_stride():
     torch.manual_seed(0)
     # Column major
     q = torch.transpose(torch.rand((4, 48, 64, 512), dtype=torch.float16, device="cuda"), -1, -2)
