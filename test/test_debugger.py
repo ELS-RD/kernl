@@ -14,7 +14,7 @@ def test_add():
     x = torch.rand(vec_len)
     y = torch.rand_like(x)
     o = torch.zeros_like(x)
-    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, y, o])
+    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, y, o], shuffle=True)
 
     def add_kernel(
             x_ptr,  # *Pointer* to first input vector
@@ -62,7 +62,7 @@ def test_softmax():
     block_ncols = 256  # do not match vec_len to use masks
     x = torch.rand((nrows, ncols))
     o = torch.zeros_like(x)
-    tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], inputs=[x, o])
+    tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], inputs=[x, o], shuffle=True)
 
     def softmax_kernel(
             output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols,
@@ -109,7 +109,7 @@ def test_matmul():
     A = torch.rand((m, k))
     B = torch.rand((k, n))
     C = torch.zeros((m, n))
-    tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C])
+    tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C], shuffle=True)
 
     def leaky_relu(x):
         x = x + 1
@@ -232,7 +232,7 @@ def test_dropout():
     x = torch.randn(size=(10, 1000))
     o = torch.zeros_like(x)
     block_m = 32
-    tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], inputs=[x, o])
+    tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], inputs=[x, o], shuffle=True)
 
     def _seeded_dropout(
             x_ptr,
@@ -267,5 +267,91 @@ def test_dropout():
                         )
 
     assert torch.allclose(torch.sum(o == 0) / x.numel(), torch.tensor(p), atol=0.1)
-    # check L1 norm
+    # check L1 norm are similar (+/- 10%)
     assert torch.allclose(torch.linalg.norm(x, dim=1, ord=1), torch.linalg.norm(o, dim=1, ord=1), rtol=0.1)
+
+
+def test_layernorm():
+    M, N = 32, 64
+    BLOCK_SIZE = 16  # need to be a power of 2
+    x_shape = (M, N)
+    w_shape = (N, )
+    weight = torch.rand(w_shape)
+    bias = torch.rand(w_shape)
+    x = -2.3 + 0.5 * torch.randn(x_shape)
+    dy = .1 * torch.randn_like(x)
+
+    out = torch.zeros_like(x)
+    mean = torch.zeros((M,))
+    rstd = torch.zeros((M,))
+    eps = 1e-5
+    # Less than 64KB per feature: enqueue fused kernel
+    # MAX_FUSED_SIZE = 65536 // x.element_size()
+    # heuristics for number of warps
+
+    tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=False)
+
+    def _layer_norm_fwd_fused(
+            Out,
+            A,
+            Weight,
+            Bias,
+            Mean, Rstd,
+            stride, N, eps,
+            BLOCK_SIZE: tl.constexpr,
+    ):
+        # position of elements processed by this program
+        row = tl.program_id(0)
+        Out += row * stride
+        A += row * stride
+        # compute mean
+        mean = 0
+        _mean = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
+        for off in range(0, N, BLOCK_SIZE):
+            cols = off + tl.arange(0, BLOCK_SIZE)
+            a = tl.load(A + cols, mask=cols < N, other=0., eviction_policy="evict_last").to(tl.float32)
+            _mean += a
+        mean = tl.sum(_mean, axis=0) / N
+        # compute variance
+        _var = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
+        for off in range(0, N, BLOCK_SIZE):
+            cols = off + tl.arange(0, BLOCK_SIZE)
+            a = tl.load(A + cols, mask=cols < N, other=0., eviction_policy="evict_last").to(tl.float32)
+            a = tl.where(cols < N, a - mean, 0.)
+            _var += a * a
+        var = tl.sum(_var, axis=0) / N
+        rstd = 1 / tl.sqrt(var + eps)
+
+        # write-back mean/rstd
+        tl.store(Mean + row, mean)
+        tl.store(Rstd + row, rstd)
+        # multiply by weight and add bias
+        for off in range(0, N, BLOCK_SIZE):
+            cols = off + tl.arange(0, BLOCK_SIZE)
+            mask = cols < N
+            weight = tl.load(Weight + cols, mask=mask)
+            bias = tl.load(Bias + cols, mask=mask)
+            a = tl.load(A + cols, mask=mask, other=0., eviction_policy="evict_first").to(tl.float32)
+            a_hat = (a - mean) * rstd
+            out = a_hat * weight + bias
+            # # write-back
+            tl.store(Out + cols, out, mask=mask)
+
+    while tl.has_next():
+        tl.increment()
+        _layer_norm_fwd_fused(
+            Out=tl.tensor_ptr[out],
+            A=tl.tensor_ptr[x],
+            Weight=tl.tensor_ptr[weight],
+            Bias=tl.tensor_ptr[bias],
+            Mean=tl.tensor_ptr[mean],
+            Rstd=tl.tensor_ptr[rstd],
+            stride=x.stride(0),
+            N=N,
+            eps=eps,
+            BLOCK_SIZE=BLOCK_SIZE,
+        )
+
+    assert torch.allclose(mean, torch.mean(x, dim=1), atol=0.1)
+    assert torch.allclose(rstd, 1/torch.sqrt(torch.var(x, dim=1, unbiased=False)+eps), atol=0.1)
+    assert torch.allclose(out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1)

@@ -39,7 +39,7 @@ class TritonDebugger:
     float32 = torch.float32
     float16 = torch.float32  # to run on torch cpu which has a low support for fp16
 
-    def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = True):
+    def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = False):
         self.grid_positions = list(product(*(range(axis) for axis in grid)))
         if shuffle:
             random.shuffle(self.grid_positions)
@@ -73,8 +73,8 @@ class TritonDebugger:
         @param end: end of the interval. Must be a power of two >= start.
         @return: a tensor of size (end - start) with values in [start, end).
         """
-        assert (end & (end-1) == 0) and end != 0, "end must be a power of 2"
-        assert start < end, "start must be less than end"
+        assert (end & (end-1) == 0) and end != 0, f"end must be a power of 2: {end}"
+        assert start < end, f"start must be less than end: {start} > {end}"
         return torch.arange(start=start, end=end)
 
     def get_tensor(self, ptr: torch.Tensor) -> torch.Tensor:
@@ -89,7 +89,7 @@ class TritonDebugger:
         indexes: list[Tensor] = self.offset_to_indexes(offsets=offsets, tensor=tensor)
         return indexes
 
-    def load(self, ptr: torch.Tensor, mask: Optional[torch.Tensor] = None, other: float = 0.) -> torch.Tensor:
+    def load(self, ptr: torch.Tensor, mask: Optional[torch.Tensor] = None, other: float = 0., eviction_policy: str = "") -> torch.Tensor:
         if mask is None:
             mask = torch.ones_like(ptr).bool()
         tensor = self.get_tensor(ptr=ptr)
@@ -98,7 +98,9 @@ class TritonDebugger:
         block[mask] = tensor[indexes]
         return block
 
-    def store(self, ptr: torch.Tensor, data: torch.Tensor, mask: torch.Tensor) -> None:
+    def store(self, ptr: torch.Tensor, data: torch.Tensor, mask: Optional[torch.Tensor] = None) -> None:
+        if mask is None:
+            mask = torch.ones_like(ptr).bool()
         tensor = self.get_tensor(ptr)
         indexes = self.get_indexes(tensor=tensor, ptr=ptr, mask=mask)
         tensor[indexes] = data[mask]
@@ -147,4 +149,9 @@ class TritonDebugger:
 
     @staticmethod
     def rand(seed: int, offset: torch.Tensor, n_rounds: int = 10):
+        # seed not used as it would produce always the same pattern
         return torch.rand(offset.shape)
+
+    @staticmethod
+    def sqrt(x: torch.Tensor) -> torch.Tensor:
+        return torch.sqrt(x)
