@@ -140,7 +140,11 @@ class TritonDebugger:
         return torch.zeros(size=shape, dtype=dtype)
 
     @staticmethod
-    def dot(input: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
+    def dot(input: torch.Tensor, other: torch.Tensor, trans_a: bool = False, trans_b: bool = False, allow_tf32=True) -> torch.Tensor:
+        if trans_a:
+            input = input.T
+        if trans_b:
+            other = other.T
         return torch.matmul(input=input, other=other)
 
     @staticmethod
@@ -155,3 +159,11 @@ class TritonDebugger:
     @staticmethod
     def sqrt(x: torch.Tensor) -> torch.Tensor:
         return torch.sqrt(x)
+
+    @staticmethod
+    def multiple_of(input: int, values: int) -> int:
+        return input
+
+    @staticmethod
+    def maximum(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return torch.max(x, y)
