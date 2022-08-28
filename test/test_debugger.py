@@ -45,11 +45,11 @@ def test_add():
         tl.store(output_ptr + offsets, output, mask=mask)
 
     while tl.has_next():
-        tl.increment()
+        tl.new_program()
         add_kernel(
-            x_ptr=tl.tensor_ptr[x],
-            y_ptr=tl.tensor_ptr[y],
-            output_ptr=tl.tensor_ptr[o],
+            x_ptr=tl.get_ptr(x),
+            y_ptr=tl.get_ptr(y),
+            output_ptr=tl.get_ptr(o),
             n_elements=x.numel(),
             BLOCK_SIZE=block_size,
         )
@@ -90,10 +90,10 @@ def test_softmax():
         tl.store(output_ptrs, softmax_output, mask=col_offsets < n_cols)
 
     while tl.has_next():
-        tl.increment()
+        tl.new_program()
         softmax_kernel(
-            output_ptr=tl.tensor_ptr[o],
-            input_ptr=tl.tensor_ptr[x],
+            output_ptr=tl.get_ptr(o),
+            input_ptr=tl.get_ptr(x),
             input_row_stride=x.stride(0),
             output_row_stride=o.stride(0),
             n_cols=ncols,
@@ -194,12 +194,12 @@ def test_matmul():
         tl.store(c_ptrs, c, mask=c_mask)
 
     while tl.has_next():
-        tl.increment()
+        tl.new_program()
         matmul_kernel(
             # Pointers to matrices
-            a_ptr=tl.tensor_ptr[A],
-            b_ptr=tl.tensor_ptr[B],
-            c_ptr=tl.tensor_ptr[C],
+            a_ptr=tl.get_ptr(A),
+            b_ptr=tl.get_ptr(B),
+            c_ptr=tl.get_ptr(C),
             # Matrix dimensions
             M=m,
             N=n,
@@ -257,9 +257,9 @@ def test_dropout():
         tl.store(output_ptr + offsets, output, mask=mask)
 
     while tl.has_next():
-        tl.increment()
-        _seeded_dropout(x_ptr=tl.tensor_ptr[x],
-                        output_ptr=tl.tensor_ptr[o],
+        tl.new_program()
+        _seeded_dropout(x_ptr=tl.get_ptr(x),
+                        output_ptr=tl.get_ptr(o),
                         n_elements=x.numel(),
                         p=p,
                         seed=123,
@@ -335,14 +335,14 @@ def test_layernorm():
             tl.store(Out + cols, out, mask=mask)
 
     while tl.has_next():
-        tl.increment()
+        tl.new_program()
         _layer_norm_fwd_fused(
-            Out=tl.tensor_ptr[out],
-            A=tl.tensor_ptr[x],
-            Weight=tl.tensor_ptr[weight],
-            Bias=tl.tensor_ptr[bias],
-            Mean=tl.tensor_ptr[mean],
-            Rstd=tl.tensor_ptr[rstd],
+            Out=tl.get_ptr(out),
+            A=tl.get_ptr(x),
+            Weight=tl.get_ptr(weight),
+            Bias=tl.get_ptr(bias),
+            Mean=tl.get_ptr(mean),
+            Rstd=tl.get_ptr(rstd),
             stride=x.stride(0),
             N=N,
             eps=eps,
@@ -378,7 +378,7 @@ def test_flash_attention():
     assert Lq == Lk and Lk == Lv
     assert Lk in {16, 32, 64, 128}
     BLOCK = 128
-    tl = TritonDebugger([TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]], inputs=[q, k, v, dout, L, m, tmp], shuffle=False)
+    tl = TritonDebugger([TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]], inputs=[q, k, v, dout, L, m, tmp], shuffle=True)
 
     def _fwd_kernel(
             Q, K, V, sm_scale,
@@ -461,16 +461,16 @@ def test_flash_attention():
         tl.store(out_ptrs, acc)
 
     while tl.has_next():
-        tl.increment()
+        tl.new_program()
         _fwd_kernel(
-            tl.tensor_ptr[q],
-            tl.tensor_ptr[k],
-            tl.tensor_ptr[v],
+            tl.get_ptr(q),
+            tl.get_ptr(k),
+            tl.get_ptr(v),
             sm_scale,
-            tl.tensor_ptr[tmp],
-            tl.tensor_ptr[L],
-            tl.tensor_ptr[m],
-            tl.tensor_ptr[dout],
+            tl.get_ptr(tmp),
+            tl.get_ptr(L),
+            tl.get_ptr(m),
+            tl.get_ptr(dout),
             q.stride(0), q.stride(1), q.stride(2), q.stride(3),
             k.stride(0), k.stride(1), k.stride(2), k.stride(3),
             v.stride(0), v.stride(1), v.stride(2), v.stride(3),

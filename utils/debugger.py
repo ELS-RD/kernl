@@ -5,34 +5,7 @@ from typing import Optional
 import torch
 from torch import Tensor
 
-
-class RangeKeyDict:
-    def __init__(self, my_dict):
-        assert not any(map(lambda x: not isinstance(x, tuple) or len(x) != 2 or x[0] > x[1], my_dict))
-
-        def lte(bound):
-            return lambda x: bound <= x
-
-        def gt(bound):
-            return lambda x: x < bound
-
-        # generate the inner dict with tuple key like (lambda x: 0 <= x, lambda x: x < 100)
-        self._my_dict = {(lte(k[0]), gt(k[1])): v for k, v in my_dict.items()}
-
-    def __getitem__(self, number):
-        from functools import reduce
-        _my_dict = self._my_dict
-        try:
-            result = next((_my_dict[key] for key in _my_dict if list(reduce(lambda s, f: filter(f, s), key, [number]))))
-        except StopIteration:
-            raise KeyError(number)
-        return result
-
-    def get(self, number, default=None):
-        try:
-            return self.__getitem__(number)
-        except KeyError:
-            return default
+from utils.range_dict import RangeKeyDict
 
 
 class TritonDebugger:
@@ -40,6 +13,13 @@ class TritonDebugger:
     float16 = torch.float32  # to run on torch cpu which has a low support for fp16
 
     def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = False):
+        """
+        Initialize a serialized triton code runner.
+        :param grid: execution grid, should match what you would provide to Cuda
+        :param inputs: a list of all tensors you plan to use in triton code. Will generate fake pointers.
+        :param shuffle: suffle execution order like in parallel execution. Helps to avoid mistakes like relying on
+            some order which is not possible in parallel execution.
+        """
         self.grid_positions = list(product(*(range(axis) for axis in grid)))
         if shuffle:
             random.shuffle(self.grid_positions)
@@ -48,22 +28,114 @@ class TritonDebugger:
         self.constexpr = int | str
         previous_boundary = 0
 
-        d = dict()
+        range_tensor_dict = dict()
         for t in inputs:
-            d[(previous_boundary, previous_boundary + t.nelement())] = t
+            range_tensor_dict[(previous_boundary, previous_boundary + t.nelement())] = t
             previous_boundary = previous_boundary + t.nelement()
 
-        self.inputs = RangeKeyDict(d)
-        self.tensor_ptr: dict[torch.Tensor, int] = {v: k[0] for k, v in d.items()}
+        self.range_tensor_dict = RangeKeyDict(range_tensor_dict)
+        self.tensor_ptr: dict[torch.Tensor, int] = {tensor: range_ptrs[0] for range_ptrs, tensor in range_tensor_dict.items()}
 
-    def increment(self):
+    def new_program(self):
+        """
+        Update program id from the grid.
+        """
         self.current_grid_position = self.grid_positions.pop(0)
 
     def program_id(self, axis: int) -> torch.Tensor:
+        """
+        Get program id for the given axis.
+        :param axis: axis to get program id for. Should be 0, 1, 2.
+        :return: program ID as a tensor
+        """
+        assert axis in [0, 1, 2]
         return torch.tensor(self.current_grid_position[axis])
 
     def has_next(self) -> bool:
+        """
+        Check if there is another program to run.
+        :return: True if there is another program to run, False otherwise.
+        """
         return len(self.grid_positions) > 0
+
+    @staticmethod
+    def offset_to_indexes(tensor: torch.Tensor, offsets: torch.Tensor) -> list[torch.Tensor]:
+        """
+        Convert the offsets to indexes of a given tensor using each axis stride.
+        :param tensor: tensor to get indexes for.
+        :param offsets: offsets to convert to indexes.
+        :return: list of indexes for each axis.
+        """
+        coordinates: list[torch.Tensor] = list()
+        for dim in range(0, tensor.ndim):
+            dim_stride = tensor.stride(dim)
+            dim_index = torch.div(offsets, dim_stride, rounding_mode='floor')
+            coordinates.append(dim_index.long())
+            offsets -= dim_index * dim_stride
+
+        return coordinates
+
+    def _get_tensor(self, ptr: torch.Tensor) -> torch.Tensor:
+        """
+        Get tensor from the input dictionary.
+        :param ptr: pointer to the tensor.
+        :return:
+        """
+        first_elem_ptr = ptr.flatten()[0].item()
+        tensor = self.range_tensor_dict[first_elem_ptr]
+        return tensor
+
+    def _get_indexes(self, tensor: torch.Tensor, ptr: torch.Tensor, mask: torch.Tensor) -> list[Tensor]:
+        """
+        Convert the pointers to indexes of a given tensor.
+        :param tensor: tensor to get indexes for.
+        :param ptr: pointer to the tensor.
+        :param mask: mask to apply to the pointers.
+        :return: list of indexes.
+        """
+        first_ptr = self.tensor_ptr[tensor]
+        offsets = ptr - first_ptr
+        offsets = offsets[mask]
+        indexes: list[Tensor] = self.offset_to_indexes(tensor=tensor, offsets=offsets)
+        return indexes
+
+    def load(self, ptr: torch.Tensor, mask: Optional[torch.Tensor] = None, other: float = 0., eviction_policy: str = "") -> torch.Tensor:
+        """
+        Load data from the provided pointers / mask.
+        :param ptr: pointers to the data.
+        :param mask: mask to apply to the pointers.
+        :param other: value to return if the position is masked.
+        :param eviction_policy: not used, just for compatibility
+        :return: loaded data.
+        """
+        if mask is None:
+            mask = torch.ones_like(ptr).bool()
+        tensor = self._get_tensor(ptr=ptr)
+        indexes = self._get_indexes(tensor=tensor, ptr=ptr, mask=mask)
+        block = torch.full_like(ptr, fill_value=other, dtype=tensor.dtype)
+        block[mask] = tensor[indexes]
+        return block
+
+    def store(self, ptr: torch.Tensor, data: torch.Tensor, mask: Optional[torch.Tensor] = None) -> None:
+        """
+        Store tensor to the provided pointers / mask.
+        :param ptr: pointers where to store the provided data.
+        :param data: data to store.
+        :param mask: mask to apply to the pointers/data.
+        """
+        if mask is None:
+            mask = torch.ones_like(ptr).bool()
+        tensor = self._get_tensor(ptr)
+        indexes = self._get_indexes(tensor=tensor, ptr=ptr, mask=mask)
+        tensor[indexes] = data[mask]
+
+    def get_ptr(self, tensor: torch.Tensor) -> int:
+        """
+        Get pointer to the beginning of the given tensor.
+        :param tensor: input tensor
+        :return: pointer as an integer
+        """
+        return self.tensor_ptr[tensor]
 
     @staticmethod
     def arange(start: int, end: int) -> torch.Tensor:
@@ -76,34 +148,6 @@ class TritonDebugger:
         assert (end & (end-1) == 0) and end != 0, f"end must be a power of 2: {end}"
         assert start < end, f"start must be less than end: {start} > {end}"
         return torch.arange(start=start, end=end)
-
-    def get_tensor(self, ptr: torch.Tensor) -> torch.Tensor:
-        first_elem_ptr = ptr.flatten()[0].item()
-        tensor = self.inputs[first_elem_ptr]
-        return tensor
-
-    def get_indexes(self, tensor: torch.Tensor, ptr: torch.Tensor, mask: torch.Tensor) -> list[Tensor]:
-        first_ptr = self.tensor_ptr[tensor]
-        offsets = ptr - first_ptr
-        offsets = offsets[mask]
-        indexes: list[Tensor] = self.offset_to_indexes(offsets=offsets, tensor=tensor)
-        return indexes
-
-    def load(self, ptr: torch.Tensor, mask: Optional[torch.Tensor] = None, other: float = 0., eviction_policy: str = "") -> torch.Tensor:
-        if mask is None:
-            mask = torch.ones_like(ptr).bool()
-        tensor = self.get_tensor(ptr=ptr)
-        indexes = self.get_indexes(tensor=tensor, ptr=ptr, mask=mask)
-        block = torch.full_like(ptr, fill_value=other, dtype=tensor.dtype)
-        block[mask] = tensor[indexes]
-        return block
-
-    def store(self, ptr: torch.Tensor, data: torch.Tensor, mask: Optional[torch.Tensor] = None) -> None:
-        if mask is None:
-            mask = torch.ones_like(ptr).bool()
-        tensor = self.get_tensor(ptr)
-        indexes = self.get_indexes(tensor=tensor, ptr=ptr, mask=mask)
-        tensor[indexes] = data[mask]
 
     @staticmethod
     def cdiv(x: int, y: int) -> int:
@@ -125,17 +169,6 @@ class TritonDebugger:
         return torch.sum(x, dim=axis)
 
     @staticmethod
-    def offset_to_indexes(offsets: torch.Tensor, tensor: torch.Tensor) -> list[torch.Tensor]:
-        coordinates: list[torch.Tensor] = list()
-        for dim in range(0, tensor.ndim):
-            dim_stride = tensor.stride(dim)
-            dim_index = torch.div(offsets, dim_stride, rounding_mode='floor')
-            coordinates.append(dim_index.long())
-            offsets -= dim_index * dim_stride
-
-        return coordinates
-
-    @staticmethod
     def zeros(shape: (int, int), dtype: torch.dtype) -> torch.Tensor:
         return torch.zeros(size=shape, dtype=dtype)
 
@@ -153,6 +186,13 @@ class TritonDebugger:
 
     @staticmethod
     def rand(seed: int, offset: torch.Tensor, n_rounds: int = 10):
+        """
+        Generate random data. Seed is not used as it would produce always the same pattern.
+        :param seed: not used
+        :param offset: random tensor will have offset shape.
+        :param n_rounds: not used
+        :return:
+        """
         # seed not used as it would produce always the same pattern
         return torch.rand(offset.shape)
 
@@ -162,6 +202,12 @@ class TritonDebugger:
 
     @staticmethod
     def multiple_of(input: int, values: int) -> int:
+        """
+        Used to type the compiler, we just return input argument.
+        :param input: some input
+        :param values: input guaranted multiple of.
+        :return: input argument.
+        """
         return input
 
     @staticmethod
