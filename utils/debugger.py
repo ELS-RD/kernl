@@ -1,6 +1,6 @@
 import random
 from itertools import product
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import Tensor
@@ -35,6 +35,8 @@ class TritonDebugger:
 
         self.range_tensor_dict = RangeKeyDict(range_tensor_dict)
         self.tensor_ptr: dict[torch.Tensor, int] = {tensor: range_ptrs[0] for range_ptrs, tensor in range_tensor_dict.items()}
+        self.total_gm_read = 0
+        self.total_gm_write = 0
 
     def new_program(self):
         """
@@ -114,6 +116,7 @@ class TritonDebugger:
         indexes = self._get_indexes(tensor=tensor, ptr=ptr, mask=mask)
         block = torch.full_like(ptr, fill_value=other, dtype=tensor.dtype)
         block[mask] = tensor[indexes]
+        self.total_gm_read += mask.sum().item()
         return block
 
     def store(self, ptr: torch.Tensor, data: torch.Tensor, mask: Optional[torch.Tensor] = None) -> None:
@@ -128,6 +131,7 @@ class TritonDebugger:
         tensor = self._get_tensor(ptr)
         indexes = self._get_indexes(tensor=tensor, ptr=ptr, mask=mask)
         tensor[indexes] = data[mask]
+        self.total_gm_write += mask.sum().item()
 
     def get_ptr(self, tensor: torch.Tensor) -> int:
         """
@@ -181,7 +185,7 @@ class TritonDebugger:
         return torch.matmul(input=input, other=other)
 
     @staticmethod
-    def where(condition: torch.BoolTensor, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def where(condition: torch.BoolTensor, x: torch.Tensor, y: Union[torch.Tensor, float]) -> torch.Tensor:
         return torch.where(condition, x, y)
 
     @staticmethod
