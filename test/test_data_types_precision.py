@@ -30,7 +30,7 @@ def test_batched_matmul_precision():
                     # The tolerated difference is: 2x (PT FP32 - PT FP16)
                     difference_torch = torch.sub(expected_float32, expected_float16)
                     difference_triton = torch.sub(expected_float32, value_float16)
-                    assert torch.le(difference_triton, 2 * difference_torch)
+                    assert torch.le(torch.abs(difference_triton), torch.abs(2 * difference_torch))
 
 
 @set_seed()
@@ -58,4 +58,4 @@ def test_linear_layer_precision():
             # The tolerated difference is: 2x (PT FP32 - PT FP16)
             difference_torch = torch.sub(expected_float32, expected_float16)
             difference_triton = torch.sub(expected_float32, value_float16)
-            assert torch.le(difference_triton, 2 * difference_torch)
+            assert torch.le(torch.abs(difference_triton), torch.abs(2 * difference_torch))
