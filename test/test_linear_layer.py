@@ -3,13 +3,14 @@ import pytest
 
 from implementations.cuda_graph import CudaGraph
 from implementations.linear_layer import linear_layer
+from test import set_seed
+
 
 @pytest.mark.parametrize("size", [128 * i for i in range(2, 10)])
 @pytest.mark.parametrize("batch", [8])
 @pytest.mark.parametrize("implementation", ["cublas", "triton", "triton_cuda_graph", "pytorch"])
+@set_seed()
 def test_benchmark(benchmark, size, batch, implementation):
-    torch.manual_seed(0)
-
     M = size
     N = size
     K = size

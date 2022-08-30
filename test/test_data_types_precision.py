@@ -2,6 +2,7 @@ import torch
 import pytest
 from implementations.batched_matmul import batched_matmul
 from implementations.linear_layer import linear_layer
+from test import set_seed
 
 
 def generate_random_data(size: tuple, device: str, torch_dtype: torch.dtype):
@@ -12,9 +13,8 @@ def generate_random_data(size: tuple, device: str, torch_dtype: torch.dtype):
 @pytest.mark.parametrize("n", [24, 32])
 @pytest.mark.parametrize("k", [24])
 @pytest.mark.parametrize("batch", [1, 16])
+@set_seed()
 def test_batched_matmul_precision(m, n, k, batch):
-    torch.manual_seed(0)
-
     a_float32 = generate_random_data((batch, m, k), 'cuda', torch.float32)
     b_float32 = generate_random_data((batch, k, n), 'cuda', torch.float32)
     expected_float32 = torch.matmul(a_float32, b_float32)
@@ -35,9 +35,8 @@ def test_batched_matmul_precision(m, n, k, batch):
 
 @pytest.mark.parametrize("size", [128 * i for i in range(2, 10)])
 @pytest.mark.parametrize("batch", [8])
+@set_seed()
 def test_linear_layer_precision(size, batch):
-    torch.manual_seed(0)
-
     M = size
     K = size
 
