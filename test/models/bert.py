@@ -97,7 +97,11 @@ def get_model_optimized_without_cudagraph():
         dynamo_backend_ofi(gm)
         return gm  # return a python callable
 
-    return torchdynamo.optimize(compiler)(base)
+    def run(*args, **kwargs):
+        with torchdynamo.optimize(compiler):
+            return base(*args, **kwargs)
+
+    return run
 
 
 def cudagraphs_inner(model, inputs, copy_outputs=True):
@@ -141,8 +145,11 @@ def get_model_optimized():
         dynamo_backend_ofi(gm)
         return cudagraphs_inner(gm, example_inputs)
 
-    gm = torchdynamo.optimize(compiler)(base)
-    return gm
+    def run(*args, **kwargs):
+        with torchdynamo.optimize(compiler):
+            return base(*args, **kwargs)
+
+    return run
 
 
 def get_model_optimized_causal():
@@ -152,5 +159,8 @@ def get_model_optimized_causal():
         dynamo_backend_ofi(gm, assume_causal=True)
         return cudagraphs_inner(gm, example_inputs)
 
-    gm = torchdynamo.optimize(compiler)(base)
-    return gm
+    def run(*args, **kwargs):
+        with torchdynamo.optimize(compiler):
+            return base(*args, **kwargs)
+
+    return run
