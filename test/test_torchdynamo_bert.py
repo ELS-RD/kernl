@@ -102,3 +102,14 @@ def test_benchmark_bert_causal_mask(benchmark, batch, seq_length, implementation
         torchdynamo.reset()
         assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
         assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
+
+
+def test_should_support_shape_change():
+    model_baseline = get_model_baseline()
+    model_optimized = get_model_optimized()
+
+    for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
+        pytorch_input = get_pytorch_input(shape)
+        expected = model_baseline(**pytorch_input)
+        result = model_optimized(**pytorch_input)
+        assert torch.allclose(result["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
