@@ -3,6 +3,8 @@ import torch
 import triton
 import triton.language as tl
 
+# CREDITS: Initially inspired by the Triton tutorial
+
 @triton.jit
 def _layer_norm_fwd_fused(
         Out,

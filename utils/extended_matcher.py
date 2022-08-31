@@ -10,6 +10,8 @@ from collections import defaultdict
 from utils.fx import static_args_are_equal
 
 
+# Originaly taken from https://github.com/pytorch/pytorch/blob/a27a4a02fecfdd626b25794a84954731b80f29fb/torch/fx/passes/utils/matcher_utils.py
+
 @dataclass
 class InternalMatch:
     # Nodes from which the match was found

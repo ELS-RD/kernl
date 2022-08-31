@@ -2,6 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
+# CREDITS: Initially inspired by the Triton tutorial
 
 @triton.jit
 def _fwd_kernel(
@@ -66,17 +67,17 @@ def _fwd_kernel(
     offs_n = tl.arange(0, BLOCK_N)  # First block on N dimension
     offs_d = tl.arange(0, BLOCK_DHEAD)  # Full head
 
-    current_batch = head_idx // heads
-    current_head = head_idx % heads
+    current_batch_idx = head_idx // heads
+    current_head_idx = head_idx % heads
     # memory offsets matrices on whole Q, K, V matrices
     # Offsets for the current block on matrix Q
-    off_q = current_batch * stride_qz + current_head * stride_qh + offs_m[:, None] * stride_qm + offs_d[None,
+    off_q = current_batch_idx * stride_qz + current_head_idx * stride_qh + offs_m[:, None] * stride_qm + offs_d[None,
                                                                                                  :] * stride_qk
     # Offsets for the first block on matrix K
-    off_k = current_batch * stride_kz + current_head * stride_kh + offs_n[:, None] * stride_kn + offs_d[None,
+    off_k = current_batch_idx * stride_kz + current_head_idx * stride_kh + offs_n[:, None] * stride_kn + offs_d[None,
                                                                                                  :] * stride_kk
     # Offsets for the first block on matrix V
-    off_v = current_batch * stride_vz + current_head * stride_vh + offs_n[:, None] * stride_qm + offs_d[None,
+    off_v = current_batch_idx * stride_vz + current_head_idx * stride_vh + offs_n[:, None] * stride_qm + offs_d[None,
                                                                                                  :] * stride_qk
 
     # pointers to blocks in Q, K, V
@@ -165,7 +166,7 @@ def _fwd_kernel(
     # For some reason we need to re-init this variable
     # The other variables in the original implementations seem not needed
     offs_n = tl.arange(0, BLOCK_DHEAD)
-    off_o = current_batch * stride_oz + current_head * stride_oh + offs_m[:, None] * stride_om + offs_n[None,
+    off_o = current_batch_idx * stride_oz + current_head_idx * stride_oh + offs_m[:, None] * stride_om + offs_n[None,
                                                                                                  :] * stride_on
     out_ptrs = output + off_o
     tl.store(out_ptrs, acc)

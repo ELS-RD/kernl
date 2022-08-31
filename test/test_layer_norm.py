@@ -5,7 +5,7 @@ from implementations.layer_norm import layer_norm_forward
 
 
 @pytest.mark.parametrize("size", [128])
-@pytest.mark.parametrize("implementation", ["cublas", "triton"])
+@pytest.mark.parametrize("implementation", ["pytorch", "triton"])
 def test_benchmark(benchmark, size, implementation):
     torch.manual_seed(0)
 
@@ -21,7 +21,7 @@ def test_benchmark(benchmark, size, implementation):
 
     value= None
     expected = torch.nn.functional.layer_norm(x, w_shape, weight, bias, eps)
-    if implementation == "cublas":
+    if implementation == "pytorch":
          value = benchmark(torch.nn.functional.layer_norm, x, w_shape, weight, bias, eps)
     elif implementation == "triton":
          value = benchmark(layer_norm_forward, x, w_shape, weight, bias, eps)

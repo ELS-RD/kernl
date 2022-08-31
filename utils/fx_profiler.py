@@ -5,6 +5,7 @@ import numpy as np
 from typing import Any, Dict, List
 from torch.fx import Interpreter, GraphModule
 
+# Originaly taken from https://github.com/pytorch/tutorials/blob/4918fe4bf3df96b233ca134c985ffb09ea45f92c/intermediate_source/fx_profiling_tutorial.py
 
 class ProfilingInterpreter(Interpreter):
     def __init__(self, module : GraphModule, mode: str = "cpu"):

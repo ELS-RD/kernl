@@ -87,6 +87,7 @@ def _fwd_kernel_original(
     tl.store(out_ptrs, acc)
 
 
+# Similar to https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py#L213
 def masked_attention_reference(q, k, v, sm_scale):
     seq_length = q.size(2)
     M = torch.tril(torch.ones((seq_length, seq_length), device="cuda"))

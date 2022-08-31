@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 
 from implementations.linear_layer import linear_layer
@@ -6,7 +8,7 @@ from utils.extended_matcher import replace_pattern
 torch.fx.wrap('linear_layer')
 
 
-def replace_linear_activation(gm: torch.fx.GraphModule, activation_module, activation: str):
+def replace_linear_activation(gm: torch.fx.GraphModule, activation_module: Callable, activation: str):
     class Pattern(torch.nn.Module):
         def __init__(self):
             super().__init__()
