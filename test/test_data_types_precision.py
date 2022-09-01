@@ -14,7 +14,7 @@ def test_batched_matmul_precision():
     for m in [m_idx * 2 for m_idx in range(8, 256, 32)]:
         for n in [n_idx * 2 for n_idx in range(8, 256, 32)]:
             for k in [k_idx * 2 for k_idx in range(8, 256, 32)]:
-                for batch in [1, 8, 16, 32, 64]:
+                for batch in [8, 16, 32]:
                     a_float32 = generate_random_data((batch, m, k), 'cuda', torch.float32)
                     b_float32 = generate_random_data((batch, k, n), 'cuda', torch.float32)
                     expected_float32 = torch.matmul(a_float32, b_float32)
@@ -36,8 +36,8 @@ def test_batched_matmul_precision():
 
 @set_seed()
 def test_linear_layer_precision():
-    for size in [128 * i for i in range(1, 1000, 10)]:
-        for batch in [1, 8, 16]:
+    for size in [64 * i for i in range(1, 20)]:
+        for batch in [8, 16]:
             M = size
             K = size
             a_float32 = generate_random_data((batch, M, K), 'cuda', torch.float32)
