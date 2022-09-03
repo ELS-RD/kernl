@@ -1,35 +1,52 @@
 import torch
 import pytest
 
-from implementations.cuda_graph import CudaGraph
+from implementations.cuda_graph import cudagraphs_inner
 from implementations.linear_layer import linear_layer
 
-@pytest.mark.parametrize("size", [128 * i for i in range(2, 10)])
-@pytest.mark.parametrize("batch", [8])
-@pytest.mark.parametrize("implementation", ["pytorch", "triton", "triton_cuda_graph", "pytorch"])
-def test_benchmark(benchmark, size, batch, implementation):
+
+@pytest.mark.parametrize("size", [8, 32, 128, 256, 384, 512])
+@pytest.mark.parametrize("contiguous", [True, False])
+@pytest.mark.parametrize("batch", [1])  # , 8
+@pytest.mark.parametrize("implementation", ["triton", "triton_cuda_graph", "pytorch", "pytorch_cuda_graph"])
+def test_benchmark(benchmark, size, contiguous, batch, implementation):
     torch.manual_seed(0)
 
     M = size
-    N = size
+    N = size * 4
     K = size
 
-    a = torch.randn((batch, M, K), device='cuda', dtype=torch.float16, requires_grad=False)
-    layer_weight = torch.randn((K * 4, K), device='cuda', dtype=torch.float16, requires_grad=False)
+    # order of dimensions is wrong so we force contiguous call
+    a = torch.randn((batch, K, M), device='cuda', dtype=torch.float16, requires_grad=False)
+    a = a.mT
+    if contiguous:
+        a = a.contiguous()
+    else:
+        assert not a.is_contiguous()
 
-    torch_linear_layer = torch.nn.Linear(K, K*4, bias=False, device="cuda", dtype=torch.float16)
+    layer_weight = torch.randn((N, K), device='cuda', dtype=torch.float16, requires_grad=False)
+
+    torch_linear_layer = torch.nn.Linear(K, N, bias=False, device="cuda", dtype=torch.float16)
     torch_linear_layer.weight.data = layer_weight
     expected = torch_linear_layer(a)
+    cuda_graph_pool = torch.cuda.graph_pool_handle()
 
     if implementation == "pytorch":
         value = benchmark(torch_linear_layer, a)
+    elif implementation == "pytorch_cuda_graph":
+        run = cudagraphs_inner(model=torch_linear_layer, inputs=[a], pool=cuda_graph_pool)
+        (value,) = benchmark(run, new_inputs=[a])
     elif implementation == "triton":
         value, _ = benchmark(linear_layer, x=a, weight=layer_weight, bias=None)
     elif implementation == "triton_cuda_graph":
-        cg = CudaGraph(weights=layer_weight)
-        value = benchmark(cg.run, inputs=a)
+        def wrapper(x):
+            # we fix weights, so we have not to provide (and copy) it during inference
+            return linear_layer(x=x, weight=layer_weight, bias=None)
+
+        run = cudagraphs_inner(model=wrapper, inputs=[a], pool=cuda_graph_pool, copy_outputs=False)
+        value, _ = benchmark(run, new_inputs=[a])
     elif implementation == "pytorch":
         value = benchmark(torch_linear_layer, input=a)
     else:
         raise ValueError(f"Unknown implementation {implementation}")
-    assert torch.allclose(value, expected, atol=1e-2)
+    assert torch.allclose(value, expected, atol=1e-1)

@@ -40,12 +40,18 @@ def kernel_fma(
         # Pointers to matrices
         OUT, ACT_INPUTS, INPUT, WEIGHT, bias,
         # Matrix dimensions
-        M, N, K,
+        M,
+        N,
+        K,
         # The stride variables represent how much to increase the ptr by when moving by 1
         # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
         # by to get the element one row down (A has M rows)
-        stride_om, stride_im,
+        stride_om,
+        stride_on,
+        stride_im,
+        stride_ik,
         stride_wn,
+        stride_wk,
         # Meta-parameters
         BLOCK_M: tl.constexpr, GROUP_M: tl.constexpr,
         BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
@@ -95,11 +101,12 @@ def kernel_fma(
     # for rows (resp. col) of C
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    rk = tl.arange(0, BLOCK_K)
+    ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
+    rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
 
     # the memory addresses of elements can follow numpy broadcasting
-    input_ptrs = INPUT + rm[:, None] * stride_im
-    weight_ptrs = WEIGHT + rn[None, :] * stride_wn
+    input_ptrs = INPUT + ram[:, None] * stride_im
+    weight_ptrs = WEIGHT + rbn[None, :] * stride_wn
 
     # initialize and iteratively update accumulator
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
@@ -110,13 +117,13 @@ def kernel_fma(
 
     # block level matrix multiplication.
     # We fetch a block memory block from both inputs, matmul and accumulate, then repeat
-    mask_rn = rn < N
-    mask_rm = rm < M
+    mask_rn = rbn < N
+    mask_rm = ram < M
 
     for i in range(0, K, BLOCK_K):
         rk = tl.arange(0, BLOCK_K) + i
-        a = tl.load(input_ptrs + rk[None, :], mask=((rk[None, :] < K) & mask_rm[:, None]), other=0.0)
-        w = tl.load(weight_ptrs + rk[:, None], mask=((rk[:, None] < K) & mask_rn[None, :]), other=0.0)
+        a = tl.load(input_ptrs + rk[None, :] * stride_ik, mask=((rk[None, :] < K) & mask_rm[:, None]), other=0.0)
+        w = tl.load(weight_ptrs + rk[:, None] * stride_wk, mask=((rk[:, None] < K) & mask_rn[None, :]), other=0.0)
 
         acc += tl.dot(a, w)
 
@@ -131,7 +138,7 @@ def kernel_fma(
     if ACTIVATION == "gelu":
         acc = activation_func.gelu(acc)
     # write back result
-    out_ptrs = OUT + rm[:, None] * stride_om + rn[None, :]
+    out_ptrs = OUT + rm[:, None] * stride_om + rn[None, :] * stride_on
     tl.store(out_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
 
 
@@ -139,7 +146,7 @@ def kernel_fma(
 def linear_layer(
         x: torch.Tensor,
         weight: torch.Tensor,
-        bias: Optional[torch.Tensor],
+        bias: Optional[torch.Tensor] = None,
         activation="",
         save_act_inputs: bool = False
 ):
@@ -147,10 +154,6 @@ def linear_layer(
     Compute e = activation(x @ weight + bias).
     This wrapper kicks the `kernel_fma` Triton kernel
     """
-
-    if not x.is_contiguous():
-        x = x.contiguous()
-
     x_ = x if x.ndim == 2 else x.flatten(0, 1)
 
     assert (
@@ -177,8 +180,12 @@ def linear_layer(
         outputs, act_inputs, x_, weight,            # data ptrs
         bias if bias is not None else x,            # auto skip bias if not present
         M, N, K,                                    # shapes
-        outputs.stride(0), x_.stride(0),            # strides
+        outputs.stride(0),  # strides
+        outputs.stride(1),
+        x_.stride(0),
+        x_.stride(1),
         weight.stride(0),
+        weight.stride(1),
         ACTIVATION=activation,                      # optional fused activation
         BIAS=bias is not None,                      # optional fused bias
         GROUP_M=8,                                  # speed optimization: group the programs
