@@ -94,9 +94,8 @@ def kernel_fma(
     num_pid_in_group = GROUP_M * num_pid_n  # number of programs in group
     group_id = pid // num_pid_in_group  # id of the group this program is in
     first_pid_m = group_id * GROUP_M  # row-id of the first program in the group
-    GROUP_M = min(
-        num_pid_m - first_pid_m, GROUP_M
-    )  # if `num_pid_m` isn't divisible by `GROUP_M`, the last group is smaller
+    # if `num_pid_m` isn't divisible by `GROUP_M`, the last group is smaller
+    GROUP_M = min(num_pid_m - first_pid_m, GROUP_M)
 
     # *within groups*, programs are ordered in a column-major order
     # row-id /col-id of the program in the *launch grid*
@@ -109,8 +108,8 @@ def kernel_fma(
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     # NOTE can't use trick to avoid masking on M and N axis with very small matrix sizes
-    #ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
-    #rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
+    # ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
+    # rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
 
     # the memory addresses of elements can follow numpy broadcasting
     input_ptrs = INPUT + rm[:, None] * stride_im
@@ -161,13 +160,9 @@ def linear_layer(
     """
     x_ = x if x.ndim == 2 else x.flatten(0, 1)
 
-    assert (
-            x_.shape[1] == weight.shape[1]
-    ), f"Incompatible dimensions in between inputs and weight, {x_.shape} - {weight.shape}"
+    assert x_.shape[1] == weight.shape[1], f"Incompatible dimensions: {x_.shape} - {weight.shape}"
     assert bias is None or bias.is_contiguous()
-    assert (
-            bias is None or bias.shape[0] == weight.shape[0]
-    ), "Incompatible dimensions in between weight and bias"
+    assert bias is None or bias.shape[0] == weight.shape[0], "Incompatible dimensions in between weight and bias"
     assert weight.is_contiguous()
 
     M, K = x_.shape
@@ -195,7 +190,6 @@ def linear_layer(
         GROUP_M=8,                                  # speed optimization: group the programs
         SAVE_ACT_INPUTS=save_act_inputs
     )
-    # fmt: on
 
     outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
 

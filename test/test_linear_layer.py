@@ -1,3 +1,5 @@
+import dataclasses
+
 import torch
 import pytest
 
@@ -5,16 +7,36 @@ from implementations.cuda_graph import cuda_graphs_wrapper
 from implementations.linear_layer import linear_layer
 
 
-@pytest.mark.parametrize("size", [8, 32, 128, 256, 384, 512])
-@pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("batch", [1, 8])
-@pytest.mark.parametrize("implementation", ["triton", "triton_cuda_graph", "pytorch", "pytorch_cuda_graph"])
-def test_benchmark(benchmark, size, contiguous, batch, implementation):
-    torch.manual_seed(0)
+@dataclasses.dataclass
+class Shape:
+    bs: int
+    M: int
+    N: int
+    K: int
 
-    M = size
-    N = size * 4
-    K = size
+    def x_shape(self):
+        return self.bs, self.K, self.M
+
+    def weight_shape(self):
+        return self.K, self.N
+
+
+@pytest.mark.parametrize("contiguous", [True, False])
+@pytest.mark.parametrize("shape", [Shape(bs=1, M=8, N=768, K=768),
+                                   Shape(bs=1, M=16, N=768, K=768),
+                                   Shape(bs=1, M=128, N=768, K=768),
+                                   Shape(bs=1, M=256, N=768, K=768),
+                                   Shape(bs=1, M=512, N=768, K=768),
+                                   Shape(bs=16, M=8, N=768, K=768),
+                                   Shape(bs=16, M=16, N=768, K=768),
+                                   Shape(bs=16, M=128, N=768, K=768),
+                                   Shape(bs=16, M=256, N=768, K=768),
+                                   Shape(bs=16, M=512, N=768, K=768),
+                                   ])
+@pytest.mark.parametrize("implementation", ["triton", "triton_cuda_graph", "pytorch", "pytorch_cuda_graph"])
+def test_benchmark(benchmark, shape: Shape, contiguous, implementation):
+    torch.manual_seed(0)
+    batch, M, N, K = dataclasses.astuple(shape)
 
     # order of dimensions is wrong so we force contiguous call
     a = torch.randn((batch, K, M), device='cuda', dtype=torch.float16, requires_grad=False)
