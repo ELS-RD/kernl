@@ -1,4 +1,4 @@
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Callable
 
 import torch
 import pytest
@@ -15,7 +15,7 @@ def get_pytorch_input(size: (int, int)) -> Dict[str, torch.Tensor]:
     }
 
 
-def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
+def get_pytorch_input_causal(size: (int, int)) -> Dict[str, torch.Tensor]:
     batch, seq_length = size
     mask = torch.tril(torch.ones((batch, seq_length, seq_length), device="cuda"))
     return {
@@ -36,26 +36,13 @@ implementations = {
 }
 
 
-@pytest.mark.parametrize("input_shape", [(1, 16) #, (1, 128), (1, 256), (1, 384), (1, 512),
-                                   #(8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
-                                   #(32, 16), (32, 128), (32, 256),
-                                   ])
-@pytest.mark.parametrize("implementation", [
-    "baseline",
-    "dynamo",
-    "dynamo_nvfuser_ofi",
-    "dynamo_no_dropout",
-    "dynamo_cuda_graphs",
-    "dynamo_optimized",
-    "dynamo_optimized_cuda_graphs",
-])
-def test_benchmark_bert(benchmark, input_shape: (int, int), implementation: str):
+def base_benchmark_bert(benchmark, pytorch_input: Callable, input_shape: (int, int), implementation: str):
     torch.manual_seed(0)
     assert implementation in implementations, f"unknown implementation: {implementation}"
     create_model = implementations[implementation]
 
     with torch.inference_mode():
-        inputs = get_pytorch_input(input_shape)
+        inputs = pytorch_input(input_shape)
         model_baseline = get_model_baseline()
         expected = model_baseline(**inputs)
         model = create_model()
@@ -66,31 +53,41 @@ def test_benchmark_bert(benchmark, input_shape: (int, int), implementation: str)
     assert torch.allclose(input=value["pooler_output"], other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
 
 
-# TODO replace implementation of the test by the one above
-@pytest.mark.parametrize("batch", [1, 8, 16])
-@pytest.mark.parametrize("seq_length", [32, 128, 512])
+# TODO restore values
+@pytest.mark.parametrize("input_shape", [(1, 16)  # , (1, 128), (1, 256), (1, 384), (1, 512),
+                                         # (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
+                                         # (32, 16), (32, 128), (32, 256),
+                                         ])
 @pytest.mark.parametrize("implementation", [
     "baseline",
-    "dynamo_optimizer_cuda_graphs"
+    # "dynamo",
+    # "dynamo_nvfuser_ofi",
+    # "dynamo_no_dropout",
+    # "dynamo_cuda_graphs",
+    "dynamo_optimized",
+    "dynamo_optimized_cuda_graphs",
 ])
-def test_benchmark_bert_causal_mask(benchmark, batch, seq_length, implementation):
-    with torch.inference_mode():
-        torch.manual_seed(0)
-        inputs = get_pytorch_input_causal((batch, seq_length))
+def test_benchmark_bert(benchmark, input_shape: (int, int), implementation: str):
+    base_benchmark_bert(benchmark=benchmark,
+                        pytorch_input=get_pytorch_input,
+                        input_shape=input_shape,
+                        implementation=implementation)
 
-        model_baseline = get_model_baseline()
-        expected = model_baseline(**inputs)
-        if implementation == "baseline":
-            value = benchmark(model_baseline, **inputs)
-        elif implementation == "dynamo_optimizer_cuda_graphs":
-            model = get_model_optimized_causal_cuda_graphs()
-            value = benchmark(model, **inputs)
-        else:
-            raise Exception(f"unknown implementation: {implementation}")
 
-        torchdynamo.reset()
-        assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
-        assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
+# TODO restore values
+@pytest.mark.parametrize("input_shape", [(1, 16)  # , (1, 128), (1, 256), (1, 384), (1, 512),
+                                         # (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
+                                         # (32, 16), (32, 128), (32, 256),
+                                         ])
+@pytest.mark.parametrize("implementation", [
+    "baseline",
+    "dynamo_optimizer_cuda_graphs_causal"
+])
+def test_benchmark_bert_causal_mask(benchmark, input_shape: (int, int), implementation):
+    base_benchmark_bert(benchmark=benchmark,
+                        pytorch_input=get_pytorch_input_causal,
+                        input_shape=input_shape,
+                        implementation=implementation)
 
 
 def test_should_support_shape_change():

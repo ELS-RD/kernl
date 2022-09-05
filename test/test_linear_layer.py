@@ -23,15 +23,15 @@ def test_benchmark(benchmark, size, contiguous, batch, implementation):
         a = a.contiguous()
     else:
         assert not a.is_contiguous()
-
+    assert not torch.any(a.isnan()).item()
     layer_weight = torch.randn((N, K), device='cuda', dtype=torch.float16, requires_grad=False)
 
     torch_linear_layer = torch.nn.Linear(K, N, bias=False, device="cuda", dtype=torch.float16)
     torch_linear_layer.weight.data = layer_weight
     expected = torch_linear_layer(a)
+    assert not torch.any(expected.isnan()).item()
     cuda_graph_pool = torch.cuda.graph_pool_handle()
 
-    # TODO switch to dict implementation
     if implementation == "pytorch":
         value = benchmark(torch_linear_layer, a)
     elif implementation == "pytorch_cuda_graph":
@@ -50,4 +50,5 @@ def test_benchmark(benchmark, size, contiguous, batch, implementation):
         value = benchmark(torch_linear_layer, input=a)
     else:
         raise ValueError(f"Unknown implementation {implementation}")
-    assert torch.allclose(value, expected, atol=1e-1)
+
+    assert torch.allclose(value, expected, rtol=1e-1, atol=1e-1), f"max diff: {torch.abs(value - expected).max()}"

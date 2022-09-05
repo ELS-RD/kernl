@@ -108,13 +108,13 @@ def kernel_fma(
     # for rows (resp. col) of C
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    # trick to avoid masking on M and N axis
-    ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
-    rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
+    # NOTE can't use trick to avoid masking on M and N axis with very small matrix sizes
+    #ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
+    #rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
 
     # the memory addresses of elements can follow numpy broadcasting
-    input_ptrs = INPUT + ram[:, None] * stride_im
-    weight_ptrs = WEIGHT + rbn[None, :] * stride_wn
+    input_ptrs = INPUT + rm[:, None] * stride_im
+    weight_ptrs = WEIGHT + rn[None, :] * stride_wn
 
     # initialize and iteratively update accumulator
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
@@ -123,17 +123,19 @@ def kernel_fma(
         bias = tl.load(bias + rn, mask=rn < N, other=0.0).to(tl.float32)
         acc += bias[None, :]
 
+    mask_rn = rn < N
+    mask_rm = rm < M
     for i in range(0, K, BLOCK_K):
         rk = tl.arange(0, BLOCK_K) + i
-        a = tl.load(input_ptrs + rk[None, :] * stride_ik, mask=(rk[None, :] < K), other=0.0)
-        w = tl.load(weight_ptrs + rk[:, None] * stride_wk, mask=(rk[:, None] < K), other=0.0)
+        a = tl.load(input_ptrs + rk[None, :] * stride_ik, mask=((rk[None, :] < K) & mask_rm[:, None]), other=0.0)
+        w = tl.load(weight_ptrs + rk[:, None] * stride_wk, mask=((rk[:, None] < K) & mask_rn[None, :]), other=0.0)
 
         acc += tl.dot(a, w)
 
     # optional: save the activation inputs
     if SAVE_ACT_INPUTS:
         act_in_ptrs = ACT_INPUTS + rm[:, None] * stride_om + rn[None, :]
-        tl.store(act_in_ptrs, acc)
+        tl.store(act_in_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
 
     # optional: fused activation (while the data is in shared memory)
     if ACTIVATION == "tanh":
@@ -142,14 +144,14 @@ def kernel_fma(
         acc = activation_func.gelu(acc)
     # write back result
     out_ptrs = OUT + rm[:, None] * stride_om + rn[None, :] * stride_on
-    tl.store(out_ptrs, acc)
+    tl.store(out_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
 
 
 # Activation needs to be a triton kernel
 def linear_layer(
         x: torch.Tensor,
         weight: torch.Tensor,
-        bias: Optional[torch.Tensor] = None,
+        bias: Optional[torch.Tensor],
         activation="",
         save_act_inputs: bool = False
 ):
