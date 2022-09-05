@@ -1,5 +1,5 @@
 import logging
-from typing import Callable
+from typing import Callable, Union
 
 import triton
 import torch
@@ -7,13 +7,13 @@ import torch
 from implementations.linear_layer import kernel_fma
 
 
-def cudagraphs_inner(model: Callable, inputs: list, copy_outputs=True, pool: (int, int) = torch.cuda.graph_pool_handle()):
+def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]], copy_outputs: bool = False, pool: (int, int) = torch.cuda.graph_pool_handle()):
     """
     From torchdynamo
     """
-    assert isinstance(inputs, (list, tuple))
+    assert isinstance(inputs, (list, tuple)), f"inputs is of type {type(inputs)} instead of list"
     static_inputs = [torch.zeros_like(x) for x in inputs]
-
+    # TODO check if warmup is required, should not...
     # warmup
     torch.cuda.synchronize()
     stream = torch.cuda.Stream()
@@ -31,10 +31,11 @@ def cudagraphs_inner(model: Callable, inputs: list, copy_outputs=True, pool: (in
     if not isinstance(static_outputs, (list, tuple)):
         static_outputs = (static_outputs,)
 
-    def run(new_inputs):
-        assert len(static_inputs) == len(new_inputs)
+    def run(*new_inputs):
+        assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
+        assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
         for dst, src in zip(static_inputs, new_inputs):
-            dst.copy_(src)
+            dst.copy_(src)  # cuda graph can only read data from the same address
         graph.replay()
         if copy_outputs:
             return [x.clone() for x in static_outputs]

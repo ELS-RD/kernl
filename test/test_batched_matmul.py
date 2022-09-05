@@ -2,6 +2,9 @@ import torch
 import pytest
 from implementations.batched_matmul import batched_matmul
 
+
+# TODO check if need to be deleted? Can it be replaced by linear layer implementation? (kind of manage batched matmul)
+# TODO if deleted, need to delete triton implementation
 @pytest.mark.parametrize("m", [24, 32])
 @pytest.mark.parametrize("n", [24, 32])
 @pytest.mark.parametrize("k", [24])

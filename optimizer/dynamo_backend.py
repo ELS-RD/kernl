@@ -9,7 +9,7 @@ from optimizer.linear import replace_all_linear
 def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     remove_dropout(gm)
     fuse_attention(gm, assume_causal)
-
+    # TODO re-enable linear layer below
     # The kernel causes performance issues for small sizes
     # try:
     #     replace_all_linear(gm)
