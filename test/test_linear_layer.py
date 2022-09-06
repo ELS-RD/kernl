@@ -3,20 +3,18 @@ import pytest
 
 from implementations.cuda_graph import CudaGraph
 from implementations.linear_layer import linear_layer
-from test_data_types_precision import set_seed
+from test.data_utils import generate_random_data
 
 
 @pytest.mark.parametrize("size", [128 * i for i in range(2, 10)])
 @pytest.mark.parametrize("batch", [8])
 @pytest.mark.parametrize("implementation", ["cublas", "triton", "triton_cuda_graph", "pytorch"])
-@set_seed()
 def test_benchmark(benchmark, size, batch, implementation):
     M = size
     N = size
     K = size
-
-    a = torch.randn((batch, M, K), device='cuda', dtype=torch.float16, requires_grad=False)
-    layer_weight = torch.randn((K * 4, K), device='cuda', dtype=torch.float16, requires_grad=False)
+    a = generate_random_data((batch, M, K), 'cuda', torch.float16)
+    layer_weight = generate_random_data((K * 4, K), 'cuda', torch.float16)
 
     torch_linear_layer = torch.nn.Linear(K, K*4, bias=False, device="cuda", dtype=torch.float16)
     torch_linear_layer.weight.data = layer_weight

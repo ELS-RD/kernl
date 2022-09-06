@@ -2,20 +2,9 @@ import torch
 
 from implementations.batched_matmul import batched_matmul
 from implementations.linear_layer import linear_layer
-from contextlib import contextmanager
+from test.data_utils import generate_random_data
 
 
-@contextmanager
-def set_seed():
-    torch.manual_seed(0)
-    yield
-
-
-def generate_random_data(size: tuple, device: str, torch_dtype: torch.dtype):
-    return torch.randn(size, device=device, dtype=torch_dtype, requires_grad=False)
-
-
-@set_seed()
 def test_batched_matmul_precision():
     for m in [m_idx * 2 for m_idx in range(8, 256, 32)]:
         for n in [n_idx * 2 for n_idx in range(8, 256, 32)]:
@@ -40,7 +29,6 @@ def test_batched_matmul_precision():
                     torch.all(compare_results).cpu().numpy()
 
 
-@set_seed()
 def test_linear_layer_precision():
     for size in [64 * i for i in range(1, 20)]:
         for batch in [8, 16]:
