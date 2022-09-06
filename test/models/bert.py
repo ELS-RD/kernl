@@ -10,9 +10,10 @@ from optimizer.dynamo_backend import dynamo_backend_ofi
 from torchdynamo.optimizations import BACKENDS
 
 
-def get_model_baseline():
+def get_model_baseline(float_16: bool = True):
+    model_dtype = torch.float16 if float_16 else torch.float32
     model_name = "bert-base-uncased"
-    model = AutoModel.from_pretrained(pretrained_model_name_or_path=model_name, torch_dtype=torch.float16)
+    model = AutoModel.from_pretrained(pretrained_model_name_or_path=model_name, torch_dtype=model_dtype)
     return model.eval().cuda()
 
 
