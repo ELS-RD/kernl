@@ -7,28 +7,36 @@ from implementations.attention_original import attention_reference, attention_fo
 from implementations.attention import attention_forward
 
 
-@pytest.mark.parametrize("batch", [1, 8, 64, 128])
+@pytest.mark.parametrize("batch", [1, 8, 32])
 @pytest.mark.parametrize("implementation", ["torch", "triton", "triton_original"])
 def test_benchmark_masked(benchmark, batch, implementation):
     torch.manual_seed(0)
     # batch, heads, seqlength, dhead
-    q = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    v = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
+    q = torch.rand((batch, 48, 512, 64), device="cuda") * 2
+    k = torch.rand((batch, 48, 512, 64), device="cuda") * 2
+    v = torch.rand((batch, 48, 512, 64), device="cuda") * 2
+
+    q_h = q.half()
+    k_h = k.half()
+    v_h = v.half()
+
     # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
     sm_scale = 0.3
 
     expected = masked_attention_reference(q, k, v, sm_scale)
+    expected_fp16 = masked_attention_reference(q_h, k_h, v_h, sm_scale)
     value = None
     if implementation == "triton_original":
-        value = benchmark(masked_attention_forward_original, q, k, v, sm_scale)
+        value = benchmark(masked_attention_forward_original, q_h, k_h, v_h, sm_scale)
     if implementation == "triton":
         output = torch.empty_like(q)
-        value = benchmark(attention_forward, q, k, v, output, sm_scale, is_causal=True)
+        value = benchmark(attention_forward, q_h, k_h, v_h, output, sm_scale, is_causal=True)
     if implementation == "torch":
-        value = benchmark(masked_attention_reference, q, k, v, sm_scale)
+        value = benchmark(masked_attention_reference, q_h, k_h, v_h, sm_scale)
 
-    assert torch.allclose(value, expected, atol=1e-2)
+    diff_reference = torch.abs(expected-expected_fp16.to(torch.float32)).max()
+    diff_tested = torch.abs(expected-value.to(torch.float32)).max()
+    assert diff_reference >= diff_tested, f"{diff_reference=}, {diff_tested=}"
 
 
 @pytest.mark.parametrize("batch", [1, 8, 32, 64, 128])

@@ -93,7 +93,7 @@ def masked_attention_reference(q, k, v, sm_scale):
     M = torch.tril(torch.ones((seq_length, seq_length), device="cuda"))
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
     p = torch.where(M == 0, float("-inf"), p)
-    p = torch.softmax(p.float(), dim=-1).half()
+    p = torch.softmax(p.float(), dim=-1).to(q.dtype)
     ref_out = torch.matmul(p, v)
     return ref_out
 

@@ -113,7 +113,6 @@ def kernel_fma(
     This kernel will consolidate over K
     """
 
-
     pid = tl.program_id(axis=0)
 
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
@@ -166,6 +165,8 @@ def kernel_fma(
         acc = activation_func.tanh(acc)
     if ACTIVATION == "gelu":
         acc = activation_func.gelu(acc)
+    if ACTIVATION == "fast_gelu":
+        acc = activation_func.fast_gelu(acc)
     # rematerialize rm and rn to save registers
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)

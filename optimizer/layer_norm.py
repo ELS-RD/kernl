@@ -21,7 +21,6 @@ def replace_layer_norm(gm: torch.fx.GraphModule):
             self.layernorm = torch.nn.LayerNorm((1, 1))
 
         def forward(self, v):
-            return layer_norm_forward(v, self.layernorm.normalized_shape, self.layernorm.weight, self.layernorm.bias,
-                                      self.layernorm.eps)
+            return layer_norm_forward(v, self.layernorm.weight, self.layernorm.bias, self.layernorm.eps)
 
     replace_pattern(gm, Pattern(), Replacement())

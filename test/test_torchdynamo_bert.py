@@ -42,7 +42,7 @@ implementations: dict[str, Implementation] = {
     "dynamo_cuda_graphs": Implementation(get_model_dynamo_cuda_graphs, causal=False),
     "dynamo_optimized": Implementation(get_model_optimized, causal=False),
     "dynamo_optimized_cuda_graphs": Implementation(get_model_optimized_cuda_graphs, causal=False),
-    # "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, causal=True),
+    "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, causal=True),
 }
 
 
@@ -64,15 +64,8 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: 
 
     torchdynamo.reset()
 
-    # for key in ["last_hidden_state", "pooler_output"]:
-    #     diff_reference = torch.max(torch.abs(expected_fp32[key] - expected_fp16[key].to(torch.float32)))
-    #     diff_tested_model = torch.max(torch.abs(expected_fp32[key] - value[key].to(torch.float32)))
-    #     assert diff_tested_model < diff_reference * 1.2, f"{key}: failed on {implementation} with shape {input_shape}"
-
-    assert torch.allclose(input=value["last_hidden_state"].to(torch.float32),
-                          other=expected["last_hidden_state"].to(torch.float32), rtol=1e-1, atol=1e-1)
-    assert torch.allclose(input=value["pooler_output"].to(torch.float32),
-                          other=expected["pooler_output"].to(torch.float32), rtol=1e-1, atol=1e-1)
+    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"], rtol=1e-1, atol=1e-1)
+    assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
 
 
 def test_support_shape_change(model_baseline_fp32):
