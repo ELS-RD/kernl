@@ -16,34 +16,38 @@ pip install -r requirements.txt
 - Benchmark function must have a param called `implementation` when benchmarking the same operation using different
   strategy
 
-### Run all
+### Run tests and benchmarks
 
 ```shell
+# tada!
 pytest
 ```
 
-### Run benchmarks
+Some rules on how `PyTest` works, in particular for benchmarks:
+
+- add `-k` to filter tests/benchmarks by their name like `pytest -k benchmark` to run only tests with `benchmark` 
+ in their name
+- you can combine expressions in the filter: `pytest -k "benchmark and not bert"` if you want to run all benchmarks 
+  except those related to BERT
+- to group and compare benchmark measures, use `pytest -k benchmark --benchmark-group-by ...`:
+  - groupinng by names: `pytest -k benchmark --benchmark-group-by fullfunc`
+  - grouping by names of parameters: `pytest -k benchmark --benchmark-group-by param:implementation,param:shape`
+    - `param:x`, `x` is the parameter name in `@pytest.mark.parametrize`
+  - combining both: `pytest -k benchmark --benchmark-group-by fullfunc,param:implementation`
+- add `-s` to see the output of the tests (print, etc.)
+- add `-v` to see the verbose output of the tests
+
+*WARNING*: `param:X` will make PyTest crash if `X` is not a parameter of at least one of the function ran.
+
+Some useful commands:
 
 ```shell
+# only benchmarks
 pytest -k benchmark
-```
-
-### Run tests
-
-```shell
+# no benchmarks
 pytest -k "not benchmark"
-```
-
-### Compare benchmarks
-
-You can group benchmark results to compare them.  
-Check that the field you are requesting is used in the benchmark you want.
-
-
-```shell
-pytest test/test_linear_layer.py --benchmark-group-by fullfunc, param:batch,param:size
-# or for all tests (at the time of writing)
-pytest --benchmark-group-by fullfunc,param:batch
+# only linear layers benchmark, group by shape and if the input is contiguous or not 
+pytest test/test_linear_layer.py --benchmark-group-by fullfunc,param:shape,param:contiguous
 ```
 
 ### Execute benchmark visualization server
