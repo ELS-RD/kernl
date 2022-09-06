@@ -14,38 +14,68 @@ import triton.language as tl
 
 # fmt: off
 from torch.utils import benchmark
+from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
 from implementations import activation_func
 
 
+def init_to_zero(name):
+    return lambda nargs: nargs[name].zero_()
+
+
+def get_configs_io_bound():
+    configs = []
+    for num_stages in [2, 3, 4, 5, 6]:
+        for block_m in [16, 32]:
+            for block_k in [32, 64]:
+                for block_n in [32, 64, 128, 256]:
+                    num_warps = 2 if block_n <= 64 else 4
+                    configs.append(
+                        triton.Config({'BLOCK_M': block_m, 'BLOCK_N': block_n, 'BLOCK_K': block_k, 'SPLIT_K': 1},
+                                      num_stages=num_stages, num_warps=num_warps))
+                    # split_k
+                    for split_k in [2, 4, 8, 16]:
+                        configs.append(triton.Config({'BLOCK_M': block_m, 'BLOCK_N': block_n, 'BLOCK_K': block_k, 'SPLIT_K': split_k},
+                                                     num_stages=num_stages, num_warps=num_warps, pre_hook=init_to_zero('C')))
+    return configs
+
+
+@triton.heuristics({
+    'EVEN_K': lambda args: args['K'] % (args['BLOCK_K'] * args['SPLIT_K']) == 0,
+})
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 32}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 32}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 32}, num_stages=5, num_warps=2),
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
+        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
+        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
         # good for int8
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 128}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 128}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 128}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 128}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 128}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 64}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 64}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 64}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 64}, num_stages=5, num_warps=2),
-    ],
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
+        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
+        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
+    ] + get_configs_io_bound(),
     key=["M", "N", "K"],
+    prune_configs_by={
+        'early_config_prune': early_config_prune,
+        'perf_model': estimate_matmul_time,
+        'top_k': 10
+    },
 )
 @triton.jit
 def kernel_fma(
         # Pointers to matrices
-        OUT, ACT_INPUTS, INPUT, WEIGHT, bias,
+        C, ACT_INPUTS, A, B, bias,
         # Matrix dimensions
         M,
         N,
@@ -62,6 +92,7 @@ def kernel_fma(
         # Meta-parameters
         BLOCK_M: tl.constexpr, GROUP_M: tl.constexpr,
         BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+        SPLIT_K: tl.constexpr, EVEN_K: tl.constexpr,
         BIAS: tl.constexpr,
         SAVE_ACT_INPUTS: tl.constexpr,
         ACTIVATION: tl.constexpr,
@@ -82,68 +113,67 @@ def kernel_fma(
     This kernel will consolidate over K
     """
 
-    # programs are grouped together to improve L2 hit rate
-    # the logic is that we'll consolidate over K. If the programs were not grouped,
-    # then multiple cols/rows in the result would end up pulling in the same row and lines
-    # from the inputs. By grouping the computation we ensure some data reuse, which the hardware
-    # covers via the L2 cache
+
     pid = tl.program_id(axis=0)
 
-    num_pid_m = tl.cdiv(M, BLOCK_M)  # number of program ids along the M axis
-    num_pid_n = tl.cdiv(N, BLOCK_N)  # number of programs ids along the N axis
-    num_pid_in_group = GROUP_M * num_pid_n  # number of programs in group
-    group_id = pid // num_pid_in_group  # id of the group this program is in
-    first_pid_m = group_id * GROUP_M  # row-id of the first program in the group
-    # if `num_pid_m` isn't divisible by `GROUP_M`, the last group is smaller
-    GROUP_M = min(num_pid_m - first_pid_m, GROUP_M)
-
-    # *within groups*, programs are ordered in a column-major order
-    # row-id /col-id of the program in the *launch grid*
-    pid_m = first_pid_m + (pid % GROUP_M)
-    pid_n = (pid % num_pid_in_group) // GROUP_M
+    grid_m = (M + BLOCK_M - 1) // BLOCK_M
+    grid_n = (N + BLOCK_N - 1) // BLOCK_N
+    # re-order program ID for better L2 performance
+    width = GROUP_M * grid_n
+    group_id = pid // width
+    group_size = min(grid_m - group_id * GROUP_M, GROUP_M)
+    pid_m = group_id * GROUP_M + (pid % group_size)
+    pid_n = (pid % width) // (group_size)
 
     # now compute the block that each program will go through
     # rm (resp. rn) denotes a range of indices
     # for rows (resp. col) of C
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    # NOTE can't use trick to avoid masking on M and N axis with very small matrix sizes
-    # ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
-    # rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
+    # trick to avoid masking on M and N axis
+    ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
+    rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
+    rk = tl.arange(0, BLOCK_K)
 
-    # the memory addresses of elements can follow numpy broadcasting
-    input_ptrs = INPUT + rm[:, None] * stride_im
-    weight_ptrs = WEIGHT + rn[None, :] * stride_wn
+    A = A + (ram[:, None] * stride_im + rk[None, :] * stride_ik)
+    B = B + (rk[:, None] * stride_wk + rbn[None, :] * stride_wn)
 
-    # initialize and iteratively update accumulator
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
     if BIAS:
         bias = tl.load(bias + rn, mask=rn < N, other=0.0).to(tl.float32)
         acc += bias[None, :]
 
-    mask_rn = rn < N
-    mask_rm = rm < M
-    for i in range(0, K, BLOCK_K):
-        rk = tl.arange(0, BLOCK_K) + i
-        a = tl.load(input_ptrs + rk[None, :] * stride_ik, mask=((rk[None, :] < K) & mask_rm[:, None]), other=0.0)
-        w = tl.load(weight_ptrs + rk[:, None] * stride_wk, mask=((rk[:, None] < K) & mask_rn[None, :]), other=0.0)
+    for k in range(K, 0, -BLOCK_K):
+        if EVEN_K:
+            a = tl.load(A)
+            b = tl.load(B)
+        else:
+            a = tl.load(A, mask=rk[None, :] < k, other=0.)
+            b = tl.load(B, mask=rk[:, None] < k, other=0.)
+        acc += tl.dot(a, b)
 
-        acc += tl.dot(a, w)
+        A += BLOCK_K * stride_ik
+        B += BLOCK_K * stride_wk
 
     # optional: save the activation inputs
     if SAVE_ACT_INPUTS:
-        act_in_ptrs = ACT_INPUTS + rm[:, None] * stride_om + rn[None, :]
-        tl.store(act_in_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
+        act_in_ptrs = ACT_INPUTS + ram[:, None] * stride_om + rbn[None, :]
+        tl.store(act_in_ptrs, acc)
 
     # optional: fused activation (while the data is in shared memory)
     if ACTIVATION == "tanh":
         acc = activation_func.tanh(acc)
     if ACTIVATION == "gelu":
         acc = activation_func.gelu(acc)
+    # rematerialize rm and rn to save registers
+    rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+    rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+
     # write back result
-    out_ptrs = OUT + rm[:, None] * stride_om + rn[None, :] * stride_on
-    tl.store(out_ptrs, acc, mask=mask_rm[:, None] & mask_rn[None, :])
+    C = C + rm[:, None] * stride_om + rn[None, :] * stride_on
+    mask = (rm < M)[:, None] & (rn < N)[None, :]
+    tl.store(C, acc, mask=mask)
 
 
 # Activation needs to be a triton kernel

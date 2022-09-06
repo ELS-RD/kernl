@@ -22,7 +22,8 @@ class Shape:
 
 
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("shape", [Shape(bs=1, M=8, N=768, K=768),
+@pytest.mark.parametrize("shape", [Shape(bs=1, M=8, N=8, K=8),
+                                   Shape(bs=1, M=8, N=768, K=768),
                                    Shape(bs=1, M=16, N=768, K=768),
                                    Shape(bs=1, M=128, N=768, K=768),
                                    Shape(bs=1, M=256, N=768, K=768),
@@ -45,13 +46,13 @@ def test_benchmark(benchmark, shape: Shape, contiguous, implementation):
         a = a.contiguous()
     else:
         assert not a.is_contiguous()
-    assert not torch.any(a.isnan()).item()
+
     layer_weight = torch.randn((N, K), device='cuda', dtype=torch.float16, requires_grad=False)
 
     torch_linear_layer = torch.nn.Linear(K, N, bias=False, device="cuda", dtype=torch.float16)
     torch_linear_layer.weight.data = layer_weight
     expected = torch_linear_layer(a)
-    assert not torch.any(expected.isnan()).item()
+
     cuda_graph_pool = torch.cuda.graph_pool_handle()
 
     if implementation == "pytorch":
