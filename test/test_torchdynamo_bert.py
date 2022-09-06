@@ -75,5 +75,4 @@ def test_support_shape_change(model_baseline_fp32):
             pytorch_input = implementation.get_input(shape)
             expected = model_baseline_fp32(**pytorch_input)
             result = model_tested(**pytorch_input)
-            assert torch.allclose(result["last_hidden_state"], expected["last_hidden_state"],
-                                  atol=1e-1), f"failed on {name} with shape {shape}"
+            assert torch.allclose(result["last_hidden_state"], expected["last_hidden_state"], atol=1e-1), f"failed on {name} with shape {shape}"
