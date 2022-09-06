@@ -13,16 +13,15 @@ def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple
     """
     assert isinstance(inputs, (list, tuple)), f"inputs is of type {type(inputs)} instead of list"
     static_inputs = [torch.zeros_like(x) for x in inputs]
-    # TODO check if warmup is required, should not...
-    # warmup
+    # required warmup, not just for perf but for correctness
     torch.cuda.synchronize()
     stream = torch.cuda.Stream()
-    # stream.wait_stream(torch.cuda.current_stream())
-    # with torch.cuda.stream(stream):
-    #     model(*inputs)
-    # stream.synchronize()
-    # torch.cuda.current_stream().wait_stream(stream)
-    # torch.cuda.synchronize()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        model(*inputs)
+    stream.synchronize()
+    torch.cuda.current_stream().wait_stream(stream)
+    torch.cuda.synchronize()
 
     # record
     graph = torch.cuda.CUDAGraph()
