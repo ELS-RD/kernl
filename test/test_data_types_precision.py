@@ -2,7 +2,13 @@ import torch
 
 from implementations.batched_matmul import batched_matmul
 from implementations.linear_layer import linear_layer
-from test import set_seed
+from contextlib import contextmanager
+
+
+@contextmanager
+def set_seed():
+    torch.manual_seed(0)
+    yield
 
 
 def generate_random_data(size: tuple, device: str, torch_dtype: torch.dtype):

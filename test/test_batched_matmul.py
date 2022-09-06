@@ -1,7 +1,7 @@
 import torch
 import pytest
 from implementations.batched_matmul import batched_matmul
-from test import set_seed
+from test_data_types_precision import set_seed
 
 
 @pytest.mark.parametrize("m", [24, 32])

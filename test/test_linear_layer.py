@@ -3,7 +3,7 @@ import pytest
 
 from implementations.cuda_graph import CudaGraph
 from implementations.linear_layer import linear_layer
-from test import set_seed
+from test_data_types_precision import set_seed
 
 
 @pytest.mark.parametrize("size", [128 * i for i in range(2, 10)])
