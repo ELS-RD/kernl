@@ -85,10 +85,10 @@ def kernel_fma(
         # by to get the element one row down (A has M rows)
         stride_om,
         stride_on,
-        stride_im,
-        stride_ik,
-        stride_wn,
-        stride_wk,
+        stride_am,
+        stride_ak,
+        stride_bn,
+        stride_bk,
         # Meta-parameters
         BLOCK_M: tl.constexpr, GROUP_M: tl.constexpr,
         BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
@@ -114,7 +114,7 @@ def kernel_fma(
     """
 
     pid = tl.program_id(axis=0)
-
+    pid_z = tl.program_id(1)
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
     grid_n = (N + BLOCK_N - 1) // BLOCK_N
     # re-order program ID for better L2 performance
@@ -132,10 +132,10 @@ def kernel_fma(
     # trick to avoid masking on M and N axis
     ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
     rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
-    rk = tl.arange(0, BLOCK_K)
+    rk = pid_z * BLOCK_K + tl.arange(0, BLOCK_K)
 
-    A = A + (ram[:, None] * stride_im + rk[None, :] * stride_ik)
-    B = B + (rk[:, None] * stride_wk + rbn[None, :] * stride_wn)
+    A = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak)
+    B = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn)
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
@@ -143,7 +143,7 @@ def kernel_fma(
         bias = tl.load(bias + rn, mask=rn < N, other=0.0).to(tl.float32)
         acc += bias[None, :]
 
-    for k in range(K, 0, -BLOCK_K):
+    for k in range(K, 0, -BLOCK_K * SPLIT_K):
         if EVEN_K:
             a = tl.load(A)
             b = tl.load(B)
@@ -152,8 +152,8 @@ def kernel_fma(
             b = tl.load(B, mask=rk[:, None] < k, other=0.)
         acc += tl.dot(a, b)
 
-        A += BLOCK_K * stride_ik
-        B += BLOCK_K * stride_wk
+        A += BLOCK_K * SPLIT_K * stride_ak
+        B += BLOCK_K * SPLIT_K * stride_bk
 
     # optional: save the activation inputs
     if SAVE_ACT_INPUTS:
@@ -174,7 +174,10 @@ def kernel_fma(
     # write back result
     C = C + rm[:, None] * stride_om + rn[None, :] * stride_on
     mask = (rm < M)[:, None] & (rn < N)[None, :]
-    tl.store(C, acc, mask=mask)
+    if SPLIT_K == 1:
+        tl.store(C, acc, mask=mask)
+    else:
+        tl.atomic_add(C, acc, mask=mask)
 
 
 # Activation needs to be a triton kernel
@@ -203,7 +206,7 @@ def linear_layer(
     act_inputs = torch.empty_like(outputs) if save_act_inputs else x  # will not be used in that case
 
     # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),) # noqa
+    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]), META['SPLIT_K']) # noqa
 
     # fmt: off
     kernel_fma[grid](

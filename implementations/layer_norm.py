@@ -68,7 +68,7 @@ def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
     BLOCK_SIZE = min(BLOCK_SIZE, 4096)
     # heuristics for number of warps
     num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
-    eps = min(eps, 1e-6)
+    eps = min(eps, 1e-6)  # >= 1e-5 may decrease Bert accuracy
     _layer_norm_fwd_fused[(M,)](
         out,
         a_arg,
