@@ -2,22 +2,19 @@
 #
 # This source code is licensed under the BSD license found in the
 # LICENSE file in the root directory of this source tree.
-import time
+
 from typing import Optional
 
 import torch
 import triton
 import triton.language as tl
 
-# CREDITS: Initially inspired by the Triton tutorial on matrix multiplications
-
-
-# fmt: off
-from torch.utils import benchmark
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
 from implementations import activation_func
 
+
+# CREDITS: Initially inspired by the Triton tutorial on matrix multiplications
 
 def init_to_zero(name):
     return lambda nargs: nargs[name].zero_()
@@ -33,10 +30,11 @@ def get_configs_io_bound():
                     configs.append(
                         triton.Config({'BLOCK_M': block_m, 'BLOCK_N': block_n, 'BLOCK_K': block_k, 'SPLIT_K': 1},
                                       num_stages=num_stages, num_warps=num_warps))
-                    # split_k
-                    for split_k in [2, 4, 8, 16]:
-                        configs.append(triton.Config({'BLOCK_M': block_m, 'BLOCK_N': block_n, 'BLOCK_K': block_k, 'SPLIT_K': split_k},
-                                                     num_stages=num_stages, num_warps=num_warps, pre_hook=init_to_zero('C')))
+                    # split_k not used
+                    # for split_k in [2, 4, 8, 16]:
+                    #     configs.append(triton.Config(
+                    #         {'BLOCK_M': block_m, 'BLOCK_N': block_n, 'BLOCK_K': block_k, 'SPLIT_K': split_k},
+                    #         num_stages=num_stages, num_warps=num_warps, pre_hook=init_to_zero('C')))
     return configs
 
 
@@ -45,26 +43,29 @@ def get_configs_io_bound():
 })
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
-        # good for int8
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
-    ] + get_configs_io_bound(),
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
+                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
+                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
+                # good for int8
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3,
+                              num_warps=8),
+                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3,
+                              num_warps=8),
+                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4,
+                              num_warps=4),
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
+                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
+            ] + get_configs_io_bound(),
     key=["M", "N", "K"],
     prune_configs_by={
         'early_config_prune': early_config_prune,
@@ -85,14 +86,16 @@ def kernel_fma(
         # by to get the element one row down (A has M rows)
         stride_om,
         stride_on,
-        stride_am,
-        stride_ak,
-        stride_bn,
-        stride_bk,
+        stride_im,
+        stride_ik,
+        stride_wn,
+        stride_wk,
         # Meta-parameters
         BLOCK_M: tl.constexpr, GROUP_M: tl.constexpr,
         BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
-        SPLIT_K: tl.constexpr, EVEN_K: tl.constexpr,
+        # split k not used, not performant with activation, kept because early_config_prune is expecting it
+        SPLIT_K: tl.constexpr,
+        EVEN_K: tl.constexpr,
         BIAS: tl.constexpr,
         SAVE_ACT_INPUTS: tl.constexpr,
         ACTIVATION: tl.constexpr,
@@ -114,7 +117,7 @@ def kernel_fma(
     """
 
     pid = tl.program_id(axis=0)
-    pid_z = tl.program_id(1)
+
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
     grid_n = (N + BLOCK_N - 1) // BLOCK_N
     # re-order program ID for better L2 performance
@@ -132,10 +135,10 @@ def kernel_fma(
     # trick to avoid masking on M and N axis
     ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
     rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
-    rk = pid_z * BLOCK_K + tl.arange(0, BLOCK_K)
+    rk = tl.arange(0, BLOCK_K)
 
-    A = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak)
-    B = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn)
+    A = A + (ram[:, None] * stride_im + rk[None, :] * stride_ik)
+    B = B + (rk[:, None] * stride_wk + rbn[None, :] * stride_wn)
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
@@ -143,7 +146,7 @@ def kernel_fma(
         bias = tl.load(bias + rn, mask=rn < N, other=0.0).to(tl.float32)
         acc += bias[None, :]
 
-    for k in range(K, 0, -BLOCK_K * SPLIT_K):
+    for k in range(K, 0, -BLOCK_K):
         if EVEN_K:
             a = tl.load(A)
             b = tl.load(B)
@@ -152,8 +155,8 @@ def kernel_fma(
             b = tl.load(B, mask=rk[:, None] < k, other=0.)
         acc += tl.dot(a, b)
 
-        A += BLOCK_K * SPLIT_K * stride_ak
-        B += BLOCK_K * SPLIT_K * stride_bk
+        A += BLOCK_K * stride_ik
+        B += BLOCK_K * stride_wk
 
     # optional: save the activation inputs
     if SAVE_ACT_INPUTS:
@@ -174,10 +177,7 @@ def kernel_fma(
     # write back result
     C = C + rm[:, None] * stride_om + rn[None, :] * stride_on
     mask = (rm < M)[:, None] & (rn < N)[None, :]
-    if SPLIT_K == 1:
-        tl.store(C, acc, mask=mask)
-    else:
-        tl.atomic_add(C, acc, mask=mask)
+    tl.store(C, acc, mask=mask)
 
 
 # Activation needs to be a triton kernel
@@ -206,22 +206,22 @@ def linear_layer(
     act_inputs = torch.empty_like(outputs) if save_act_inputs else x  # will not be used in that case
 
     # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]), META['SPLIT_K']) # noqa
+    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
 
     # fmt: off
     kernel_fma[grid](
-        outputs, act_inputs, x_, weight,            # data ptrs
-        bias if bias is not None else x,            # auto skip bias if not present
-        M, N, K,                                    # shapes
+        outputs, act_inputs, x_, weight,  # data ptrs
+        bias if bias is not None else x,  # auto skip bias if not present
+        M, N, K,  # shapes
         outputs.stride(0),  # strides
         outputs.stride(1),
         x_.stride(0),
         x_.stride(1),
         weight.stride(0),
         weight.stride(1),
-        ACTIVATION=activation,                      # optional fused activation
-        BIAS=bias is not None,                      # optional fused bias
-        GROUP_M=8,                                  # speed optimization: group the programs
+        ACTIVATION=activation,  # optional fused activation
+        BIAS=bias is not None,  # optional fused bias
+        GROUP_M=8,  # speed optimization: group the programs
         SAVE_ACT_INPUTS=save_act_inputs
     )
 
