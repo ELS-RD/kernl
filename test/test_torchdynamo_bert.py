@@ -17,32 +17,34 @@ def model_baseline_fp32():
 @dataclasses.dataclass
 class Implementation:
     model: Callable
-    causal: bool
+    is_causal: bool
 
-    def get_input(self, size: (int, int)) -> Dict[str, torch.Tensor]:
-        if self.causal:
-            batch, seq_length = size
-            mask = torch.tril(torch.ones((batch, seq_length, seq_length), device="cuda"))
-            return {
-                "input_ids": torch.randint(2, 1000, size=size, dtype=torch.int32, device="cuda"),
-                "attention_mask": mask,
-            }
-        else:
-            return {
-                "input_ids": torch.randint(2, 1000, size=size, dtype=torch.int32, device="cuda"),
-                "attention_mask": None,  # TODO None is not a correct value, no key at all would be better
-            }
+
+def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
+    batch, seq_length = shape
+    mask = torch.tril(torch.ones((batch, seq_length, seq_length), device="cuda"))
+    return {
+        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
+        "attention_mask": mask,
+    }
+
+
+def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
+    return {
+        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
+        "attention_mask": None,  # TODO None is not a correct value, no key at all would be better
+    }
 
 
 implementations: dict[str, Implementation] = {
-    "baseline": Implementation(get_model_baseline, causal=False),
-    "dynamo": Implementation(get_model_dynamo, causal=False),
-    "dynamo_nvfuser_ofi": Implementation(get_model_dynamo_nvfuser_ofi, causal=False),
-    "dynamo_no_dropout": Implementation(get_model_dynamo_dropout_removed, causal=False),
-    "dynamo_cuda_graphs": Implementation(get_model_dynamo_cuda_graphs, causal=False),
-    "dynamo_optimized": Implementation(get_model_optimized, causal=False),
-    "dynamo_optimized_cuda_graphs": Implementation(get_model_optimized_cuda_graphs, causal=False),
-    "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, causal=True),
+    "baseline": Implementation(get_model_baseline, is_causal=False),
+    "dynamo": Implementation(get_model_dynamo, is_causal=False),
+    "dynamo_nvfuser_ofi": Implementation(get_model_dynamo_nvfuser_ofi, is_causal=False),
+    "dynamo_no_dropout": Implementation(get_model_dynamo_dropout_removed, is_causal=False),
+    "dynamo_cuda_graphs": Implementation(get_model_dynamo_cuda_graphs, is_causal=False),
+    "dynamo_optimized": Implementation(get_model_optimized, is_causal=False),
+    "dynamo_optimized_cuda_graphs": Implementation(get_model_optimized_cuda_graphs, is_causal=False),
+    "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, is_causal=True),
 }
 
 
@@ -56,8 +58,9 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: 
     assert implementation in implementations, f"unknown implementation: {implementation}"
     model_tested = implementations[implementation]
 
+    inputs = get_input_causal(input_shape) if model_tested.is_causal else get_input_non_causal(input_shape)
+
     with torch.inference_mode():
-        inputs = model_tested.get_input(input_shape)
         expected = model_baseline_fp32(**inputs)
         model = model_tested.model()
         value = benchmark(model, **inputs)
@@ -69,10 +72,11 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: 
 
 
 def test_support_shape_change(model_baseline_fp32):
+    """Test that the model can handle shape changes without being reloaded/rebuilt."""
     for name, implementation in implementations.items():
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
-            pytorch_input = implementation.get_input(shape)
+            pytorch_input = get_input_causal(shape) if model_tested.is_causal else get_input_non_causal(shape)
             expected = model_baseline_fp32(**pytorch_input)
             result = model_tested(**pytorch_input)
             assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"], atol=1e-1), f"failed on {name} with shape {shape}"

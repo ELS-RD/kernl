@@ -15,7 +15,7 @@ implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, f
 @pytest.mark.parametrize("size", [128, 512, 1024, 2048, 4096])
 @pytest.mark.parametrize("cuda_graphs", [True, False])
 @pytest.mark.parametrize("implementation", ["pytorch", "triton"])
-def test_benchmark_layer_norm(benchmark, size, cuda_graphs, implementation):
+def test_benchmark_layer_norm(benchmark, size: int, cuda_graphs: bool, implementation: str):
     assert implementation in implementations, f"Unknown implementation: {implementation}"
 
     torch.manual_seed(0)
