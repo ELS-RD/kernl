@@ -37,7 +37,7 @@ def test_benchmark_masked(benchmark, batch, implementation):
     assert diff_reference >= diff_tested, f"{diff_reference=}, {diff_tested=}"
 
 
-@pytest.mark.parametrize("batch", [1, 8, 32, 64, 128])
+@pytest.mark.parametrize("batch", [1, 8, 32, 64])
 @pytest.mark.parametrize("implementation", ["torch", "triton_original", "triton"])
 def test_benchmark(benchmark, batch, implementation):
     torch.manual_seed(0)
