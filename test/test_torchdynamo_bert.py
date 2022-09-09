@@ -76,7 +76,7 @@ def test_support_shape_change(model_baseline_fp32):
     for name, implementation in implementations.items():
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
-            pytorch_input = get_input_causal(shape) if model_tested.is_causal else get_input_non_causal(shape)
+            pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
             expected = model_baseline_fp32(**pytorch_input)
             result = model_tested(**pytorch_input)
             assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"], atol=1e-1), f"failed on {name} with shape {shape}"
