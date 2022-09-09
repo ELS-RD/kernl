@@ -12,7 +12,7 @@ implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, f
 }
 
 
-@pytest.mark.parametrize("shape", [128], ids=lambda x: f"shape={x}x{x}")  # , 512, 1024, 2048, 4096
+@pytest.mark.parametrize("shape", [128, 512, 1024, 2048, 4096], ids=lambda x: f"shape={x}x{x}")
 @pytest.mark.parametrize("cuda_graphs", [True, False], ids=["cuda_graphs", "no_cuda_graphs"])
 @pytest.mark.parametrize("implementation", ["pytorch", "triton"])
 def test_benchmark_layer_norm(benchmark, shape: int, cuda_graphs: bool, implementation: str):
