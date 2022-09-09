@@ -62,7 +62,7 @@ def test_benchmark(benchmark, batch, implementation):
 
 
 @pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512], ids=lambda x: f"seq_length={x}")
-@pytest.mark.parametrize("batch", [1, 8, 16, 32, 64, 128], ids=lambda x: f"batch={x}")
+@pytest.mark.parametrize("batch", [1, 8, 16, 32, 64], ids=lambda x: f"batch={x}")
 def test_optimized(batch, seq_length):
     torch.manual_seed(0)
     # batch, heads, seqlength, dhead
