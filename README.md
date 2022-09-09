@@ -50,14 +50,6 @@ pytest -k "not benchmark"
 pytest test/test_linear_layer.py --benchmark-group-by fullfunc,param:shape,param:contiguous
 ```
 
-### Execute benchmark visualization server
-
-You must first run benchmarks
-
-```shell
-python3.8 server.py
-```
-
 ## Create new patterns to replace fx graph nodes
 
 The first step to replace function/module calls in the graph is to create the pattern that will be replaced.

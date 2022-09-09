@@ -1,4 +1,3 @@
-import pickle
 from typing import List
 
 import torch
@@ -80,9 +79,6 @@ class BenchmarkSession(object):
         return sorted(groups.items(), key=lambda pair: pair[0] or "")
 
     def finish(self):
-        with open('benchmarks.pickle', 'wb') as f:
-            pickle.dump(self.benchmarks, f)
-
         grouped = self.get_groups(self.benchmarks, self.config.option.benchmark_group_by)
         for (group, benchmarks) in grouped:
             print("\n" + group)
