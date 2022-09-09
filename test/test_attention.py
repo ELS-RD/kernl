@@ -1,5 +1,3 @@
-import gc
-
 import torch
 import pytest
 from implementations.attention_masked_original import masked_attention_reference, masked_attention_forward_original
@@ -63,8 +61,8 @@ def test_benchmark(benchmark, batch, implementation):
     assert torch.allclose(value, expected, atol=1e-2)
 
 
-@pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512])
-@pytest.mark.parametrize("batch", [1, 8, 16, 32, 64, 128])
+@pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512], ids=lambda x: f"seq_length={x}")
+@pytest.mark.parametrize("batch", [1, 8, 16, 32, 64, 128], ids=lambda x: f"batch={x}")
 def test_optimized(batch, seq_length):
     torch.manual_seed(0)
     # batch, heads, seqlength, dhead

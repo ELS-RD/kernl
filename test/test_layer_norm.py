@@ -12,14 +12,14 @@ implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, f
 }
 
 
-@pytest.mark.parametrize("size", [128, 512, 1024, 2048, 4096])
-@pytest.mark.parametrize("cuda_graphs", [True, False])
+@pytest.mark.parametrize("shape", [128], ids=lambda x: f"shape={x}x{x}")  # , 512, 1024, 2048, 4096
+@pytest.mark.parametrize("cuda_graphs", [True, False], ids=["cuda_graphs", "no_cuda_graphs"])
 @pytest.mark.parametrize("implementation", ["pytorch", "triton"])
-def test_benchmark_layer_norm(benchmark, size: int, cuda_graphs: bool, implementation: str):
+def test_benchmark_layer_norm(benchmark, shape: int, cuda_graphs: bool, implementation: str):
     assert implementation in implementations, f"Unknown implementation: {implementation}"
 
     torch.manual_seed(0)
-    M = N = size
+    M = N = shape
     eps = 1e-6
 
     weight = torch.rand((N,), dtype=torch.float16, device='cuda', requires_grad=False)

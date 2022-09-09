@@ -14,16 +14,14 @@ class Shape:
     N: int
     K: int
 
-    def x_shape(self):
-        return self.bs, self.K, self.M
-
-    def weight_shape(self):
-        return self.K, self.N
+    @property
+    def __dict__(self):
+        return dataclasses.asdict(self)
 
 
-@pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("bias", [True, False])
-@pytest.mark.parametrize("activation", ["", "tanh", "gelu"])
+@pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
+@pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
+@pytest.mark.parametrize("activation", ["", "tanh", "gelu"], ids=["no_activation", "tanh", "gelu"])
 @pytest.mark.parametrize("shape", [Shape(bs=1, M=8, N=8, K=8),
                                    Shape(bs=1, M=8, N=768, K=768),
                                    Shape(bs=1, M=16, N=768, K=768),
@@ -35,7 +33,7 @@ class Shape:
                                    Shape(bs=16, M=128, N=768, K=768),
                                    Shape(bs=16, M=256, N=768, K=768),
                                    Shape(bs=16, M=512, N=768, K=768),
-                                   ])
+                                   ], ids=lambda x: f"{x.bs}x{x.M}x{x.N}x{x.K}")
 @pytest.mark.parametrize("implementation", ["triton", "triton_cuda_graph", "pytorch", "pytorch_cuda_graph"])
 def test_benchmark(benchmark, shape: Shape, bias: bool, activation: str, contiguous: bool, implementation: str):
     torch.manual_seed(0)

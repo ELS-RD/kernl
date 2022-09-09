@@ -51,7 +51,7 @@ implementations: dict[str, Implementation] = {
 @pytest.mark.parametrize("input_shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
                                          (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
                                          (32, 16), (32, 128), (32, 256),
-                                         ])
+                                         ], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: (int, int), implementation: str):
     torch.manual_seed(0)
