@@ -25,7 +25,7 @@ class TritonDebugger:
             random.shuffle(self.grid_positions)
 
         self.current_grid_position = None
-        self.constexpr = int | str
+        self.constexpr = Union[int, str]
         previous_boundary = 0
 
         range_tensor_dict = dict()
@@ -163,6 +163,10 @@ class TritonDebugger:
     @staticmethod
     def max(x: torch.Tensor, axis=0) -> torch.Tensor:
         return torch.max(x, dim=axis).values
+
+    @staticmethod
+    def min(x: torch.Tensor, axis=0) -> torch.Tensor:
+        return torch.min(x, dim=axis).values
 
     @staticmethod
     def exp(x: torch.Tensor) -> torch.Tensor:
