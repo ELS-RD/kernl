@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Dict
 
 import torch
 import pytest
@@ -6,7 +6,7 @@ import pytest
 from implementations.cuda_graph import cuda_graphs_wrapper
 from implementations.layer_norm import layer_norm_forward
 
-implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, float], torch.Tensor]] = {
+implementations: Dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, float], torch.Tensor]] = {
     "pytorch": lambda x, weight, bias, eps: torch.nn.functional.layer_norm(x, weight.shape, weight, bias, eps),
     "triton": lambda x, weight, bias, eps: layer_norm_forward(x, weight, bias, eps),
 }
