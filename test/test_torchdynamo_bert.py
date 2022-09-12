@@ -1,13 +1,14 @@
 import dataclasses
 from typing import Dict, Callable
 
-import torch
 import pytest
+import torch
+import torchdynamo
+
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
-    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_model_onnx, get_model_onnx_optimized, \
-    get_model_tensorrt, get_input_causal, get_input_non_causal
-import torchdynamo
+    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_bert_onnx, get_bert_onnx_optimized, \
+    get_bert_tensorrt
 
 
 @pytest.fixture
@@ -39,9 +40,9 @@ def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
 
 implementations: Dict[str, Implementation] = {
     "baseline": Implementation(get_model_baseline, is_causal=False),
-    "onnx": Implementation(get_model_onnx, is_causal=False),
-    "onnx_optimized": Implementation(get_model_onnx_optimized, is_causal=False),
-    "tensorrt": Implementation(get_model_tensorrt, is_causal=False),
+    "onnx": Implementation(get_bert_onnx, is_causal=False),
+    "onnx_optimized": Implementation(get_bert_onnx_optimized, is_causal=False),
+    "tensorrt": Implementation(get_bert_tensorrt, is_causal=False),
     "dynamo": Implementation(get_model_dynamo, is_causal=False),
     "dynamo_nvfuser_ofi": Implementation(get_model_dynamo_nvfuser_ofi, is_causal=False),
     "dynamo_no_dropout": Implementation(get_model_dynamo_dropout_removed, is_causal=False),
