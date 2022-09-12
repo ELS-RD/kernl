@@ -4,17 +4,19 @@ import torch
 import pytest
 
 from implementations.cuda_graph import cuda_graphs_wrapper
-from implementations.layer_norm import layer_norm_forward
+from implementations.layer_norm import layer_norm_forward, _layer_norm_fwd_fused_single_pass, \
+    _layer_norm_fwd_fused_multi_pass
 
 implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, float], torch.Tensor]] = {
     "pytorch": lambda x, weight, bias, eps: torch.nn.functional.layer_norm(x, weight.shape, weight, bias, eps),
-    "triton": lambda x, weight, bias, eps: layer_norm_forward(x, weight, bias, eps),
+    "triton_original": lambda x, weight, bias, eps: layer_norm_forward(x, weight, bias, eps, _layer_norm_fwd_fused_multi_pass),
+    "triton_improved": lambda x, weight, bias, eps: layer_norm_forward(x, weight, bias, eps, _layer_norm_fwd_fused_single_pass),
 }
 
 
-@pytest.mark.parametrize("shape", [128, 512, 1024, 2048, 4096], ids=lambda x: f"shape={x}x{x}")
+@pytest.mark.parametrize("shape", [128, 512, 1024, 2048, 4096, 8192], ids=lambda x: f"shape={x}x{x}")
 @pytest.mark.parametrize("cuda_graphs", [True, False], ids=["cuda_graphs", "no_cuda_graphs"])
-@pytest.mark.parametrize("implementation", ["pytorch", "triton"])
+@pytest.mark.parametrize("implementation", ["triton_original", "triton_improved", "pytorch"])
 def test_benchmark_layer_norm(benchmark, shape: int, cuda_graphs: bool, implementation: str):
     assert implementation in implementations, f"Unknown implementation: {implementation}"
 

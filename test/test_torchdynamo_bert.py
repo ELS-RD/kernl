@@ -48,17 +48,17 @@ implementations: dict[str, Implementation] = {
 }
 
 
-@pytest.mark.parametrize("input_shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
-                                         (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
-                                         (32, 16), (32, 128), (32, 256),
-                                         ], ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
+                                   (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
+                                   (32, 16), (32, 128), (32, 256),
+                                   ], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("implementation", implementations.keys())
-def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: (int, int), implementation: str):
+def test_benchmark_implementations(benchmark, model_baseline_fp32, shape: (int, int), implementation: str):
     torch.manual_seed(0)
     assert implementation in implementations, f"unknown implementation: {implementation}"
     model_tested = implementations[implementation]
 
-    inputs = get_input_causal(input_shape) if model_tested.is_causal else get_input_non_causal(input_shape)
+    inputs = get_input_causal(shape) if model_tested.is_causal else get_input_non_causal(shape)
 
     with torch.inference_mode():
         expected = model_baseline_fp32(**inputs)
@@ -67,7 +67,8 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: 
 
     torchdynamo.reset()
 
-    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"], rtol=1e-1, atol=1e-1)
+    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"], rtol=1e-1,
+                          atol=1e-1)
     assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
 
 
@@ -79,4 +80,5 @@ def test_support_shape_change(model_baseline_fp32):
             pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
             expected = model_baseline_fp32(**pytorch_input)
             result = model_tested(**pytorch_input)
-            assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"], atol=1e-1), f"failed on {name} with shape {shape}"
+            assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"],
+                                  atol=1e-1), f"failed on {name} with shape {shape}"
