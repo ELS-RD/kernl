@@ -38,7 +38,7 @@ def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
     }
 
 
-implementations: Dict[str, Implementation] = {
+implementations: dict[str, Implementation] = {
     "baseline": Implementation(get_model_baseline, is_causal=False),
     "onnx": Implementation(get_bert_onnx, is_causal=False),
     "onnx_optimized": Implementation(get_bert_onnx_optimized, is_causal=False),
