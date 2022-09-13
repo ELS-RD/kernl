@@ -1,115 +1,82 @@
-from typing import Tuple, Dict
+import dataclasses
+from typing import Dict, Callable
 
 import torch
 import pytest
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
-    get_model_dynamo_dropout_removed, get_model_optimized, get_model_dynamo_cudagraphs, \
-    get_model_optimized_without_cudagraph, get_model_optimized_causal, get_model_dynamo_inductor, \
-    get_model_dynamo_onnx2tensorrt
+    get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
+    get_model_optimized, get_model_optimized_causal_cuda_graphs
 import torchdynamo
 
 
-def get_pytorch_input(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
-    return {
-        "input_ids": torch.randint(2, 1000, size=size, dtype=torch.int32, device="cuda"),
-        "attention_mask": None,
-    }
+@pytest.fixture
+def model_baseline_fp32():
+    return get_model_baseline(float_16=False)
 
 
-def get_pytorch_input_causal(size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
-    batch, seq_length = size
+@dataclasses.dataclass
+class Implementation:
+    model: Callable
+    is_causal: bool
+
+
+def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
+    batch, seq_length = shape
     mask = torch.tril(torch.ones((batch, seq_length, seq_length), device="cuda"))
     return {
-        "input_ids": torch.randint(2, 1000, size=size, dtype=torch.int32, device="cuda"),
+        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
         "attention_mask": mask,
     }
 
 
-@pytest.mark.parametrize("batch", [1, 8, 16, 32])
-@pytest.mark.parametrize("seq_length", [16, 64, 128, 256])
-@pytest.mark.parametrize("implementation", [
-    "baseline",
-    "dynamo",
-    "dynamo_nvfuser_ofi",
-    "dynamo_no_dropout",
-    # "dynamo_onnx2tensorrt",
-    "dynamo_cudagraphs",
-    # "dynamo_optimized_without_cudagraph",
-    "dynamo_optimized",
-    # "dynamo_inductor",
-])
-def test_benchmark_bert(benchmark, batch, seq_length, implementation):
+def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
+    return {
+        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
+        "attention_mask": None,  # TODO None is not a correct value, no key at all would be better
+    }
+
+
+implementations: dict[str, Implementation] = {
+    "baseline": Implementation(get_model_baseline, is_causal=False),
+    "dynamo": Implementation(get_model_dynamo, is_causal=False),
+    "dynamo_nvfuser_ofi": Implementation(get_model_dynamo_nvfuser_ofi, is_causal=False),
+    "dynamo_no_dropout": Implementation(get_model_dynamo_dropout_removed, is_causal=False),
+    "dynamo_cuda_graphs": Implementation(get_model_dynamo_cuda_graphs, is_causal=False),
+    "dynamo_optimized": Implementation(get_model_optimized, is_causal=False),
+    "dynamo_optimized_cuda_graphs": Implementation(get_model_optimized_cuda_graphs, is_causal=False),
+    "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, is_causal=True),
+}
+
+
+@pytest.mark.parametrize("input_shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
+                                         (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
+                                         (32, 16), (32, 128), (32, 256),
+                                         ], ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("implementation", implementations.keys())
+def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: (int, int), implementation: str):
+    torch.manual_seed(0)
+    assert implementation in implementations, f"unknown implementation: {implementation}"
+    model_tested = implementations[implementation]
+
+    inputs = get_input_causal(input_shape) if model_tested.is_causal else get_input_non_causal(input_shape)
+
     with torch.inference_mode():
-        torch.manual_seed(0)
-        input = get_pytorch_input((batch, seq_length))
+        expected = model_baseline_fp32(**inputs)
+        model = model_tested.model()
+        value = benchmark(model, **inputs)
 
-        model_baseline = get_model_baseline()
-        expected = model_baseline(**input)
-        value = None
-        if implementation == "baseline":
-            model_baseline(**input)
-            value = benchmark(model_baseline, **input)
-        if implementation == "dynamo":
-            model = get_model_dynamo()
-            value = benchmark(model, **input)
-        if implementation == "dynamo_nvfuser_ofi":
-            model = get_model_dynamo_nvfuser_ofi()
-            value = benchmark(model, **input)
-        if implementation == "dynamo_no_dropout":
-            model = get_model_dynamo_dropout_removed()
-            value = benchmark(model, **input)
-        if implementation == "dynamo_optimized_without_cudagraph":
-            model = get_model_optimized_without_cudagraph()
-            value = benchmark(model, **input)
-        if implementation == "dynamo_cudagraphs":
-            model = get_model_dynamo_cudagraphs()
-            value = benchmark(model, **input)
-        if implementation == "dynamo_inductor":
-            model = get_model_dynamo_inductor()
-            value = benchmark(model, **input)
-        if implementation == "dynamo_onnx2tensorrt":
-            model = get_model_dynamo_onnx2tensorrt()
-            value = benchmark(model, **input)
-        if implementation == "dynamo_optimized":
-            model = get_model_optimized()
-            value = benchmark(model, **input)
+    torchdynamo.reset()
 
-        torchdynamo.reset()
-        assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
-        assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
+    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"], rtol=1e-1, atol=1e-1)
+    assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
 
 
-@pytest.mark.parametrize("batch", [1, 8, 16])
-@pytest.mark.parametrize("seq_length", [512])
-@pytest.mark.parametrize("implementation", [
-    "baseline",
-    "dynamo_optimizer"
-])
-def test_benchmark_bert_causal_mask(benchmark, batch, seq_length, implementation):
-    with torch.inference_mode():
-        torch.manual_seed(0)
-        input = get_pytorch_input_causal((batch, seq_length))
-
-        model_baseline = get_model_baseline()
-        expected = model_baseline(**input)
-        value = None
-        if implementation == "baseline":
-            model_baseline(**input)
-            value = benchmark(model_baseline, **input)
-        if implementation == "dynamo_optimizer":
-            model = get_model_optimized_causal()
-            value = benchmark(model, **input)
-        torchdynamo.reset()
-        assert torch.allclose(value["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
-        assert torch.allclose(value["pooler_output"], expected["pooler_output"], atol=1e-1)
-
-
-def test_should_support_shape_change():
-    model_baseline = get_model_baseline()
-    model_optimized = get_model_optimized()
-
-    for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
-        pytorch_input = get_pytorch_input(shape)
-        expected = model_baseline(**pytorch_input)
-        result = model_optimized(**pytorch_input)
-        assert torch.allclose(result["last_hidden_state"], expected["last_hidden_state"], atol=1e-1)
+def test_support_shape_change(model_baseline_fp32):
+    """Test that the model can handle shape changes without being reloaded/rebuilt."""
+    for name, implementation in implementations.items():
+        model_tested = implementation.model()
+        for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
+            pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
+            expected = model_baseline_fp32(**pytorch_input)
+            result = model_tested(**pytorch_input)
+            assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"], atol=1e-1), f"failed on {name} with shape {shape}"

@@ -7,7 +7,6 @@ import triton.language as tl
 
 @triton.jit
 def _fwd_kernel(
-        batch,
         heads,
         seq_length,
         Q,
@@ -29,7 +28,6 @@ def _fwd_kernel(
     Computes attention
     Each head is size (seq_length, BLOCK_DHEAD)
 
-    @param batch: Batch size
     @param heads: Number of heads per batch
     @param seq_length: Sequence length
     @param Q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
@@ -206,7 +204,6 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False):
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
     _fwd_kernel[grid](
-        batch,
         heads,
         seq_length,
         q,
