@@ -17,6 +17,11 @@ def _layer_norm_fwd_fused_single_pass(
         stride, N, eps,
         BLOCK_SIZE: tl.constexpr,
 ):
+    """
+    Based on Welford's variance computation algorithm.
+    https://changyaochen.github.io/welford/
+    https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+    """
     # position of elements processed by this program
     row = tl.program_id(0)
     Out += row * stride
@@ -31,17 +36,15 @@ def _layer_norm_fwd_fused_single_pass(
         mask = cols < N
         a = tl.load(A + cols, mask=mask, other=0., eviction_policy="evict_last").to(tl.float32)
 
-        old_mean = mean
         block_mean = tl.sum(a, axis=0) / nb_block_col
+        # mean is 0 or has a mask applied to it, no need to mask delta_mean!
+        delta_mean = block_mean - mean
+        delta_mean_sqr = delta_mean * delta_mean
 
-        block_delta = tl.sum((a - block_mean) * a * mask, axis=0)
-
-        old_var = var
-        mean = old_mean + tl.sum((a - old_mean) * mask, axis=0) / end
-
-        delta_mean = block_mean - old_mean
-        delta2 = delta_mean * delta_mean
-        var = old_var + block_delta + delta2 * (start * nb_block_col) / end
+        block_delta = tl.sum((a - block_mean) * a, axis=0)
+        # mean has a mask!
+        mean += tl.sum((a - mean) * mask, axis=0) / end
+        var += block_delta + delta_mean_sqr * (start * nb_block_col) / end
 
     var = var / N
     rstd = 1 / tl.sqrt(var + eps)

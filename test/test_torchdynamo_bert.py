@@ -10,7 +10,7 @@ import torchdynamo
 
 
 @pytest.fixture
-def model_baseline_fp32():
+def model_reference_fp32():
     return get_model_baseline(float_16=False)
 
 
@@ -53,7 +53,7 @@ implementations: dict[str, Implementation] = {
                                    (32, 16), (32, 128), (32, 256),
                                    ], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("implementation", implementations.keys())
-def test_benchmark_implementations(benchmark, model_baseline_fp32, shape: (int, int), implementation: str):
+def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int, int), implementation: str):
     torch.manual_seed(0)
     assert implementation in implementations, f"unknown implementation: {implementation}"
     model_tested = implementations[implementation]
@@ -61,7 +61,7 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, shape: (int, 
     inputs = get_input_causal(shape) if model_tested.is_causal else get_input_non_causal(shape)
 
     with torch.inference_mode():
-        expected = model_baseline_fp32(**inputs)
+        expected = model_reference_fp32(**inputs)
         model = model_tested.model()
         value = benchmark(model, **inputs)
 
@@ -72,13 +72,13 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, shape: (int, 
     assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
 
 
-def test_support_shape_change(model_baseline_fp32):
+def test_support_shape_change(model_reference_fp32):
     """Test that the model can handle shape changes without being reloaded/rebuilt."""
     for name, implementation in implementations.items():
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
             pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
-            expected = model_baseline_fp32(**pytorch_input)
+            expected = model_reference_fp32(**pytorch_input)
             result = model_tested(**pytorch_input)
             assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"],
                                   atol=1e-1), f"failed on {name} with shape {shape}"
