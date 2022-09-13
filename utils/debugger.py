@@ -10,7 +10,7 @@ from utils.range_dict import RangeKeyDict
 
 class TritonDebugger:
     float32 = torch.float32
-    float16 = torch.float16  # to run on torch cpu which has a low support for fp16
+    float16 = torch.float16
 
     def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = False):
         """
