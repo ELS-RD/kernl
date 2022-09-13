@@ -14,6 +14,7 @@ def _layer_norm_fwd_fused_single_pass(
         A,
         Weight,
         Bias,
+        Mean, Rstd,
         stride, N, eps,
         BLOCK_SIZE: tl.constexpr,
 ):
@@ -50,8 +51,8 @@ def _layer_norm_fwd_fused_single_pass(
     rstd = 1 / tl.sqrt(var + eps)
 
     # write-back mean/rstd
-    # tl.store(Mean + row, mean)
-    # tl.store(Rstd + row, rstd)
+    tl.store(Mean + row, mean)
+    tl.store(Rstd + row, rstd)
 
     # multiply by weight and add bias
     for off in range(0, N, BLOCK_SIZE):
@@ -72,7 +73,7 @@ def _layer_norm_fwd_fused_multi_pass(
         A,
         Weight,
         Bias,
-        # Mean, Rstd,
+        Mean, Rstd,
         stride, N, eps,
         BLOCK_SIZE: tl.constexpr,
 ):
@@ -98,8 +99,8 @@ def _layer_norm_fwd_fused_multi_pass(
     var = tl.sum(_var, axis=0) / N
     rstd = 1 / tl.sqrt(var + eps)
     # write-back mean/rstd
-    # tl.store(Mean + row, mean)
-    # tl.store(Rstd + row, rstd)
+    tl.store(Mean + row, mean)
+    tl.store(Rstd + row, rstd)
     # multiply by weight and add bias
     for off in range(0, N, BLOCK_SIZE):
         cols = off + tl.arange(0, BLOCK_SIZE)
@@ -109,7 +110,7 @@ def _layer_norm_fwd_fused_multi_pass(
         a = tl.load(A + cols, mask=mask, other=0., eviction_policy="evict_first").to(tl.float32)
         a_hat = (a - mean) * rstd
         out = a_hat * weight + bias
-        # # write-back
+        # write-back
         tl.store(Out + cols, out, mask=mask)
 
 
@@ -119,8 +120,8 @@ def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
     # reshape input data into 2D tensor
     a_arg = a.reshape(-1, a.shape[-1])
     M, N = a_arg.shape
-    # mean = torch.empty((M,), dtype=torch.float32, device="cuda")
-    # rstd = torch.empty((M,), dtype=torch.float32, device="cuda")
+    mean = torch.empty((M,), dtype=torch.float32, device="cuda")
+    rstd = torch.empty((M,), dtype=torch.float32, device="cuda")
     # Less than 64KB per feature: enqueue fused kernel
     MAX_FUSED_SIZE = 65536 // a.element_size()
     BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
@@ -134,7 +135,7 @@ def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
         a_arg,
         weight,
         bias,
-        # mean, rstd,
+        mean, rstd,
         a_arg.stride(0), N, eps,
         BLOCK_SIZE=BLOCK_SIZE,
         num_warps=num_warps,
