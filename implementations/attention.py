@@ -3,6 +3,8 @@ import triton
 import triton.language as tl
 
 
+# CREDITS: Initially inspired by the Triton tutorial
+
 @triton.jit
 def _fwd_kernel(
         batch,
@@ -14,11 +16,11 @@ def _fwd_kernel(
         sm_scale,
         TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
         output,
-        stride_qz, stride_qh, stride_qm, stride_qk,
-        stride_kz, stride_kh, stride_kn, stride_kk,
-        stride_vz, stride_vh, stride_vk, stride_vn,
-        stride_oz, stride_oh, stride_om, stride_on,
-
+        q_batch_stride, q_head_stride, q_m_stride, q_k_stride,
+        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,
+        v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
+        o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
+        IS_CAUSAL: tl.constexpr,
         BLOCK_M: tl.constexpr,
         BLOCK_DHEAD: tl.constexpr,
         BLOCK_N: tl.constexpr,
@@ -36,22 +38,22 @@ def _fwd_kernel(
     @param sm_scale: Scaling factor applied after operation QxK
     @param TMP: Temporary variable to fix a compiler bug
     @param output: Output matrix size (batch, heads, seq_length, BLOCK_DHEAD)
-    @param stride_qz: matrix q stride for batch dimension
-    @param stride_qh: matrix q stride for head dimension
-    @param stride_qm: matrix q stride for rows, called "dimension m"
-    @param stride_qk: matrix q stride for columns
-    @param stride_kz: matrix k stride for batch dimension
-    @param stride_kh: matrix k stride for head dimension
-    @param stride_kn: matrix k stride for rows, called "dimension n"
-    @param stride_kk: matrix k stride for columns
-    @param stride_vz: matrix v stride for batch dimension
-    @param stride_vh: matrix v stride for head dimension
-    @param stride_vk: matrix v stride for columns
-    @param stride_vn: matrix v stride for rows
-    @param stride_oz: output matrix stride for batch dimension
-    @param stride_oh: output matrix stride for head dimension
-    @param stride_om: output matrix stride for rows
-    @param stride_on: output matrix stride for columns
+    @param q_batch_stride: matrix q stride for batch dimension
+    @param q_head_stride: matrix q stride for head dimension
+    @param q_m_stride: matrix q stride for rows, called "dimension m"
+    @param q_k_stride: matrix q stride for columns
+    @param k_batch_stride: matrix k stride for batch dimension
+    @param k_head_stride: matrix k stride for head dimension
+    @param k_n_stride: matrix k stride for rows, called "dimension n"
+    @param k_k_stride: matrix k stride for columns
+    @param v_batch_stride: matrix v stride for batch dimension
+    @param v_head_stride: matrix v stride for head dimension
+    @param v_k_stride: matrix v stride for columns
+    @param v_n_stride: matrix v stride for rows
+    @param o_batch_stride: output matrix stride for batch dimension
+    @param o_head_stride: output matrix stride for head dimension
+    @param o_m_stride: output matrix stride for rows
+    @param o_n_stride: output matrix stride for columns
     @param BLOCK_M: number of rows computed in a single instance for matrix Q
     @param BLOCK_DHEAD: number of columns per head
     @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
@@ -66,13 +68,23 @@ def _fwd_kernel(
     offs_n = tl.arange(0, BLOCK_N)  # First block on N dimension
     offs_d = tl.arange(0, BLOCK_DHEAD)  # Full head
 
+    current_batch_idx = head_idx // heads
+    current_head_idx = head_idx % heads
     # memory offsets matrices on whole Q, K, V matrices
     # Offsets for the current block on matrix Q
-    off_q = head_idx * stride_qh + offs_m[:, None] * stride_qm + offs_d[None, :] * stride_qk
+    off_q = current_batch_idx * q_batch_stride \
+            + current_head_idx * q_head_stride \
+            + offs_m[:, None] * q_m_stride + offs_d[None, :] * q_k_stride
+
     # Offsets for the first block on matrix K
-    off_k = head_idx * stride_kh + offs_n[:, None] * stride_kn + offs_d[None, :] * stride_kk
+    off_k = current_batch_idx * k_batch_stride \
+            + current_head_idx * k_head_stride + offs_n[:, None] * k_n_stride \
+            + offs_d[None, :] * k_k_stride
+
     # Offsets for the first block on matrix V
-    off_v = head_idx * stride_vh + offs_n[:, None] * stride_qm + offs_d[None, :] * stride_qk
+    off_v = current_batch_idx * v_batch_stride \
+            + current_head_idx * v_head_stride + offs_n[:, None] * q_m_stride \
+            + offs_d[None, :] * q_k_stride
 
     # pointers to blocks in Q, K, V
     q_ptrs = Q + off_q
@@ -94,18 +106,23 @@ def _fwd_kernel(
     # it will stay in SRAM throughout
     q = tl.load(q_ptrs)
 
+    n_end = seq_length
+    if IS_CAUSAL:
+        n_end = (m_block_idx + 1) * BLOCK_M,
     # loop over k, v and update accumulator
     # n_row_offset is the row offset on dimension N of the current block
     # It's used for booth the N dimension of K and V because they are handled at the same time
-    for n_row_offset in range(0, seq_length, BLOCK_N):
+    for n_row_offset in range(0, n_end, BLOCK_N):
         n_row_offset = tl.multiple_of(n_row_offset, BLOCK_N)
         # We load the current block in K in SRAM
         # We do the first multiplication between the block in Q and the current block in K
         # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
-        k = tl.load(k_ptrs + n_row_offset * stride_kn)
+        k = tl.load(k_ptrs + n_row_offset * k_n_stride)
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
+        if IS_CAUSAL:
+            qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions
@@ -124,6 +141,7 @@ def _fwd_kernel(
         # divide by the normalization. It's strange to do it this way instead of simply computing the softmax for qk,
         # but since all needed operations are already done for updating m and d, it seems faster
         p_scale = beta / d_new
+
         qk_softmax = numerators * p_scale[:, None]
 
         # From here, qk_softmax is correct related to all over previously done block
@@ -143,7 +161,7 @@ def _fwd_kernel(
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
-        v = tl.load(v_ptrs + n_row_offset * stride_vk)
+        v = tl.load(v_ptrs + n_row_offset * v_k_stride)
         qk_softmax = qk_softmax.to(tl.float16)
         acc += tl.dot(qk_softmax, v)
 
@@ -154,19 +172,24 @@ def _fwd_kernel(
     # For some reason we need to re-init this variable
     # The other variables in the original implementations seem not needed
     offs_n = tl.arange(0, BLOCK_DHEAD)
-    off_o = head_idx * stride_oh + offs_m[:, None] * stride_om + offs_n[None, :] * stride_on
+    off_o = current_batch_idx * o_batch_stride \
+            + current_head_idx * o_head_stride + offs_m[:, None] * o_m_stride \
+            + offs_n[None, :] * o_n_stride
+
     out_ptrs = output + off_o
     tl.store(out_ptrs, acc)
 
 
-def attention_forward(q, k, v, sm_scale):
+def attention_forward(q, k, v, output, sm_scale, is_causal=False):
     """
     Computes attention
 
     @param q: Query matrix size (batch, heads, seq_length, dhead)
     @param k: Key matrix size (batch, heads, seq_length, dhead)
     @param v: Value matrix size (batch, heads, seq_length, dhead)
+    @param output: Output matrix size (batch, heads, seq_length, dhead)
     @param sm_scale: Scaling factor applied after operation QxK
+    @param is_causal: Autoregressive decoder attention
     @return:
     """
     # Constraints
@@ -174,12 +197,14 @@ def attention_forward(q, k, v, sm_scale):
     assert q.shape[-1] == k.shape[-1]
     batch, heads, seq_length, dhead = q.size()
 
-    BLOCK_M = 128
-    BLOCK_N = 128
+    # Todo: Ensure 2^n only ?
+    BLOCK_M = min(128, seq_length)
+    BLOCK_N = min(128, seq_length)
+    assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
+
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
-    output = torch.empty_like(q)
     _fwd_kernel[grid](
         batch,
         heads,
@@ -194,6 +219,7 @@ def attention_forward(q, k, v, sm_scale):
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         v.stride(0), v.stride(1), v.stride(2), v.stride(3),
         output.stride(0), output.stride(1), output.stride(2), output.stride(3),
+        IS_CAUSAL=is_causal,
         BLOCK_M=BLOCK_M,
         BLOCK_N=BLOCK_N,
         BLOCK_DHEAD=dhead,

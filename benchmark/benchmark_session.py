@@ -31,7 +31,7 @@ class BenchmarkSession(object):
             ])
         tensor = torch.Tensor(compare)
         min_values, min_indexes = torch.min(tensor, dim=0)
-        _, max_indexes = torch.max(tensor, dim=0)
+        max_values, max_indexes = torch.max(tensor, dim=0)
 
         table = []
         for benchmark_idx, benchmark in enumerate(benchmarks):
@@ -39,7 +39,7 @@ class BenchmarkSession(object):
                 benchmark.name,
             ]
             for idx, v in enumerate(compare[benchmark_idx]):
-                text = f"{round(v, 4)} ({round(float(v / min_values[idx]), 2)})"
+                text = f"{round(v, 4)} ({round(float(max_values[idx] / v), 2)})"
                 if benchmark_idx == min_indexes[idx]:
                     text = colored(text, "green")
                 if benchmark_idx == max_indexes[idx]:
@@ -62,9 +62,9 @@ class BenchmarkSession(object):
                 elif grouping == "fullname":
                     key += bench.fullname,
                 elif grouping == "func":
-                    key += bench.name.split("[")[0],
+                    key += bench.func,
                 elif grouping == "fullfunc":
-                    key += bench.fullname.split("[")[0],
+                    key += bench.fullfunc,
                 elif grouping == "param":
                     key += bench.param,
                 elif grouping.startswith("param:"):

@@ -6,3 +6,5 @@ ipykernel
 pytest
 tabulate
 termcolor
+functorch
+git+https://github.com/pytorch/torchdynamo.git@6bd5b8bb8888d5dab0b9574b20f00de975eebc72

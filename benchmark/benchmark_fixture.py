@@ -1,3 +1,4 @@
+import gc
 from typing import Callable, Optional, Iterable
 
 import torch
@@ -70,6 +71,9 @@ class BenchmarkFixture(object):
         times = torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)])
         gpu_data = BenchmarkData(times)
 
+        gc.collect()
+        torch.cuda.empty_cache()
+
         cpu_times = []
         # Benchmark
         for i in range(n_repeat):
@@ -85,8 +89,11 @@ class BenchmarkFixture(object):
             start = perf_counter_ns()
             function_to_benchmark(*args, **kwargs)
             torch.cuda.synchronize()
-            cpu_times.append((perf_counter_ns() - start) / 1e-6)
+            cpu_times.append((perf_counter_ns() - start) * 1e-6)
         cpu_data = BenchmarkData(torch.Tensor(cpu_times))
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
         self.add_result(BenchmarkResult(self, gpu_data, cpu_data))
 

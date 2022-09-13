@@ -2,7 +2,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 # Original implementation with masking removed for benchmarking and reference purpose
 
 @triton.jit
