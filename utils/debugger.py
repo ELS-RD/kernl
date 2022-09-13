@@ -10,7 +10,7 @@ from utils.range_dict import RangeKeyDict
 
 class TritonDebugger:
     float32 = torch.float32
-    float16 = torch.float32  # to run on torch cpu which has a low support for fp16
+    float16 = torch.float16  # to run on torch cpu which has a low support for fp16
 
     def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = False):
         """
@@ -30,6 +30,7 @@ class TritonDebugger:
 
         range_tensor_dict = dict()
         for t in inputs:
+            assert t.device.type == "cuda", print(f"Tensor {t} is not on cuda")
             range_tensor_dict[(previous_boundary, previous_boundary + t.nelement())] = t
             previous_boundary = previous_boundary + t.nelement()
 
@@ -114,7 +115,7 @@ class TritonDebugger:
             mask = torch.ones_like(ptr).bool()
         tensor = self._get_tensor(ptr=ptr)
         indexes = self._get_indexes(tensor=tensor, ptr=ptr, mask=mask)
-        block = torch.full_like(ptr, fill_value=other, dtype=tensor.dtype)
+        block = torch.full_like(ptr, fill_value=other, dtype=tensor.dtype, device="cuda")
         block[mask] = tensor[indexes]
         self.total_gm_read += mask.sum().item()
         return block
@@ -151,7 +152,7 @@ class TritonDebugger:
         """
         assert (end & (end-1) == 0) and end != 0, f"end must be a power of 2: {end}"
         assert start < end, f"start must be less than end: {start} > {end}"
-        return torch.arange(start=start, end=end)
+        return torch.arange(start=start, end=end, device="cuda")
 
     @staticmethod
     def cdiv(x: int, y: int) -> int:
@@ -178,7 +179,7 @@ class TritonDebugger:
 
     @staticmethod
     def zeros(shape: (int, int), dtype: torch.dtype) -> torch.Tensor:
-        return torch.zeros(size=shape, dtype=dtype)
+        return torch.zeros(size=shape, dtype=dtype, device="cuda")
 
     @staticmethod
     def dot(input: torch.Tensor, other: torch.Tensor, trans_a: bool = False, trans_b: bool = False, allow_tf32=True) -> torch.Tensor:
@@ -202,7 +203,7 @@ class TritonDebugger:
         :return:
         """
         # seed not used as it would produce always the same pattern
-        return torch.rand(offset.shape)
+        return torch.rand(offset.shape, device="cuda")
 
     @staticmethod
     def sqrt(x: torch.Tensor) -> torch.Tensor:
