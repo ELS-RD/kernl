@@ -3,6 +3,8 @@ import os
 
 from transformers import AutoConfig, PretrainedConfig
 
+from test.utils.ort_utils import inference_onnx_binding
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,11 +22,12 @@ def get_model_onnx(model_name: str, model_dir_path: str):
     model_file_path = os.path.join(model_dir_path, model_onnx_name)
     # Load a model from transformers and export it through the ONNX format
     model = ORTModelForSequenceClassification.from_pretrained(model_name, from_transformers=True)
-
-    # Save the onnx model
     model.save_pretrained(model_file_path, file_name=model_onnx_name)
-    onnx_model = create_model_for_provider(model_file_path, "CUDAExecutionProvider")
-    return onnx_model
+
+    def run(*args, **kwargs):
+        return inference_onnx_binding(model_onnx=model, device="cuda", *args, **kwargs)
+
+    return run
 
 
 def get_model_onnx_optimized(model_name: str, model_dir_path: str):
@@ -39,7 +42,7 @@ def get_model_onnx_optimized(model_name: str, model_dir_path: str):
         return
     _ = get_model_onnx(model_name, model_dir_path)
     model_onnx_name = f"{model_name}.onnx"
-    onnx_optim_model_path = f"{model_name}_optim.onnx"
+    onnx_optim_model_path = os.path.join(model_dir_path, f"{model_name}_optim.onnx")
     num_attention_heads, hidden_size = get_model_size(path=model_name)
     model_config: PretrainedConfig = AutoConfig.from_pretrained(
         pretrained_model_name_or_path=model_name
@@ -55,7 +58,11 @@ def get_model_onnx_optimized(model_name: str, model_dir_path: str):
         architecture=model_config.model_type,
     )
     model_onnx_optim = create_model_for_provider(path=onnx_optim_model_path, provider_to_use="CUDAExecutionProvider")
-    return model_onnx_optim
+
+    def run(*args, **kwargs):
+        return inference_onnx_binding(model_onnx=model_onnx_optim, device="cuda", *args, **kwargs)
+
+    return run
 
 
 def get_model_tensorrt(model_name: str, model_dir_path: str, optimized_onnx: bool = False):
@@ -64,7 +71,7 @@ def get_model_tensorrt(model_name: str, model_dir_path: str, optimized_onnx: boo
         import tensorrt as trt
         from tensorrt import Runtime
         from tensorrt.tensorrt import ICudaEngine
-        from transformer_deploy.backends.trt_utils import build_engine, save_engine, load_engine
+        from test.utils.trt_utils import build_engine, save_engine, load_engine
     except ImportError:
         logger.error(
             "It seems that TensorRT is not yet installed. It is required to include TensorRT in benchmark."
@@ -79,7 +86,7 @@ def get_model_tensorrt(model_name: str, model_dir_path: str, optimized_onnx: boo
     model_onnx_name = f"{model_name}_optim.onnx" if optimized_onnx else f"{model_name}.onnx"
     engine: ICudaEngine = build_engine(
         runtime=runtime,
-        onnx_file_path=model_onnx_name,
+        onnx_file_path=f"{model_onnx_name}/{model_onnx_name}",
         logger=trt_logger,
         workspace_size=20000 * 1024 ** 2,
         fp16=False,  # for tests only

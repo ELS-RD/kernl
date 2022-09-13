@@ -8,7 +8,7 @@ from transformers import AutoModel
 from implementations.cuda_graph import cuda_graphs_wrapper
 from optimizer.dropout import remove_dropout
 from optimizer.dynamo_backend import dynamo_backend_ofi
-from test.models.runtimes_utils import get_model_onnx, get_model_onnx_optimized, get_model_tensorrt
+from test.utils.benchmark_utils import get_model_onnx, get_model_onnx_optimized, get_model_tensorrt
 
 model_name = "bert-base-uncased"
 models_dir = "./benchmark_models"
