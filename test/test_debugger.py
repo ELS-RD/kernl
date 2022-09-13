@@ -11,9 +11,9 @@ random.seed(123)
 def test_add():
     vec_len = 25
     block_size = 64  # not a vec len multiple to test masks
-    x = torch.rand(vec_len)
-    y = torch.rand_like(x)
-    o = torch.zeros_like(x)
+    x = torch.rand(vec_len, device="cuda")
+    y = torch.rand_like(x, device="cuda")
+    o = torch.zeros_like(x, device="cuda")
     tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, y, o], shuffle=True)
 
     def add_kernel(
@@ -62,8 +62,8 @@ def test_softmax():
     ncols = 250
     nrows = 16
     block_ncols = 256  # do not match vec_len to use masks
-    x = torch.rand((nrows, ncols))
-    o = torch.zeros_like(x)
+    x = torch.rand((nrows, ncols), device="cuda")
+    o = torch.zeros_like(x, device="cuda")
     tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], inputs=[x, o], shuffle=True)
 
     def softmax_kernel(
@@ -110,9 +110,9 @@ def test_matmul():
     m, n, k = 16, 4, 32
     assert k % 32 == 0
     block_m, block_n, block_k = 4, 2, 4
-    A = torch.rand((m, k))
-    B = torch.rand((k, n))
-    C = torch.zeros((m, n))
+    A = torch.rand((m, k), device="cuda", dtype=torch.float16)
+    B = torch.rand((k, n), device="cuda", dtype=torch.float16)
+    C = torch.zeros((m, n), device="cuda", dtype=torch.float16)
     tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C], shuffle=True)
 
     def leaky_relu(x):
@@ -228,7 +228,7 @@ def test_matmul():
     def leaky_relu_pytorch(x):
         x = x + 1
         return torch.where(x >= 0, x, 0.01 * x)
-    assert torch.allclose(C, leaky_relu_pytorch(A @ B))
+    assert torch.allclose(C, leaky_relu_pytorch(A @ B), atol=1e-1)
     assert tl.total_gm_write == m * n
     # we load tile a and tile b for each position on M and N, and repeat along K axis
     assert tl.total_gm_read == ((block_m * block_k) + (block_k * block_n)) * (k / block_k) * (n / block_n) * (m / block_m)
@@ -236,7 +236,7 @@ def test_matmul():
 
 def test_dropout():
     p = 0.5
-    x = torch.randn(size=(10, 1000))
+    x = torch.randn(size=(10, 1000), device="cuda")
     o = torch.zeros_like(x)
     block_m = 32
     tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], inputs=[x, o], shuffle=True)
@@ -285,14 +285,14 @@ def test_layernorm():
     BLOCK_SIZE = 16  # need to be a power of 2
     x_shape = (M, N)
     w_shape = (N, )
-    weight = torch.rand(w_shape)
-    bias = torch.rand(w_shape)
-    x = -2.3 + 0.5 * torch.randn(x_shape)
+    weight = torch.rand(w_shape, device="cuda")
+    bias = torch.rand(w_shape, device="cuda")
+    x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
     dy = .1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
-    mean = torch.zeros((M,))
-    rstd = torch.zeros((M,))
+    mean = torch.zeros((M,), device="cuda")
+    rstd = torch.zeros((M,), device="cuda")
     eps = 1e-5
 
     tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=True)
@@ -374,17 +374,15 @@ def test_layernorm_welford_variance():
     BLOCK_SIZE = 16  # need to be a power of 2
     x_shape = (M, N)
     w_shape = (N, )
-    weight = torch.rand(w_shape)
-    bias = torch.rand(w_shape)
-    x = -2.3 + 0.5 * torch.randn(x_shape)
+    weight = torch.rand(w_shape, device="cuda")
+    bias = torch.rand(w_shape, device="cuda")
+    x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
     dy = .1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
-    mean = torch.zeros((M,))
-    rstd = torch.zeros((M,))
+    mean = torch.zeros((M,), device="cuda")
+    rstd = torch.zeros((M,), device="cuda")
     eps = 1e-5
-    print("mean", torch.mean(x, dim=1))
-    print("var", torch.var(x, dim=1, unbiased=False))
 
     tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=False)
     def _layer_norm_fwd_fused(
@@ -467,23 +465,23 @@ def test_layernorm_welford_variance():
 
 def test_flash_attention():
     Z, H, N_CTX, D_HEAD = 3, 2, 2048, 64
-    q = torch.empty((Z, H, N_CTX, D_HEAD)).normal_(mean=0, std=.5)
-    k = torch.empty((Z, H, N_CTX, D_HEAD)).normal_(mean=0, std=.5)
-    v = torch.empty((Z, H, N_CTX, D_HEAD)).normal_(mean=0, std=.5)
+    q = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=.5)
+    k = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=.5)
+    v = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=.5)
     sm_scale = 0.3
-    dout = torch.randn_like(q)
+    dout = torch.randn_like(q).float()
     # reference implementation
-    M = torch.tril(torch.ones((N_CTX, N_CTX)))
+    M = torch.tril(torch.ones((N_CTX, N_CTX), device="cuda"))
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
     for z in range(Z):
         for h in range(H):
             p[:, :, M == 0] = float("-inf")
     p = torch.softmax(p, dim=-1)
     ref_out = torch.matmul(p, v)
-    tmp = torch.empty((q.shape[0] * q.shape[1], q.shape[2]))
+    tmp = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device="cuda", dtype=torch.float32)
 
-    L = torch.empty((q.shape[0] * q.shape[1], q.shape[2]))
-    m = torch.empty((q.shape[0] * q.shape[1], q.shape[2]))
+    L = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device="cuda")
+    m = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device="cuda")
 
     Lq, Lk, Lv = q.shape[-1], k.shape[-1], v.shape[-1]
     assert Lq == Lk and Lk == Lv
@@ -591,4 +589,4 @@ def test_flash_attention():
             BLOCK_DMODEL=Lk
         )
 
-    assert torch.allclose(dout, ref_out, atol=1e-4)
+    assert torch.allclose(dout, ref_out.float(), atol=1e-2)
