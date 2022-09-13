@@ -5,6 +5,7 @@ import triton.language as tl
 
 # CREDITS: Initially inspired by the Triton tutorial
 
+
 @triton.jit
 def _layer_norm_fwd_fused(
         Out,
@@ -52,7 +53,7 @@ def _layer_norm_fwd_fused(
         tl.store(Out + cols, out, mask=mask)
 
 
-def layer_norm_forward(a, normalized_shape, weight, bias, eps):
+def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float):
     # allocate output
     out = torch.empty_like(a)
     # reshape input data into 2D tensor
@@ -67,6 +68,7 @@ def layer_norm_forward(a, normalized_shape, weight, bias, eps):
     BLOCK_SIZE = min(BLOCK_SIZE, 4096)
     # heuristics for number of warps
     num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
+    eps = min(eps, 1e-6)  # >= 1e-5 may decrease Bert accuracy
     _layer_norm_fwd_fused[(M,)](
         out,
         a_arg,

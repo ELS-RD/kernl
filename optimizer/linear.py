@@ -54,7 +54,6 @@ def replace_linear(gm: torch.fx.GraphModule):
 
 
 def replace_all_linear(gm: torch.fx.GraphModule):
-    # It is used for pooler and causes error (probably because it is a the output and badly supported)
-    # replace_linear_activation(gm, torch.nn.Tanh(), "tanh")
+    replace_linear_activation(gm, torch.nn.Tanh(), "tanh")
     replace_linear_activation(gm, torch.nn.functional.gelu, "gelu")
     replace_linear(gm)
