@@ -14,23 +14,23 @@ def test_benchmark_masked(benchmark, batch, implementation):
     k = torch.rand((batch, 48, 512, 64), device="cuda") * 2
     v = torch.rand((batch, 48, 512, 64), device="cuda") * 2
 
-    q_h = q.half()
-    k_h = k.half()
-    v_h = v.half()
+    q_half = q.half()
+    k_half = k.half()
+    v_half = v.half()
 
     # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
     sm_scale = 0.3
 
     expected = masked_attention_reference(q, k, v, sm_scale)
-    expected_fp16 = masked_attention_reference(q_h, k_h, v_h, sm_scale)
+    expected_fp16 = masked_attention_reference(q_half, k_half, v_half, sm_scale)
     value = None
     if implementation == "triton_original":
-        value = benchmark(masked_attention_forward_original, q_h, k_h, v_h, sm_scale)
+        value = benchmark(masked_attention_forward_original, q_half, k_half, v_half, sm_scale)
     if implementation == "triton":
         output = torch.empty_like(q)
-        value = benchmark(attention_forward, q_h, k_h, v_h, output, sm_scale, is_causal=True)
+        value = benchmark(attention_forward, q_half, k_half, v_half, output, sm_scale, is_causal=True)
     if implementation == "torch":
-        value = benchmark(masked_attention_reference, q_h, k_h, v_h, sm_scale)
+        value = benchmark(masked_attention_reference, q_half, k_half, v_half, sm_scale)
 
     diff_reference = torch.abs(expected-expected_fp16.to(torch.float32)).max()
     diff_tested = torch.abs(expected-value.to(torch.float32)).max()
