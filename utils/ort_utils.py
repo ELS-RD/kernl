@@ -1,22 +1,7 @@
-#  Copyright 2022, Lefebvre Dalloz Services
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-
 """
 All the tooling to ease ONNX Runtime usage.
 """
 import ctypes as C
-import logging
 from ctypes.util import find_library
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -24,10 +9,6 @@ import numpy as np
 import torch
 # noinspection PyUnresolvedReferences
 from onnxruntime import ExecutionMode, GraphOptimizationLevel, InferenceSession, IOBinding, OrtValue, SessionOptions
-from onnxruntime.transformers import optimizer
-from onnxruntime.transformers.fusion_options import FusionOptions
-from onnxruntime.transformers.onnx_model_bert import BertOnnxModel
-from onnxruntime.transformers.optimizer import MODEL_TYPES
 
 libc = C.CDLL(find_library("c"))
 libc.malloc.restype = C.c_void_p
@@ -71,51 +52,6 @@ def create_model_for_provider(
         options.execution_mode = ExecutionMode.ORT_SEQUENTIAL
         options.intra_op_num_threads = nb_threads
     return InferenceSession(path, options, providers=provider_to_use)
-
-
-def optimize_onnx(
-    onnx_path: str,
-    onnx_optim_model_path: str,
-    fp16: bool,
-    use_cuda: bool,
-    num_attention_heads: int = 0,
-    hidden_size: int = 0,
-    architecture: str = "bert",
-) -> None:
-    """
-    ONNX Runtime transformer graph optimization.
-    Performs some operator fusion (merge several nodes of the graph in a single one)
-    and may convert some nodes to reduced precision.
-    :param onnx_path: ONNX input path
-    :param onnx_optim_model_path: where to save optimized model
-    :param fp16: use mixed precision (faster inference)
-    :param use_cuda: perform optimization on GPU (should )
-    :param num_attention_heads: number of attention heads of a model (0 -> try to detect)
-    :param hidden_size: hidden layer size of a model (0 -> try to detect)
-    :param architecture: model architecture to optimize. One of [bert, bart, gpt2]
-    """
-    optimization_options = FusionOptions(model_type=architecture)
-    optimization_options.enable_gelu_approximation = False  # additional optimization
-    if architecture == "distilbert":
-        optimization_options.enable_embed_layer_norm = False
-    if architecture not in MODEL_TYPES:
-        logging.info(f"Unknown architecture {architecture} for Onnx Runtime optimizer, overriding with 'bert' value")
-        architecture = "bert"
-    opt_level = 1 if architecture == "bert" else 0
-    optimized_model: BertOnnxModel = optimizer.optimize_model(
-        input=onnx_path,
-        model_type=architecture,
-        use_gpu=use_cuda,
-        opt_level=opt_level,
-        num_heads=num_attention_heads,  # automatic detection with 0 may not work with opset 13 or distilbert models
-        hidden_size=hidden_size,  # automatic detection with 0
-        optimization_options=optimization_options,
-    )
-    if fp16:
-        # use_symbolic_shape_infer set to false because doesn't work after ONNX package v1.10.2
-        optimized_model.convert_float_to_float16(use_symbolic_shape_infer=False)  # FP32 -> FP16
-    logging.info(f"optimizations applied: {optimized_model.get_fused_operator_statistics()}")
-    optimized_model.save_model_to_file(onnx_optim_model_path)
 
 
 # https://github.com/pytorch/pytorch/blob/ac79c874cefee2f8bc1605eed9a924d80c0b3542/torch/testing/_internal/common_utils.py#L349
@@ -233,9 +169,6 @@ def inference_onnx_binding(
             continue
         tensor: torch.Tensor = inputs[input_onnx.name]
         tensor = tensor.detach()
-        if tensor.dtype in [torch.int64, torch.long]:
-            # int32 mandatory as input of bindings, int64 not supported
-            tensor = tensor.type(dtype=torch.int32)
         tensor = tensor.contiguous()
         binding.bind_input(
             name=input_onnx.name,

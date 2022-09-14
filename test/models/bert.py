@@ -1,3 +1,4 @@
+import tempfile
 from typing import List
 
 import torch
@@ -8,10 +9,10 @@ from transformers import AutoModel
 from implementations.cuda_graph import cuda_graphs_wrapper
 from optimizer.dropout import remove_dropout
 from optimizer.dynamo_backend import dynamo_backend_ofi
-from test.utils.benchmark_utils import get_model_onnx, get_model_tensorrt
+from utils.modeling_utils import get_model_onnx, get_model_optim_fp32_onnx, get_model_optim_fp16_onnx
 
 model_name = "bert-base-uncased"
-models_dir = "./models/benchmark_models"
+models_dir = tempfile.TemporaryDirectory().name
 
 
 def get_model_baseline(float_16: bool = True):
@@ -20,12 +21,16 @@ def get_model_baseline(float_16: bool = True):
     return model.eval().cuda()
 
 
-def get_bert_onnx(shape: tuple[int, int]):
-    return get_model_onnx(model_name, models_dir, shape)
+def get_bert_onnx():
+    return get_model_onnx(model_name, models_dir)
 
 
-def get_bert_tensorrt(shape: tuple[int, int]):
-    return get_model_tensorrt(model_name, models_dir, shape)
+def get_bert_optim_fp32_onnx():
+    return get_model_optim_fp32_onnx(model_name, models_dir)
+
+
+def get_bert_optim_fp16_onnx():
+    return get_model_optim_fp16_onnx(model_name, models_dir)
 
 
 def get_model_dynamo_dropout_removed():

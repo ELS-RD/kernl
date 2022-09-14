@@ -8,8 +8,9 @@ import torchdynamo
 
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
-    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_bert_onnx, get_bert_tensorrt
-from test.utils.benchmark_utils import get_input_non_causal, get_input_causal
+    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_bert_onnx, get_bert_optim_fp32_onnx,\
+    get_bert_optim_fp16_onnx
+from utils.modeling_utils import get_input_non_causal, get_input_causal
 
 logger = logging.getLogger(__name__)
 
@@ -37,20 +38,25 @@ implementations: dict[str, Implementation] = {
 }
 
 try:
-    import onnxruntime as ort
+    # check imports and initialize onnx model
+    _ = get_bert_onnx()
     implementations["onnx"] = Implementation(get_bert_onnx, is_causal=True)
-except ImportError:
-    logger.warning(
-        "It seems that onnx runtime is not yet installed. Onnx models will not be included in the benchmark."
-    )
+except ImportError as e:
+    logger.warning(str(e))
 
 try:
-    import tensorrt as trt
-    implementations["tensorrt"] = Implementation(get_bert_tensorrt, is_causal=True)
-except ImportError:
-    logger.error(
-        "It seems that TensorRT is not yet installed. It is required to include TensorRT in benchmark."
-    )
+    # check imports and initialize optimized fp32 onnx model
+    _ = get_bert_optim_fp32_onnx()
+    implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=True)
+except ImportError as e:
+    logger.warning(str(e))
+
+try:
+    # check imports and initialize optimized fp16 onnx model
+    _ = get_bert_optim_fp16_onnx()
+    implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=True)
+except ImportError as e:
+    logger.warning(str(e))
 
 
 @pytest.mark.parametrize("input_shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
@@ -67,7 +73,7 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: 
 
     with torch.inference_mode():
         expected = model_baseline_fp32(**inputs)
-        model = model_tested.model(shape=input_shape) if implementation in ["onnx", "tensorrt"] else model_tested.model()
+        model = model_tested.model()
         value = benchmark(model, **inputs)
 
     torchdynamo.reset()
@@ -81,10 +87,6 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: 
 def test_support_shape_change(model_baseline_fp32):
     """Test that the model can handle shape changes without being reloaded/rebuilt."""
     for name, implementation in implementations.items():
-        if name in ["onnx", "tensorrt"]:
-            # onnx and tensorrt implementations are shape dependent for now,
-            # so they don't support handling shape change without reload.
-            continue
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
             pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
