@@ -8,10 +8,10 @@ from transformers import AutoModel
 from implementations.cuda_graph import cuda_graphs_wrapper
 from optimizer.dropout import remove_dropout
 from optimizer.dynamo_backend import dynamo_backend_ofi
-from test.utils.benchmark_utils import get_model_onnx, get_model_onnx_optimized, get_model_tensorrt
+from test.utils.benchmark_utils import get_model_onnx, get_model_tensorrt
 
 model_name = "bert-base-uncased"
-models_dir = "./benchmark_models"
+models_dir = "./models/benchmark_models"
 
 
 def get_model_baseline(float_16: bool = True):
@@ -22,10 +22,6 @@ def get_model_baseline(float_16: bool = True):
 
 def get_bert_onnx():
     return get_model_onnx(model_name, models_dir)
-
-
-def get_bert_onnx_optimized():
-    return get_model_onnx_optimized(get_model_onnx_optimized, models_dir)
 
 
 def get_bert_tensorrt():
