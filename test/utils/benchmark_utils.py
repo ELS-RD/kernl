@@ -49,13 +49,13 @@ def get_model_tensorrt(model_name: str, model_dir_path: str):
     trt_model_name = f"{model_name}.plan"
     model_onnx_name = f"{model_name}.onnx"
     input_id_shape = TensorRTShape(
-        min_shape=[1, 512], optimal_shape=[32, 512], max_shape=[32, 512], input_name="input_ids"
+        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[32, 512], input_name="input_ids"
     )
     attention_mask_shape = TensorRTShape(
-        min_shape=[1, 512], optimal_shape=[32, 512], max_shape=[32, 512], input_name="attention_mask"
+        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[32, 512], input_name="attention_mask"
     )
     token_type_id_shape = TensorRTShape(
-        min_shape=[1, 512], optimal_shape=[32, 512], max_shape=[32, 512], input_name="token_type_ids"
+        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[32, 512], input_name="token_type_ids"
     )
     input_shapes = [input_id_shape, attention_mask_shape, token_type_id_shape]
     output_shape = TensorRTShape(
