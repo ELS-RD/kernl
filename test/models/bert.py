@@ -20,12 +20,12 @@ def get_model_baseline(float_16: bool = True):
     return model.eval().cuda()
 
 
-def get_bert_onnx():
-    return get_model_onnx(model_name, models_dir)
+def get_bert_onnx(shape: tuple[int, int]):
+    return get_model_onnx(model_name, models_dir, shape)
 
 
-def get_bert_tensorrt():
-    return get_model_tensorrt(model_name, models_dir)
+def get_bert_tensorrt(shape: tuple[int, int]):
+    return get_model_tensorrt(model_name, models_dir, shape)
 
 
 def get_model_dynamo_dropout_removed():

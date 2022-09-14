@@ -1,6 +1,6 @@
 import dataclasses
 import logging
-from typing import Dict, Callable
+from typing import Callable
 
 import pytest
 import torch
@@ -9,6 +9,7 @@ import torchdynamo
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
     get_model_optimized, get_model_optimized_causal_cuda_graphs, get_bert_onnx, get_bert_tensorrt
+from test.utils.benchmark_utils import get_input_non_causal, get_input_causal
 
 logger = logging.getLogger(__name__)
 
@@ -24,30 +25,6 @@ class Implementation:
     is_causal: bool
 
 
-def get_input_onnx(shape: (int, int)) -> Dict[str, torch.Tensor]:
-    return {
-        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int64, device="cuda"),
-        "attention_mask": torch.ones(size=shape, dtype=torch.int64, device="cuda"),
-        "token_type_ids": torch.zeros(size=shape, dtype=torch.int64, device="cuda")
-    }
-
-
-def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
-    batch, seq_length = shape
-    mask = torch.tril(torch.ones((batch, seq_length, seq_length), device="cuda"))
-    return {
-        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
-        "attention_mask": mask,
-    }
-
-
-def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
-    return {
-        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
-        "attention_mask": None,  # TODO None is not a correct value, no key at all would be better
-    }
-
-
 implementations: dict[str, Implementation] = {
     "baseline": Implementation(get_model_baseline, is_causal=False),
     "dynamo": Implementation(get_model_dynamo, is_causal=False),
@@ -60,8 +37,8 @@ implementations: dict[str, Implementation] = {
 }
 
 try:
-    from optimum.onnxruntime import ORTModelForFeatureExtraction
-    implementations["onnx"] = Implementation(get_bert_onnx, is_causal=False)
+    import onnxruntime as ort
+    implementations["onnx"] = Implementation(get_bert_onnx, is_causal=True)
 except ImportError:
     logger.warning(
         "It seems that onnx runtime is not yet installed. Onnx models will not be included in the benchmark."
@@ -69,16 +46,14 @@ except ImportError:
 
 try:
     import tensorrt as trt
-    implementations["tensorrt"] = Implementation(get_bert_tensorrt, is_causal=False)
+    implementations["tensorrt"] = Implementation(get_bert_tensorrt, is_causal=True)
 except ImportError:
     logger.error(
         "It seems that TensorRT is not yet installed. It is required to include TensorRT in benchmark."
     )
 
 
-@pytest.mark.parametrize("input_shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
-                                         (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
-                                         (32, 16), (32, 128), (32, 256),
+@pytest.mark.parametrize("input_shape", [(1, 16)
                                          ], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: (int, int), implementation: str):
@@ -86,33 +61,31 @@ def test_benchmark_implementations(benchmark, model_baseline_fp32, input_shape: 
     assert implementation in implementations, f"unknown implementation: {implementation}"
     model_tested = implementations[implementation]
 
-    if implementation in ["onnx", "tensorrt"]:
-        inputs = get_input_onnx(input_shape)
-    else:
-        inputs = get_input_causal(input_shape) if model_tested.is_causal else get_input_non_causal(input_shape)
+    inputs = get_input_causal(input_shape) if model_tested.is_causal else get_input_non_causal(input_shape)
 
     with torch.inference_mode():
         expected = model_baseline_fp32(**inputs)
-        model = model_tested.model()
+        model = model_tested.model(shape=input_shape) if implementation in ["onnx", "tensorrt"] else model_tested.model()
         value = benchmark(model, **inputs)
 
     torchdynamo.reset()
 
     if "last_hidden_state" in value:
-        assert torch.allclose(input=value["last_hidden_state"].float().to("cuda"), other=expected["last_hidden_state"], rtol=1e-1, atol=1e-1)
+        assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"], rtol=1e-1, atol=1e-1)
     if "pooler_output" in value:
-        assert torch.allclose(input=value["pooler_output"].float().to("cuda"), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
+        assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
 
 
 def test_support_shape_change(model_baseline_fp32):
     """Test that the model can handle shape changes without being reloaded/rebuilt."""
     for name, implementation in implementations.items():
+        if name in ["onnx", "tensorrt"]:
+            # onnx and tensorrt implementations are shape dependent for now,
+            # so they don't support handling shape change without reload.
+            continue
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
-            if name in ["onnx", "tensorrt"]:
-                pytorch_input = get_input_onnx(shape)
-            else:
-                pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
+            pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
             expected = model_baseline_fp32(**pytorch_input)
             result = model_tested(**pytorch_input)
-            assert torch.allclose(result["last_hidden_state"].float().to("cuda"), expected["last_hidden_state"], atol=1e-1), f"failed on {name} with shape {shape}"
+            assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"], atol=1e-1), f"failed on {name} with shape {shape}"
