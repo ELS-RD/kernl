@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Dict, Tuple
 
 from transformers import AutoModel
 import torch
@@ -25,7 +24,7 @@ def get_input_non_causal(shape: (int, int)) -> dict[str, torch.Tensor]:
     }
 
 
-def get_model_onnx(model_name: str, model_dir_path: str, shape: Tuple[int, int]):
+def get_model_onnx(model_name: str, model_dir_path: str, shape: tuple[int, int]):
     try:
         from test.utils.pytorch_utils import convert_to_onnx
         from test.utils.ort_utils import create_model_for_provider
@@ -62,7 +61,7 @@ def get_model_onnx(model_name: str, model_dir_path: str, shape: Tuple[int, int])
     return run
 
 
-def get_model_tensorrt(model_name: str, model_dir_path: str, shape: Tuple[int, int]):
+def get_model_tensorrt(model_name: str, model_dir_path: str, shape: tuple[int, int]):
     try:
         from tensorrt.tensorrt import Logger
         import tensorrt as trt
