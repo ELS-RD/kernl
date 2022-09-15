@@ -5,8 +5,8 @@ from utils.extended_matcher import replace_pattern
 
 torch.fx.wrap('attention_wrapper')
 
-def attention_wrapper(q, k, v, output, sm_scale, is_causal, *args):
-    return attention_forward(q, k, v, output, sm_scale, is_causal=is_causal)
+def attention_wrapper(q, k, v, output, sm_scale, attention_mask, is_causal):
+    return attention_forward(q, k, v, output, sm_scale, mask=attention_mask, is_causal=is_causal)
 
 def fuse_attention(gm: torch.fx.GraphModule, is_causal: bool):
     def pattern(q, k, attention_mask, v):
@@ -20,7 +20,7 @@ def fuse_attention(gm: torch.fx.GraphModule, is_causal: bool):
 
     def replace(q, k, attention_mask, v):
         output = torch.empty_like(q)
-        output = attention_wrapper(q, k, v, output, 1 / 8.0, is_causal, attention_mask)
+        output = attention_wrapper(q, k, v, output, 1 / 8.0, attention_mask, is_causal)
         return output
     
     replace_pattern(gm, pattern, replace)

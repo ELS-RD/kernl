@@ -131,7 +131,7 @@ class TritonDebugger:
             mask = torch.ones_like(ptr).bool()
         tensor = self._get_tensor(ptr)
         indexes = self._get_indexes(tensor=tensor, ptr=ptr, mask=mask)
-        tensor[indexes] = data[mask]
+        tensor[indexes] = data[mask].to(tensor.dtype)
         self.total_gm_write += mask.sum().item()
 
     def get_ptr(self, tensor: torch.Tensor) -> int:

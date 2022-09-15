@@ -1,8 +1,8 @@
 import torch
 import pytest
 from implementations.attention_masked_original import masked_attention_reference, masked_attention_forward_original
-from implementations.attention_original import attention_reference, attention_forward_original
-from implementations.attention import attention_forward
+from implementations.attention_original import attention_forward_original
+from implementations.attention import attention_forward, attention_reference
 
 
 @pytest.mark.parametrize("batch", [1, 8, 32])
@@ -60,22 +60,33 @@ def test_benchmark(benchmark, batch, implementation):
 
     assert torch.allclose(value, expected, atol=1e-2)
 
+def generate_rand_mask(batch, seq_length, dtype):
+    attention_mask = torch.randint(0, 2, size=(batch, seq_length), device="cuda").to(dtype)
+    attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
+    attention_mask = (1.0 - attention_mask) * torch.finfo(dtype).min
+    return attention_mask
 
+@pytest.mark.parametrize("has_mask", [False, True], ids=lambda x: f"seq_length={x}")
 @pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512], ids=lambda x: f"seq_length={x}")
 @pytest.mark.parametrize("batch", [1, 8, 16, 32, 64], ids=lambda x: f"batch={x}")
-def test_optimized(batch, seq_length):
-    torch.manual_seed(0)
+def test_optimized(has_mask, batch, seq_length):
+    torch.manual_seed(2)
     # batch, heads, seqlength, dhead
-    q = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
-    v = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
+    mask = generate_rand_mask(batch, seq_length, dtype=torch.float32) if has_mask else None
+    q = torch.rand((batch, 48, seq_length, 64), dtype=torch.float32, device="cuda")
+    k = torch.rand((batch, 48, seq_length, 64), dtype=torch.float32, device="cuda")
+    v = torch.rand((batch, 48, seq_length, 64), dtype=torch.float32, device="cuda")
     sm_scale = 0.3
+    expected_fp32 = attention_reference(q, k, v, sm_scale, attention_mask=mask)
 
-    expected = attention_reference(q, k, v, sm_scale)
-    output = torch.empty_like(q)
-    attention_forward(q, k, v, output, sm_scale)
-    assert torch.allclose(output, expected, atol=1e-2)
+    mask_half = mask.half() if has_mask else None
+    q_half = q.half()
+    k_half = k.half()
+    v_half = v.half()
 
+    output_half = torch.empty_like(q_half)
+    attention_forward(q_half, k_half, v_half, output_half, sm_scale, mask=mask_half)
+    assert torch.allclose(output_half.to(torch.float32), expected_fp32.to(torch.float32), atol=1e-2)
 
 def test_mixed_stride():
     torch.manual_seed(0)

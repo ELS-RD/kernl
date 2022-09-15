@@ -32,7 +32,7 @@ def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
 def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
     return {
         "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
-        "attention_mask": None,  # TODO None is not a correct value, no key at all would be better
+        "attention_mask": torch.randint(0, 2, size=shape, dtype=torch.int32, device="cuda"),
     }
 
 

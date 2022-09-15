@@ -13,6 +13,8 @@ def _fwd_kernel(
         K,
         V,
         sm_scale,
+        mask,
+        mask_batch_stride,
         TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
         output,
         q_batch_stride, q_head_stride, q_m_stride, q_k_stride,
@@ -107,6 +109,7 @@ def _fwd_kernel(
     n_end = seq_length
     if IS_CAUSAL:
         n_end = (m_block_idx + 1) * BLOCK_M,
+
     # loop over k, v and update accumulator
     # n_row_offset is the row offset on dimension N of the current block
     # It's used for booth the N dimension of K and V because they are handled at the same time
@@ -119,8 +122,15 @@ def _fwd_kernel(
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
+
         if IS_CAUSAL:
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
+
+        if mask is not None:
+            offs_mask = current_batch_idx * mask_batch_stride + n_row_offset + tl.arange(0, BLOCK_N)
+            mask_ptrs = mask + offs_mask[None, :]
+            m = tl.load(mask_ptrs)
+            qk += m # We could use -inf, but to respect the passed param, we apply it
 
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions
@@ -178,7 +188,30 @@ def _fwd_kernel(
     tl.store(out_ptrs, acc)
 
 
-def attention_forward(q, k, v, output, sm_scale, is_causal=False):
+def attention_reference(q, k, v, sm_scale, attention_mask=None):
+    """
+    Reference implementation for attention
+    @param q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param k: Key matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param v: Value matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param sm_scale: Scaling factor applied after operation QxK
+    @param attention_mask: Size (batch, 1, 1, seq_length) or (batch, seq_length). Warning the mask isn't a binary mask
+    like the one you use normally. This mask is directly added to QxK.
+    @return:
+    """
+    batch = q.size(0)
+    seq_length = q.size(2)
+    p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
+
+    if attention_mask is not None:
+        attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
+        p += attention_mask
+    p = torch.nn.functional.softmax(p, dim=-1)
+    ref_out = torch.matmul(p, v)
+    return ref_out
+
+
+def attention_forward(q, k, v, output, sm_scale, is_causal=False, mask=None):
     """
     Computes attention
 
@@ -203,6 +236,10 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False):
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
+    if mask is not None:
+        assert mask.is_contiguous()
+        mask = mask.view(batch, seq_length)
+
     _fwd_kernel[grid](
         heads,
         seq_length,
@@ -210,6 +247,8 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False):
         k,
         v,
         sm_scale,
+        mask,
+        mask.stride(0) if mask is not None else 0,
         tmp,
         output,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
