@@ -1,5 +1,5 @@
 import dataclasses
-import logging
+import warnings
 from typing import Callable, Dict
 
 import pytest
@@ -41,7 +41,7 @@ try:
     implementations["onnx"] = Implementation(get_bert_onnx, is_causal=False)
 except ImportError as e:
     error = f"It seems that you are missing some dependencies: onnx won't be included in benchmarks. \n {str(e)}"
-    logging.warning(error)
+    warnings.warn(UserWarning(error))
 
 try:
     # check imports and initialize optimized fp32 onnx model
@@ -49,7 +49,7 @@ try:
     implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=False)
 except ImportError as e:
     error = f"It seems that you are missing some dependencies: onnx_optim_fp32 won't be included in benchmarks. \n {str(e)}"
-    logging.warning(error)
+    warnings.warn(UserWarning(error))
 
 try:
     # check imports and initialize optimized fp16 onnx model
@@ -57,7 +57,7 @@ try:
     implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=False)
 except ImportError as e:
     error = f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
-    logging.warning(error)
+    warnings.warn(UserWarning(error))
 
 
 @pytest.mark.parametrize("shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
