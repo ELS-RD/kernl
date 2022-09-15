@@ -42,24 +42,24 @@ try:
     _ = get_bert_onnx()
     implementations["onnx"] = Implementation(get_bert_onnx, is_causal=True)
 except ImportError as e:
-    error = f"It seems that you are missing some dependencies. \n {e}"
-    logging.warning(str(error))
+    error = f"It seems that you are missing some dependencies. \n {str(e)}"
+    logging.warning(error)
 
 try:
     # check imports and initialize optimized fp32 onnx model
     _ = get_bert_optim_fp32_onnx()
     implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=True)
 except ImportError as e:
-    error = f"It seems that you are missing some dependencies. \n {e}"
-    logging.warning(str(error))
+    error = f"It seems that you are missing some dependencies. \n {str(e)}"
+    logging.warning(error)
 
 try:
     # check imports and initialize optimized fp16 onnx model
     _ = get_bert_optim_fp16_onnx()
     implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=True)
 except ImportError as e:
-    error = f"It seems that you are missing some dependencies. \n {e}"
-    logging.warning(str(error))
+    error = f"It seems that you are missing some dependencies. \n {str(e)}"
+    logging.warning(error)
 
 
 @pytest.mark.parametrize("shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),

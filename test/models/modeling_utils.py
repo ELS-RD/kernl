@@ -1,7 +1,6 @@
 from typing import Dict
 
 import torch
-from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 
 def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
@@ -24,8 +23,8 @@ def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
 def get_model_onnx(model_name: str, model_path: str):
     from test.models.onnx_utils import build_onnx
     from test.models.ort_utils import inference_onnx_binding
-    from transformers.modeling_outputs import BaseModelOutput
-
+    from transformers.modeling_outputs import BaseModelOutputWithPooling
+    import ayoub
     model_onnx = build_onnx(model_name, model_path)
 
     def run(*args, **kwargs):
@@ -45,7 +44,7 @@ def get_model_onnx(model_name: str, model_path: str):
 def get_model_optim_fp32_onnx(model_name: str, model_path: str):
     from test.models.onnx_utils import optimize_onnx
     from test.models.ort_utils import inference_onnx_binding
-    from transformers.modeling_outputs import BaseModelOutput
+    from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = optimize_onnx(model_name, model_path)
 
@@ -66,7 +65,7 @@ def get_model_optim_fp32_onnx(model_name: str, model_path: str):
 def get_model_optim_fp16_onnx(model_name: str, model_path: str):
     from test.models.onnx_utils import optimize_onnx
     from test.models.ort_utils import inference_onnx_binding
-    from transformers.modeling_outputs import BaseModelOutput
+    from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = optimize_onnx(model_name, model_path, True)
 
