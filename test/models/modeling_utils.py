@@ -1,9 +1,7 @@
-import logging
 from typing import Dict
 
 import torch
-
-logger = logging.getLogger(__name__)
+from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 
 def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
@@ -24,13 +22,10 @@ def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
 
 
 def get_model_onnx(model_name: str, model_path: str):
-    try:
-        from utils.onnx_utils import build_onnx
-        from utils.ort_utils import inference_onnx_binding
-        from transformers.modeling_outputs import BaseModelOutput
-    except ImportError as e:
-        error = f"It seems that you are missing some dependencies. \n {e}"
-        raise ImportError(error)
+    from test.models.onnx_utils import build_onnx
+    from test.models.ort_utils import inference_onnx_binding
+    from transformers.modeling_outputs import BaseModelOutput
+
     model_onnx = build_onnx(model_name, model_path)
 
     def run(*args, **kwargs):
@@ -39,19 +34,19 @@ def get_model_onnx(model_name: str, model_path: str):
             "attention_mask": kwargs["attention_mask"].to("cuda"),
             "token_type_ids": kwargs["token_type_ids"].to("cuda")
         }
-        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs, device="cuda")
-        return BaseModelOutput(last_hidden_state=outputs["last_hidden_state"].type(torch.float32))
+        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=outputs["last_hidden_state"].type(torch.float32),
+            pooler_output=outputs["1607"].type(torch.float32)
+        )
     return run
 
 
 def get_model_optim_fp32_onnx(model_name: str, model_path: str):
-    try:
-        from utils.onnx_utils import optimize_onnx
-        from utils.ort_utils import inference_onnx_binding
-        from transformers.modeling_outputs import BaseModelOutput
-    except ImportError as e:
-        error = f"It seems that you are missing some dependencies. \n {e}"
-        raise ImportError(error)
+    from test.models.onnx_utils import optimize_onnx
+    from test.models.ort_utils import inference_onnx_binding
+    from transformers.modeling_outputs import BaseModelOutput
+
     model_onnx = optimize_onnx(model_name, model_path)
 
     def run(*args, **kwargs):
@@ -60,19 +55,19 @@ def get_model_optim_fp32_onnx(model_name: str, model_path: str):
             "attention_mask": kwargs["attention_mask"].to("cuda"),
             "token_type_ids": kwargs["token_type_ids"].to("cuda")
         }
-        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs, device="cuda")
-        return BaseModelOutput(last_hidden_state=outputs["last_hidden_state"].type(torch.float32))
+        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=outputs["last_hidden_state"].type(torch.float32),
+            pooler_output=outputs["1607"].type(torch.float32)
+        )
     return run
 
 
 def get_model_optim_fp16_onnx(model_name: str, model_path: str):
-    try:
-        from utils.onnx_utils import optimize_onnx
-        from utils.ort_utils import inference_onnx_binding
-        from transformers.modeling_outputs import BaseModelOutput
-    except ImportError as e:
-        error = f"It seems that you are missing some dependencies. \n {e}"
-        raise ImportError(error)
+    from test.models.onnx_utils import optimize_onnx
+    from test.models.ort_utils import inference_onnx_binding
+    from transformers.modeling_outputs import BaseModelOutput
+
     model_onnx = optimize_onnx(model_name, model_path, True)
 
     def run(*args, **kwargs):
@@ -81,6 +76,9 @@ def get_model_optim_fp16_onnx(model_name: str, model_path: str):
             "attention_mask": kwargs["attention_mask"].to("cuda"),
             "token_type_ids": kwargs["token_type_ids"].to("cuda")
         }
-        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs, device="cuda")
-        return BaseModelOutput(last_hidden_state=outputs["last_hidden_state"].type(torch.float32))
+        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=outputs["last_hidden_state"].type(torch.float32),
+            pooler_output=outputs["1607"].type(torch.float32)
+        )
     return run

@@ -9,7 +9,7 @@ from transformers import AutoModel
 from implementations.cuda_graph import cuda_graphs_wrapper
 from optimizer.dropout import remove_dropout
 from optimizer.dynamo_backend import dynamo_backend_ofi
-from utils.modeling_utils import get_model_onnx, get_model_optim_fp32_onnx, get_model_optim_fp16_onnx
+from test.models.modeling_utils import get_model_onnx, get_model_optim_fp32_onnx, get_model_optim_fp16_onnx
 
 model_name = "bert-base-uncased"
 models_dir = tempfile.TemporaryDirectory().name

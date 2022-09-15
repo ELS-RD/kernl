@@ -3,7 +3,7 @@ All the tooling to ease ONNX Runtime usage.
 """
 import ctypes as C
 from ctypes.util import find_library
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -13,45 +13,14 @@ from onnxruntime import ExecutionMode, GraphOptimizationLevel, InferenceSession,
 libc = C.CDLL(find_library("c"))
 libc.malloc.restype = C.c_void_p
 
-# GPU inference only
-try:
-    # noinspection PyUnresolvedReferences
-    import cupy as cp
-except ImportError:
-    pass
+import cupy as cp
 
 
-def create_model_for_provider(
-    path: str,
-    provider_to_use: Union[str, List],
-    nb_threads: int = 0,
-    optimization_level: GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
-    enable_profiling: bool = False,
-    log_severity: int = 2,
-) -> InferenceSession:
-    """
-    Create an ONNX Runtime instance.
-    :param path: path to ONNX file or serialized to string model
-    :param provider_to_use: provider to use for inference
-    :param nb_threads: intra_op_num_threads to use. You may want to try different parameters,
-        more core does not always provide best performances. 0 let ORT choose the best value.
-    :param optimization_level: expected level of ONNX Runtime optimization. For GPU and NLP, extended is the one
-        providing kernel fusion of element wise operations. Enable all level is for CPU inference.
-        see https://onnxruntime.ai/docs/performance/graph-optimizations.html#layout-optimizations
-    :param enable_profiling: let Onnx Runtime log each kernel time.
-    :param log_severity: Log severity level. 0:Verbose, 1:Info, 2:Warning. 3:Error, 4:Fatal.
-    :return: ONNX Runtime inference session
-    """
+def create_model_for_provider(path: str) -> InferenceSession:
     options = SessionOptions()
-    options.graph_optimization_level = optimization_level
-    options.enable_profiling = enable_profiling
-    options.log_severity_level = log_severity
-    if isinstance(provider_to_use, str):
-        provider_to_use = [provider_to_use]
-    if provider_to_use == ["CPUExecutionProvider"]:
-        options.execution_mode = ExecutionMode.ORT_SEQUENTIAL
-        options.intra_op_num_threads = nb_threads
-    return InferenceSession(path, options, providers=provider_to_use)
+    options.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+    options.log_severity_level = 2
+    return InferenceSession(path, options, providers=["CUDAExecutionProvider"])
 
 
 # https://github.com/pytorch/pytorch/blob/ac79c874cefee2f8bc1605eed9a924d80c0b3542/torch/testing/_internal/common_utils.py#L349
@@ -87,14 +56,6 @@ ort_conversion_table: Dict[str, Tuple[torch.dtype, Optional[np.dtype], Optional[
 
 
 def to_pytorch(ort_tensor: OrtValue, clone_tensor: bool) -> torch.Tensor:
-    """
-    Convert OrtValue output by Onnx Runtime to Pytorch tensor.
-    The process can be done in a zero copy way (depending of clone parameter).
-    :param ort_tensor: output from Onnx Runtime
-    :param clone_tensor: Onnx Runtime owns the storage array and will write on the next inference.
-        By cloning you guarantee that the data won't change.
-    :return: Pytorch tensor
-    """
     ort_type = ort_tensor.data_type()
     torch_type, np_type, c_type, element_size = ort_conversion_table[ort_type]
     use_cuda = ort_tensor.device_name().lower() == "cuda"
@@ -133,37 +94,10 @@ def to_pytorch(ort_tensor: OrtValue, clone_tensor: bool) -> torch.Tensor:
     return torch_tensor
 
 
-def inference_onnx_binding(
-    model_onnx: InferenceSession,
-    inputs: Dict[str, torch.Tensor],
-    device: str,
-    device_id: int = 0,
-    binding: Optional[IOBinding] = None,
-    clone_tensor: bool = True,
-) -> Dict[str, torch.Tensor]:
-    """
-    Performs inference on ONNX Runtime in an optimized way.
-    In particular, it avoids any Onnx Runtime output tensor copy.
-    It means that Onnx Runtime is still owner of the array, and it will overwrite its content if you do another
-    inference. To avoid any issue, just set clone_tensor to True (default).
-    For best performance and lowest memory footprint, if you know what you are doing, set clone_tensor to False.
-
-    :param model_onnx: ONNX model
-    :param inputs: input torch tensor
-    :param device: where to run the inference. One of [cpu, cuda]
-    :param device_id: ID of the device where to run the inference, to be used when there are multiple GPUs, etc.
-    :param binding: previously generated binding IO, will be reset.
-    :param clone_tensor: clone Pytorch tensor to avoid its content being overwritten by Onnx Runtime
-        at the next inference call.
-    :return: a dict {axis name: output tensor}
-    """
-    assert isinstance(device, str)
-    assert device in ["cpu", "cuda"], f"unexpected inference device: '{device}'"
-    if binding is None:
-        binding: IOBinding = model_onnx.io_binding()
-    else:
-        binding.clear_binding_inputs()
-        binding.clear_binding_outputs()
+def inference_onnx_binding(model_onnx: InferenceSession, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    binding: IOBinding = model_onnx.io_binding()
+    device = "cuda"
+    device_id = 0
     for input_onnx in model_onnx.get_inputs():
         if input_onnx.name not in inputs:  # some inputs may be optional
             continue
@@ -194,5 +128,5 @@ def inference_onnx_binding(
         binding.get_outputs()
     ), f"{len(model_onnx.get_outputs())} != {len(binding.get_outputs())}"
     for out, t in zip(model_onnx.get_outputs(), binding.get_outputs()):
-        outputs[out.name] = to_pytorch(t, clone_tensor=clone_tensor)
+        outputs[out.name] = to_pytorch(t, clone_tensor=True)
     return outputs
