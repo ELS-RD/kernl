@@ -24,7 +24,7 @@ def get_model_onnx(model_name: str, model_path: str):
     from test.models.onnx_utils import build_onnx
     from test.models.ort_utils import inference_onnx_binding
     from transformers.modeling_outputs import BaseModelOutputWithPooling
-    import ayoub
+
     model_onnx = build_onnx(model_name, model_path)
 
     def run(*args, **kwargs):
