@@ -40,6 +40,7 @@ def test_benchmark(benchmark, shape: Shape, bias: bool, activation: str, contigu
     batch, M, N, K = dataclasses.astuple(shape)
 
     # order of dimensions is wrong so we force contiguous call
+
     a = torch.randn((batch, K, M), device='cuda', dtype=torch.float16, requires_grad=False)
     a = a.mT
     if contiguous:
