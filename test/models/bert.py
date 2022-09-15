@@ -9,7 +9,6 @@ from transformers import AutoModel
 from implementations.cuda_graph import cuda_graphs_wrapper
 from optimizer.dropout import remove_dropout
 from optimizer.dynamo_backend import dynamo_backend_ofi
-from test.models.onnx_utils import get_model_onnx, get_model_optim_fp32_onnx, get_model_optim_fp16_onnx
 
 model_name = "bert-base-uncased"
 models_dir = tempfile.TemporaryDirectory().name
@@ -22,14 +21,17 @@ def get_model_baseline(float_16: bool = True):
 
 
 def get_bert_onnx():
+    from test.models.onnx_utils import get_model_onnx
     return get_model_onnx(model_name, models_dir)
 
 
 def get_bert_optim_fp32_onnx():
+    from test.models.onnx_utils import get_model_optim_fp32_onnx
     return get_model_optim_fp32_onnx(model_name, models_dir)
 
 
 def get_bert_optim_fp16_onnx():
+    from test.models.onnx_utils import get_model_optim_fp16_onnx
     return get_model_optim_fp16_onnx(model_name, models_dir)
 
 
