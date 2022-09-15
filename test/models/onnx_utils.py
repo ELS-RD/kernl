@@ -51,3 +51,63 @@ def optimize_onnx(model_name: str, model_path: str, float16: bool = False, model
 
     optimized_model.save_model_to_file(os.path.join(model_path, optim_model_name))
     return create_model_for_provider(os.path.join(model_path, optim_model_name))
+
+
+def get_model_onnx(model_name: str, model_path: str):
+    from test.models.ort_utils import inference_onnx_binding
+    from transformers.modeling_outputs import BaseModelOutputWithPooling
+
+    model_onnx = build_onnx(model_name, model_path)
+
+    def run(*args, **kwargs):
+        inputs = {
+            "input_ids": kwargs["input_ids"],
+            "attention_mask": kwargs["attention_mask"],
+            "token_type_ids": kwargs["token_type_ids"]
+        }
+        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=outputs["last_hidden_state"],
+            pooler_output=outputs["1607"]
+        )
+    return run
+
+
+def get_model_optim_fp32_onnx(model_name: str, model_path: str):
+    from test.models.ort_utils import inference_onnx_binding
+    from transformers.modeling_outputs import BaseModelOutputWithPooling
+
+    model_onnx = optimize_onnx(model_name, model_path)
+
+    def run(*args, **kwargs):
+        inputs = {
+            "input_ids": kwargs["input_ids"],
+            "attention_mask": kwargs["attention_mask"],
+            "token_type_ids": kwargs["token_type_ids"]
+        }
+        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=outputs["last_hidden_state"],
+            pooler_output=outputs["1607"]
+        )
+    return run
+
+
+def get_model_optim_fp16_onnx(model_name: str, model_path: str):
+    from test.models.ort_utils import inference_onnx_binding
+    from transformers.modeling_outputs import BaseModelOutputWithPooling
+
+    model_onnx = optimize_onnx(model_name, model_path, True)
+
+    def run(*args, **kwargs):
+        inputs = {
+            "input_ids": kwargs["input_ids"],
+            "attention_mask": kwargs["attention_mask"],
+            "token_type_ids": kwargs["token_type_ids"]
+        }
+        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=outputs["last_hidden_state"],
+            pooler_output=outputs["1607"]
+        )
+    return run

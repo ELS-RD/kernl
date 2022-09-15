@@ -10,9 +10,7 @@ from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dyn
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
     get_model_optimized, get_model_optimized_causal_cuda_graphs, get_bert_onnx, get_bert_optim_fp32_onnx, \
     get_bert_optim_fp16_onnx
-from test.models.modeling_utils import get_input_non_causal, get_input_causal
-
-logging.basicConfig(level=logging.WARNING)
+from test.models.data_utils import get_input_non_causal, get_input_causal
 
 
 @pytest.fixture
@@ -42,7 +40,7 @@ try:
     _ = get_bert_onnx()
     implementations["onnx"] = Implementation(get_bert_onnx, is_causal=False)
 except ImportError as e:
-    error = f"It seems that you are missing some dependencies. \n {str(e)}"
+    error = f"It seems that you are missing some dependencies: onnx won't be included in benchmarks. \n {str(e)}"
     logging.warning(error)
 
 try:
@@ -50,7 +48,7 @@ try:
     _ = get_bert_optim_fp32_onnx()
     implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=False)
 except ImportError as e:
-    error = f"It seems that you are missing some dependencies. \n {str(e)}"
+    error = f"It seems that you are missing some dependencies: onnx_optim_fp32 won't be included in benchmarks. \n {str(e)}"
     logging.warning(error)
 
 try:
@@ -58,7 +56,7 @@ try:
     _ = get_bert_optim_fp16_onnx()
     implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=False)
 except ImportError as e:
-    error = f"It seems that you are missing some dependencies. \n {str(e)}"
+    error = f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
     logging.warning(error)
 
 
