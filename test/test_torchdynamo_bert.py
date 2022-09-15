@@ -1,6 +1,6 @@
 import dataclasses
 import logging
-from typing import Callable
+from typing import Callable, Dict
 
 import pytest
 import torch
@@ -8,7 +8,7 @@ import torchdynamo
 
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
-    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_bert_onnx, get_bert_optim_fp32_onnx,\
+    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_bert_onnx, get_bert_optim_fp32_onnx, \
     get_bert_optim_fp16_onnx
 from test.models.modeling_utils import get_input_non_causal, get_input_causal
 
@@ -26,7 +26,7 @@ class Implementation:
     is_causal: bool
 
 
-implementations: dict[str, Implementation] = {
+implementations: Dict[str, Implementation] = {
     "baseline": Implementation(get_model_baseline, is_causal=False),
     "dynamo": Implementation(get_model_dynamo, is_causal=False),
     "dynamo_nvfuser_ofi": Implementation(get_model_dynamo_nvfuser_ofi, is_causal=False),
@@ -40,7 +40,7 @@ implementations: dict[str, Implementation] = {
 try:
     # check imports and initialize onnx model
     _ = get_bert_onnx()
-    implementations["onnx"] = Implementation(get_bert_onnx, is_causal=True)
+    implementations["onnx"] = Implementation(get_bert_onnx, is_causal=False)
 except ImportError as e:
     error = f"It seems that you are missing some dependencies. \n {str(e)}"
     logging.warning(error)
@@ -48,7 +48,7 @@ except ImportError as e:
 try:
     # check imports and initialize optimized fp32 onnx model
     _ = get_bert_optim_fp32_onnx()
-    implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=True)
+    implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=False)
 except ImportError as e:
     error = f"It seems that you are missing some dependencies. \n {str(e)}"
     logging.warning(error)
@@ -56,7 +56,7 @@ except ImportError as e:
 try:
     # check imports and initialize optimized fp16 onnx model
     _ = get_bert_optim_fp16_onnx()
-    implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=True)
+    implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=False)
 except ImportError as e:
     error = f"It seems that you are missing some dependencies. \n {str(e)}"
     logging.warning(error)
@@ -81,9 +81,12 @@ def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int,
 
     torchdynamo.reset()
 
-    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"], rtol=1e-1,
-                          atol=1e-1)
-    assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
+    assert torch.allclose(
+        input=value["last_hidden_state"].float(), other=expected["last_hidden_state"].type(torch.float32), rtol=1e-1, atol=1e-1
+    )
+    assert torch.allclose(
+        input=value["pooler_output"].float(), other=expected["pooler_output"].type(torch.float32), rtol=1e-1, atol=1e-1
+    )
 
 
 def test_support_shape_change(model_reference_fp32):
