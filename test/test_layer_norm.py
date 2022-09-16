@@ -23,7 +23,7 @@ implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, f
 def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, implementation: str):
     torch.manual_seed(0)
     M = N = shape
-    eps = 1e-6
+    eps = 1e-5
 
     weight = torch.rand((N,), dtype=dtype, device='cuda', requires_grad=False)
     bias = torch.randn_like(weight, dtype=dtype, device='cuda', requires_grad=False)
