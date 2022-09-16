@@ -5,7 +5,62 @@ import triton.language as tl
 from triton import JITFunction
 
 
-# CREDITS: Initially inspired by the Triton tutorial
+# CREDITS: Initially inspired by the Triton tutorial and xformers implementation
+
+
+def pytorch_naive_layernorm(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float):
+    mean = a.mean(dim=-1, keepdim=True)
+    var = a.var(dim=-1, keepdim=True)
+    rstd = 1 / torch.sqrt(var + eps)
+    a_hat = (a - mean) * rstd
+    out = a_hat * weight + bias
+    return out
+
+
+@triton.jit
+def layer_norm_xformers(Y,
+                        X,
+                        W,
+                        B,
+                        M,
+                        V,
+                        x_stride,
+                        y_stride,
+                        N,
+                        eps,
+                        BLOCK_SIZE: tl.constexpr):
+    """
+    LayerNorm forward pass for a single feature.
+    Won't work for very large tensors.
+    based on:
+    https://github.com/facebookresearch/xformers/blob/main/xformers/triton/k_layer_norm.py
+    """
+
+    row = tl.program_id(0)
+    cols = tl.arange(0, BLOCK_SIZE)
+    mask = cols < N
+
+    x_ptrs = X + row * x_stride + cols
+
+    x = tl.load(x_ptrs, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
+    w = tl.load(W + cols, mask=mask, other=1.0)
+    b = tl.load(B + cols, mask=mask, other=0.0)
+
+    # Compute mean and variance
+    mean = tl.sum(x, axis=0) / N
+    x_zm = tl.where(mask, x - mean, 0.0)
+    tl.store(M + row, mean)
+
+    x_var = tl.sum(x_zm * x_zm, axis=0) / N
+    rstd = 1.0 / tl.sqrt(x_var + eps)
+
+    # Normalize
+    y = x_zm * rstd
+    tl.store(V + row, rstd)
+
+    y = y * w + b
+    y_ptrs = Y + row * y_stride + cols
+    tl.store(y_ptrs, y, mask=mask)
 
 
 @triton.jit
@@ -14,8 +69,12 @@ def _layer_norm_fwd_fused_single_pass(
         A,
         Weight,
         Bias,
-        Mean, std,
-        stride, N, eps,
+        Mean,
+        std,
+        stride_row_a,
+        stride_row_out,
+        N,
+        eps,
         BLOCK_SIZE: tl.constexpr,
 ):
     """
@@ -29,7 +88,7 @@ def _layer_norm_fwd_fused_single_pass(
     :param Bias: bias added to the normalized input
     :param Mean: save mean tensor for backward
     :param std: save standard deviation tensor for backward
-    :param stride: stride of the input tensor
+    :param stride_row_a: stride of the input tensor
     :param N: number of elements per row in the input tensor
     :param eps: epsilon value to avoid division by zero
     :param BLOCK_SIZE: number of threads per block
@@ -37,8 +96,8 @@ def _layer_norm_fwd_fused_single_pass(
     """
     # position of elements processed by this program
     _idx = tl.program_id(0)
-    out_ptr = Out + _idx * stride
-    a_ptr = A + _idx * stride
+    a_ptr = A + _idx * stride_row_a
+    out_ptr = Out + _idx * stride_row_out
     # compute mean
     mean = 0.0
     var = 0.0
@@ -48,6 +107,7 @@ def _layer_norm_fwd_fused_single_pass(
         column_offset = start_n_offset + tl.arange(0, BLOCK_SIZE)
         mask = column_offset < N
         # eviction policy below have little impact now because of new implementation. Kept as is.
+        # float32 is used to avoid overflow in the square
         a = tl.load(a_ptr + column_offset, mask=mask, other=0., eviction_policy="evict_last").to(tl.float32)
 
         block_mean = tl.sum(a, axis=0) / nb_block_cols
@@ -88,7 +148,7 @@ def _layer_norm_fwd_fused_multi_pass(
         Weight,
         Bias,
         Mean, Rstd,
-        stride, N, eps,
+        stride, unused_stride, N, eps,
         BLOCK_SIZE: tl.constexpr,
 ):
     # position of elements processed by this program
@@ -129,6 +189,9 @@ def _layer_norm_fwd_fused_multi_pass(
 
 
 def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction = _layer_norm_fwd_fused_single_pass):
+    # catch eps being too small if the tensors are fp16
+    if a.dtype == torch.float16:
+        eps = max(eps, 1.6e-5)
     # allocate output
     out = torch.empty_like(a)
     # reshape input data into 2D tensor
@@ -139,19 +202,22 @@ def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
     std = torch.empty((M,), dtype=torch.float32, device="cuda")
     # Less than 64KB per feature: enqueue fused kernel
     MAX_FUSED_SIZE = 65536 // a.element_size()
-    BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
+    BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.cdiv(N, 256) * 256)
     BLOCK_SIZE = max(BLOCK_SIZE, 128)
-    BLOCK_SIZE = min(BLOCK_SIZE, 4096)
+    if layer_norm_xformers == implementation:
+        assert N <= 4096*2, "LayerNorm: N is too large for xformers implementation"
+    BLOCK_SIZE = min(BLOCK_SIZE, 4096*2)
     # heuristics for number of warps
     num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
-    eps = min(eps, 1e-6)  # >= 1e-5 may decrease Bert accuracy
     implementation[(M,)](
         out,
         a_arg,
         weight,
         bias,
         mean, std,
-        a_arg.stride(0), N, eps,
+        a_arg.stride(0),
+        out.stride(0),
+        N, eps,
         BLOCK_SIZE=BLOCK_SIZE,
         num_warps=num_warps,
     )

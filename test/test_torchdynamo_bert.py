@@ -62,10 +62,8 @@ except ImportError as e:
     warnings.warn(UserWarning(error))
 
 
-@pytest.mark.parametrize("shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
-                                   (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
-                                   (32, 16), (32, 128), (32, 256),
-                                   ], ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("shape", [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 128, 256, 384, 512]
+                                   if bs * seq_l < 10000], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int, int), implementation: str):
     torch.manual_seed(0)
