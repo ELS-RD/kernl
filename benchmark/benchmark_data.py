@@ -30,9 +30,9 @@ class BenchmarkData(object):
         return torch.mean(self.data).item()
 
     @property
-    def percentiles(self) -> Iterable[float]:
-        percentiles = torch.quantile(self.data, torch.tensor([0.5, 0.2, 0.8])).tolist()
-        return tuple(percentiles)
+    def quartiles(self) -> Iterable[float]:
+        quartiles = torch.quantile(self.data, torch.tensor([0.25, 0.5, 0.75])).tolist()
+        return tuple(quartiles)
 
     @property
     def stddev(self) -> float:
@@ -62,3 +62,18 @@ class BenchmarkData(object):
     @property
     def ops(self) -> float:
         return self.rounds / self.total if self.total > 0. else 0.
+
+    def to_dict(self):
+        return {
+            'median': self.median,
+            'ops': self.ops,
+            'q1': self.quartiles[0],
+            'q3': self.quartiles[2],
+            'rounds': self.rounds,
+            'stddev_outliers': self.stddev_outliers,
+            'stddev': self.stddev,
+            'mean': self.mean,
+            'max': self.max,
+            'min': self.min,
+            'total': self.total,
+        }
