@@ -16,7 +16,7 @@ def tanh(x):
 
 @triton.jit
 def relu(x):
-    """Tanh activation function"""
+    """Relu activation function"""
     return tl.maximum(0, x)
 
 
