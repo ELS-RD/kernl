@@ -35,6 +35,11 @@ def get_bert_optim_fp16_onnx():
     return get_model_optim_fp16_onnx(model_name, models_dir)
 
 
+def get_bert_tensorrt():
+    from test.models.trt_utils import get_trt_model
+    return get_trt_model(model_name, models_dir)
+
+
 def get_model_dynamo_dropout_removed():
     base = get_model_baseline()
 

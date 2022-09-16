@@ -61,6 +61,15 @@ except ImportError as e:
     error = f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
     warnings.warn(UserWarning(error))
 
+try:
+    # check imports and initialize tensorrt model
+    from test.models.bert import get_bert_tensorrt
+    _ = get_bert_tensorrt()
+    implementations["tensorrt"] = Implementation(get_bert_tensorrt, is_causal=False)
+except ImportError as e:
+    error = f"It seems that you are missing some dependencies: tensorrt won't be included in benchmarks. \n {str(e)}"
+    warnings.warn(UserWarning(error))
+
 
 @pytest.mark.parametrize("shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),
                                    (8, 16), (8, 128), (8, 256), (8, 384), (8, 512),
