@@ -25,7 +25,6 @@ def layer_norm_xformers(Y,
                         M,
                         V,
                         x_stride,
-                        y_stride,
                         N,
                         eps,
                         BLOCK_SIZE: tl.constexpr):
@@ -59,7 +58,7 @@ def layer_norm_xformers(Y,
     tl.store(V + row, rstd)
 
     y = y * w + b
-    y_ptrs = Y + row * y_stride + cols
+    y_ptrs = Y + row * x_stride + cols
     tl.store(y_ptrs, y, mask=mask)
 
 
@@ -72,7 +71,6 @@ def _layer_norm_fwd_fused_single_pass(
         Mean,
         std,
         stride_row_a,
-        stride_row_out,
         N,
         eps,
         BLOCK_SIZE: tl.constexpr,
@@ -97,7 +95,7 @@ def _layer_norm_fwd_fused_single_pass(
     # position of elements processed by this program
     _idx = tl.program_id(0)
     a_ptr = A + _idx * stride_row_a
-    out_ptr = Out + _idx * stride_row_out
+    out_ptr = Out + _idx * stride_row_a
     # compute mean
     mean = 0.0
     var = 0.0
@@ -148,7 +146,7 @@ def _layer_norm_fwd_fused_multi_pass(
         Weight,
         Bias,
         Mean, Rstd,
-        stride, unused_stride, N, eps,
+        stride, N, eps,
         BLOCK_SIZE: tl.constexpr,
 ):
     # position of elements processed by this program
@@ -202,7 +200,7 @@ def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
     std = torch.empty((M,), dtype=torch.float32, device="cuda")
     # Less than 64KB per feature: enqueue fused kernel
     MAX_FUSED_SIZE = 65536 // a.element_size()
-    BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.cdiv(N, 256) * 256)
+    BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
     BLOCK_SIZE = max(BLOCK_SIZE, 128)
     if layer_norm_xformers == implementation:
         assert N <= 4096*2, "LayerNorm: N is too large for xformers implementation"
@@ -216,7 +214,6 @@ def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
         bias,
         mean, std,
         a_arg.stride(0),
-        out.stride(0),
         N, eps,
         BLOCK_SIZE=BLOCK_SIZE,
         num_warps=num_warps,
