@@ -32,8 +32,8 @@ def test_benchmark_masked(benchmark, batch, implementation):
     if implementation == "torch":
         value = benchmark(masked_attention_reference, q_half, k_half, v_half, sm_scale)
 
-    diff_reference = torch.abs(expected-expected_fp16.to(torch.float32)).max()
-    diff_tested = torch.abs(expected-value.to(torch.float32)).max()
+    diff_reference = torch.abs(expected - expected_fp16.to(torch.float32)).max()
+    diff_tested = torch.abs(expected - value.to(torch.float32)).max()
     assert diff_reference >= diff_tested, f"{diff_reference=}, {diff_tested=}"
 
 
@@ -60,17 +60,19 @@ def test_benchmark(benchmark, batch, implementation):
 
     assert torch.allclose(value, expected, atol=1e-2)
 
+
 def generate_rand_mask(batch, seq_length, dtype):
     attention_mask = torch.randint(0, 2, size=(batch, seq_length), device="cuda").to(dtype)
     attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
     attention_mask = (1.0 - attention_mask) * torch.finfo(dtype).min
     return attention_mask
 
-@pytest.mark.parametrize("has_mask", [False, True], ids=lambda x: f"seq_length={x}")
+
+@pytest.mark.parametrize("has_mask", [False, True], ids=["no-mask", "mask"])
 @pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512], ids=lambda x: f"seq_length={x}")
 @pytest.mark.parametrize("batch", [1, 8, 16, 32, 64], ids=lambda x: f"batch={x}")
 def test_optimized(has_mask, batch, seq_length):
-    torch.manual_seed(2)
+    torch.manual_seed(0)
     # batch, heads, seqlength, dhead
     mask = generate_rand_mask(batch, seq_length, dtype=torch.float32) if has_mask else None
     q = torch.rand((batch, 48, seq_length, 64), dtype=torch.float32, device="cuda")
@@ -87,6 +89,7 @@ def test_optimized(has_mask, batch, seq_length):
     output_half = torch.empty_like(q_half)
     attention_forward(q_half, k_half, v_half, output_half, sm_scale, mask=mask_half)
     assert torch.allclose(output_half.to(torch.float32), expected_fp32.to(torch.float32), atol=1e-2)
+
 
 def test_mixed_stride():
     torch.manual_seed(0)

@@ -204,6 +204,7 @@ def attention_reference(q, k, v, sm_scale, attention_mask=None):
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
 
     if attention_mask is not None:
+        # for broadcasting
         attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
         p += attention_mask
     p = torch.nn.functional.softmax(p, dim=-1)
