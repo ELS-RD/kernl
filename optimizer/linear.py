@@ -9,7 +9,7 @@ torch.fx.wrap('linear_wrapper')
 
 
 def linear_wrapper(v, linear, activation=None):
-    return linear_layer(v, linear.weight.data, linear.bias.data if linear.bias else None,
+    return linear_layer(v, linear.weight.data, linear.bias.data if linear.bias is not None else None,
                         activation=activation)
 
 
