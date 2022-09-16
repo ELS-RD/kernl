@@ -126,6 +126,7 @@ def _fwd_kernel(
         if IS_CAUSAL:
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
+        # Todo: Try to extract outside of this loop to see if perf improvement
         if mask is not None:
             offs_mask = current_batch_idx * mask_batch_stride + n_row_offset + tl.arange(0, BLOCK_N)
             mask_ptrs = mask + offs_mask[None, :]

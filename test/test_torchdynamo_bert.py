@@ -31,11 +31,13 @@ def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
         "attention_mask": mask,
     }
 
+def get_attention_mask(shape: (int, int)) -> torch.Tensor:
+    return torch.randint(1, shape[1], (shape[0],), device="cuda")[:, None] > torch.arange(0, shape[1], device="cuda")[None, :]
 
 def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
     return {
         "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
-        "attention_mask": torch.randint(0, 2, size=shape, dtype=torch.int32, device="cuda"),
+        "attention_mask": get_attention_mask(shape)
     }
 
 
