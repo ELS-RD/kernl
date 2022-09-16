@@ -82,10 +82,10 @@ def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int,
     torchdynamo.reset()
 
     assert torch.allclose(
-        input=value["last_hidden_state"].float(), other=expected["last_hidden_state"].type(torch.float32), rtol=1e-1, atol=1e-1
+        input=value["last_hidden_state"].float(), other=expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1
     )
     assert torch.allclose(
-        input=value["pooler_output"].float(), other=expected["pooler_output"].type(torch.float32), rtol=1e-1, atol=1e-1
+        input=value["pooler_output"].float(), other=expected["pooler_output"].float(), rtol=1e-1, atol=1e-1
     )
 
 
