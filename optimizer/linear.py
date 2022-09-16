@@ -5,12 +5,13 @@ import torch
 from implementations.linear_layer import linear_layer
 from utils.extended_matcher import replace_pattern
 
-torch.fx.wrap('linear_wrapper')
 
-
-def linear_wrapper(v, linear, activation=None):
+def linear_wrapper(v, linear, activation=""):
     return linear_layer(v, linear.weight.data, linear.bias.data if linear.bias is not None else None,
                         activation=activation)
+
+
+torch.fx.wrap('linear_wrapper')
 
 
 def replace_linear_activation(gm: torch.fx.GraphModule, activation_module: Callable, activation: str):
@@ -60,6 +61,6 @@ def replace_linear(gm: torch.fx.GraphModule):
 
 def replace_all_linear(gm: torch.fx.GraphModule):
     replace_linear_activation(gm, torch.nn.Tanh(), "tanh")
-    replace_linear_activation(gm, torch.nn.ReLU(), "relu")
+    # replace_linear_activation(gm, torch.nn.ReLU(), "relu")
     replace_linear_activation(gm, torch.nn.functional.gelu, "gelu")
     replace_linear(gm)
