@@ -5,9 +5,24 @@ from implementations.attention_original import attention_forward_original
 from implementations.attention import attention_forward
 
 
-@pytest.mark.parametrize("batch", [1, 8, 32])
-@pytest.mark.parametrize("implementation", ["torch", "triton", "triton_original"])
-def test_benchmark_masked(benchmark, batch, implementation):
+def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
+    if is_causal:
+        return masked_attention_forward_original(*args, **kwargs)
+    else:
+        return attention_forward_original(*args, **kwargs)
+
+
+implementations = {
+    "original": lambda q, k, v, output, sm_scale, is_causal: original_triton_flash_attention(is_causal, q, k, v, output, sm_scale),
+    "triton": lambda q, k, v, output, sm_scale, is_causal: attention_forward(q, k, v, output, sm_scale, is_causal),
+    "torch": lambda q, k, v, output, sm_scale, is_causal: attention_reference(q, k, v, output, sm_scale, is_causal),
+}
+
+
+@pytest.mark.parametrize("batch", [1, 8, 32, 64])
+@pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
+@pytest.mark.parametrize("implementation", implementations.keys())
+def test_benchmark_masked(benchmark, batch: int, implementation, is_causal: bool):
     torch.manual_seed(0)
     # batch, heads, seqlength, dhead
     q = torch.rand((batch, 48, 512, 64), device="cuda") * 2
@@ -21,45 +36,13 @@ def test_benchmark_masked(benchmark, batch, implementation):
     # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
     sm_scale = 0.3
 
-    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=True)
+    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=is_causal)
     output = torch.empty_like(q_half)
-    expected_fp16 = attention_reference(q=q_half, k=k_half, v=v_half, output=output, sm_scale=sm_scale, is_causal=True)
-    output.zero_()
-    value = None
-    if implementation == "triton_original":
-        value = benchmark(masked_attention_forward_original, q_half, k_half, v_half, output, sm_scale)
-    if implementation == "triton":
-        value = benchmark(attention_forward, q_half, k_half, v_half, output, sm_scale, is_causal=True)
-    if implementation == "torch":
-        value = benchmark(attention_reference, q_half, k_half, v_half, output, sm_scale, is_causal=True)
 
-    diff_reference = torch.abs(expected-expected_fp16.float()).max()
-    diff_tested = torch.abs(expected-value.float()).max()
-    assert diff_reference >= diff_tested, f"{diff_reference=}, {diff_tested=}"
+    func = implementations[implementation]
+    value = benchmark(func, q_half, k_half, v_half, output, sm_scale, is_causal)
 
-
-@pytest.mark.parametrize("batch", [1, 8, 32, 64])
-@pytest.mark.parametrize("implementation", ["torch", "triton_original", "triton"])
-def test_benchmark(benchmark, batch, implementation):
-    torch.manual_seed(0)
-    # batch, heads, seqlength, dhead
-    q = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    v = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
-    sm_scale = 0.3
-
-    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False)
-    value = None
-    output = torch.empty_like(q)
-    if implementation == "triton_original":
-        value = benchmark(attention_forward_original, q, k, v, output, sm_scale)
-    if implementation == "triton":
-        value = benchmark(attention_forward, q, k, v, output, sm_scale)
-    if implementation == "torch":
-        value = benchmark(attention_reference, q, k, v, output, sm_scale, False)
-
-    assert torch.allclose(value, expected, atol=1e-2)
+    assert torch.allclose(value.float(), expected, atol=1e-1)
 
 
 @pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512], ids=lambda x: f"seq_length={x}")
