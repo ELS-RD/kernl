@@ -159,7 +159,7 @@ def _fwd_kernel(
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
-        v = tl.load(v_ptrs + n_row_offset * v_k_stride)
+        v = tl.load(v_ptrs + n_row_offset * v_k_stride).to(tl.float16)
         qk_softmax = qk_softmax.to(tl.float16)
         acc += tl.dot(qk_softmax, v)
 
