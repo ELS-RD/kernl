@@ -33,26 +33,21 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
 
     torch.manual_seed(0)
     # batch, heads, seq_length, dhead
-    args_ref = {
-        "q": torch.rand((batch, 48, seq_length, 64), device="cuda") * 2,
-        "k": torch.rand((batch, 48, seq_length, 64), device="cuda") * 2,
-        "v": torch.rand((batch, 48, seq_length, 64), device="cuda") * 2,
-        "output": torch.empty((batch, 48, 512, 64), device="cuda"),
+    mat_shape = (batch, 48, seq_length, 64)
+    args = {
+        "q": torch.rand(mat_shape, device="cuda") * 2,
+        "k": torch.rand(mat_shape, device="cuda") * 2,
+        "v": torch.rand(mat_shape, device="cuda") * 2,
+        "output": torch.empty(mat_shape, device="cuda"),
         "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
         "is_causal": is_causal,
     }
 
-    expected = attention_reference(**args_ref)
-
-    args_benchmark = dict()
-    for k, v in args_ref.items():
-        if isinstance(v, torch.Tensor):
-            args_benchmark[k] = v.to(dtype=dtype)
-        else:
-            args_benchmark[k] = v
+    expected = attention_reference(**args)
+    args = {k: v.to(dtype).clone() if isinstance(v, torch.Tensor) else v for k, v in args.items()}
 
     func = implementations[implementation]
-    value = benchmark(func, **args_benchmark)
+    value = benchmark(func, **args)
 
     assert torch.allclose(value.float(), expected, atol=1e-1)
 
