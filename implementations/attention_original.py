@@ -85,14 +85,6 @@ def _fwd_kernel_original(
     tl.store(out_ptrs, acc)
 
 
-def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float):
-    # reference implementation
-    p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
-    p = torch.softmax(p.float(), dim=-1).half()
-    ref_out = torch.matmul(p, v, out=output)
-    return ref_out
-
-
 def attention_forward_original(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float):
     BLOCK = 128
     # shape constraints

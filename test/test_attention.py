@@ -1,7 +1,7 @@
 import torch
 import pytest
-from implementations.attention_masked_original import masked_attention_reference, masked_attention_forward_original
-from implementations.attention_original import attention_reference, attention_forward_original
+from implementations.attention_masked_original import attention_reference, masked_attention_forward_original
+from implementations.attention_original import attention_forward_original
 from implementations.attention import attention_forward
 
 
@@ -21,16 +21,17 @@ def test_benchmark_masked(benchmark, batch, implementation):
     # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
     sm_scale = 0.3
 
-    expected = masked_attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale)
+    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=True)
     output = torch.empty_like(q_half)
-    expected_fp16 = masked_attention_reference(q=q_half, k=k_half, v=v_half, output=output, sm_scale=sm_scale)
+    expected_fp16 = attention_reference(q=q_half, k=k_half, v=v_half, output=output, sm_scale=sm_scale, is_causal=True)
+    output.zero_()
     value = None
     if implementation == "triton_original":
         value = benchmark(masked_attention_forward_original, q_half, k_half, v_half, output, sm_scale)
     if implementation == "triton":
         value = benchmark(attention_forward, q_half, k_half, v_half, output, sm_scale, is_causal=True)
     if implementation == "torch":
-        value = benchmark(masked_attention_reference, q_half, k_half, v_half, output, sm_scale)
+        value = benchmark(attention_reference, q_half, k_half, v_half, output, sm_scale, is_causal=True)
 
     diff_reference = torch.abs(expected-expected_fp16.float()).max()
     diff_tested = torch.abs(expected-value.float()).max()
@@ -48,7 +49,7 @@ def test_benchmark(benchmark, batch, implementation):
     # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
     sm_scale = 0.3
 
-    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q),sm_scale=sm_scale)
+    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False)
     value = None
     output = torch.empty_like(q)
     if implementation == "triton_original":
@@ -56,7 +57,7 @@ def test_benchmark(benchmark, batch, implementation):
     if implementation == "triton":
         value = benchmark(attention_forward, q, k, v, output, sm_scale)
     if implementation == "torch":
-        value = benchmark(attention_reference, q, k, v, output, sm_scale)
+        value = benchmark(attention_reference, q, k, v, output, sm_scale, False)
 
     assert torch.allclose(value, expected, atol=1e-2)
 
@@ -72,7 +73,7 @@ def test_optimized(batch, seq_length):
     sm_scale = 0.3
 
     output = torch.empty_like(q)
-    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale)
+    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False)
     attention_forward(q, k, v, output, sm_scale)
     assert torch.allclose(output, expected, atol=1e-2)
 
@@ -86,7 +87,7 @@ def test_mixed_stride():
     v = torch.rand_like(q)
     sm_scale = 0.3
 
-    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale)
+    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False)
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale)
     assert torch.allclose(output, expected, atol=1e-2)

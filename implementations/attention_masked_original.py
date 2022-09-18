@@ -88,11 +88,12 @@ def _fwd_kernel_original(
 
 
 # Similar to https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py#L213
-def masked_attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float):
+def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool):
     seq_length = q.size(2)
-    M = torch.tril(torch.ones((seq_length, seq_length), device="cuda"))
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
-    p = torch.where(M == 0, float("-inf"), p)
+    if is_causal:
+        M = torch.tril(torch.ones((seq_length, seq_length), device="cuda"))
+        p = torch.where(M == 0, float("-inf"), p)
     p = torch.softmax(p.float(), dim=-1).to(q.dtype)
     ref_out = torch.matmul(p, v, out=output)
     return ref_out
