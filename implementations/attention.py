@@ -178,7 +178,7 @@ def _fwd_kernel(
     tl.store(out_ptrs, acc)
 
 
-def attention_forward(q, k, v, output, sm_scale, is_causal=False):
+def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal=False):
     """
     Computes attention
 
