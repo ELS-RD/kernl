@@ -21,7 +21,7 @@ class Shape:
 
 @pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
 @pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
-@pytest.mark.parametrize("activation", ["", "tanh", "gelu"], ids=["no_activation", "tanh", "gelu"])
+@pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
 @pytest.mark.parametrize("shape", [Shape(bs=1, M=8, N=8, K=8),
                                    Shape(bs=1, M=8, N=768, K=768),
                                    Shape(bs=1, M=16, N=768, K=768),
@@ -54,6 +54,8 @@ def test_benchmark(benchmark, shape: Shape, bias: bool, activation: str, contigu
         activation_fn = torch.nn.functional.gelu
     elif activation == "tanh":
         activation_fn = torch.tanh
+    elif activation == "relu":
+        activation_fn = torch.relu
     elif activation == "":
         activation_fn = lambda x: x
     else:
