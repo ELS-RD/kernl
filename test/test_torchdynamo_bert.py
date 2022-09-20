@@ -23,24 +23,6 @@ class Implementation:
     is_causal: bool
 
 
-def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
-    batch, seq_length = shape
-    mask = torch.tril(torch.ones((batch, seq_length, seq_length), device="cuda"))
-    return {
-        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
-        "attention_mask": mask,
-    }
-
-def get_attention_mask(shape: (int, int)) -> torch.Tensor:
-    return torch.randint(1, shape[1], (shape[0],), device="cuda")[:, None] > torch.arange(0, shape[1], device="cuda")[None, :]
-
-def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
-    return {
-        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int32, device="cuda"),
-        "attention_mask": get_attention_mask(shape)
-    }
-
-
 implementations: dict[str, Implementation] = {
     "baseline": Implementation(get_model_baseline, is_causal=False),
     "dynamo": Implementation(get_model_dynamo, is_causal=False),
