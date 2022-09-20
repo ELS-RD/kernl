@@ -14,6 +14,11 @@ def tanh(x):
     """Tanh activation function"""
     return tl.libdevice.tanh(x)
 
+@triton.jit
+def relu(x):
+    """Relu activation function"""
+    return tl.maximum(0, x)
+
 
 @triton.jit
 def fast_gelu(x):
