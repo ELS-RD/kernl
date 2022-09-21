@@ -68,20 +68,25 @@ def generate_rand_mask(batch, seq_length, dtype):
     return attention_mask
 
 
-@pytest.mark.parametrize("has_mask", [False, True], ids=["no-mask", "mask"])
+@pytest.mark.parametrize("mask_type", ["no-mask", "bias-mask", "broadcast-mask"])
 @pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512], ids=lambda x: f"seq_length={x}")
 @pytest.mark.parametrize("batch", [1, 8, 16, 32, 64], ids=lambda x: f"batch={x}")
-def test_optimized(has_mask, batch, seq_length):
+def test_optimized(mask_type, batch, seq_length):
     torch.manual_seed(0)
+    mask = None
+    if mask_type == "bias-mask":
+        mask = torch.rand((batch, 48, seq_length, seq_length), dtype=torch.float32, device="cuda")
+    if mask_type == "broadcast-mask":
+        mask = generate_rand_mask(batch, seq_length, dtype=torch.float32)
+
     # batch, heads, seqlength, dhead
-    mask = generate_rand_mask(batch, seq_length, dtype=torch.float32) if has_mask else None
     q = torch.rand((batch, 48, seq_length, 64), dtype=torch.float32, device="cuda")
     k = torch.rand((batch, 48, seq_length, 64), dtype=torch.float32, device="cuda")
     v = torch.rand((batch, 48, seq_length, 64), dtype=torch.float32, device="cuda")
     sm_scale = 0.3
     expected_fp32 = attention_reference(q, k, v, sm_scale, attention_mask=mask)
 
-    mask_half = mask.half() if has_mask else None
+    mask_half = mask.half() if mask is not None else None
     q_half = q.half()
     k_half = k.half()
     v_half = v.half()

@@ -14,13 +14,14 @@ def _fwd_kernel(
         V,
         sm_scale,
         mask,
-        mask_batch_stride,
         TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
         output,
         q_batch_stride, q_head_stride, q_m_stride, q_k_stride,
-        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,
+        k_batch_stride, k_head_stride, k_n_stride, k_k_stride, # n et k inversé ici (naming only) ???????????????????????????????????
         v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
         o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
+        mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
+        IS_MASK_BROADCAST: tl.constexpr,
         IS_CAUSAL: tl.constexpr,
         BLOCK_M: tl.constexpr,
         BLOCK_DHEAD: tl.constexpr,
@@ -128,10 +129,14 @@ def _fwd_kernel(
 
         # Todo: Try to extract outside of this loop to see if perf improvement
         if mask is not None:
-            offs_mask = current_batch_idx * mask_batch_stride + n_row_offset + tl.arange(0, BLOCK_N)
-            mask_ptrs = mask + offs_mask[None, :]
+            offs_mask = current_batch_idx * mask_batch_stride \
+                        + (offs_n[None, :] + n_row_offset) * mask_k_stride
+            if not IS_MASK_BROADCAST:
+                offs_mask += offs_m[:, None] * mask_m_stride \
+                             + current_head_idx * mask_head_stride
+            mask_ptrs = mask + offs_mask
             m = tl.load(mask_ptrs)
-            qk += m # We could use -inf, but to respect the passed param, we apply it
+            qk += m
 
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions
@@ -196,17 +201,13 @@ def attention_reference(q, k, v, sm_scale, attention_mask=None):
     @param k: Key matrix size (batch, heads, seq_length, BLOCK_DHEAD)
     @param v: Value matrix size (batch, heads, seq_length, BLOCK_DHEAD)
     @param sm_scale: Scaling factor applied after operation QxK
-    @param attention_mask: Size (batch, 1, 1, seq_length) or (batch, seq_length). Warning the mask isn't a binary mask
+    @param attention_mask: Size (batch, 1, 1, seq_length) or (batch, heads, seq_length, seq_length). Warning the mask isn't a binary mask
     like the one you use normally. This mask is directly added to QxK.
     @return:
     """
-    batch = q.size(0)
-    seq_length = q.size(2)
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
 
     if attention_mask is not None:
-        # for broadcasting
-        attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
         p += attention_mask
     p = torch.nn.functional.softmax(p, dim=-1)
     ref_out = torch.matmul(p, v)
@@ -239,8 +240,7 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False, mask=None):
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
     if mask is not None:
-        assert mask.is_contiguous()
-        mask = mask.view(batch, seq_length)
+        assert mask.size() == (batch, heads, seq_length, seq_length) or mask.size(1) == 1 and mask.size(2) == 1
 
     _fwd_kernel[grid](
         heads,
@@ -250,13 +250,17 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False, mask=None):
         v,
         sm_scale,
         mask,
-        mask.stride(0) if mask is not None else 0,
         tmp,
         output,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         v.stride(0), v.stride(1), v.stride(2), v.stride(3),
         output.stride(0), output.stride(1), output.stride(2), output.stride(3),
+        mask.stride(0) if mask is not None else 0,
+        mask.stride(1) if mask is not None else 0,
+        mask.stride(2) if mask is not None else 0,
+        mask.stride(3) if mask is not None else 0,
+        IS_MASK_BROADCAST=mask.size() != (batch, heads, seq_length, seq_length) if mask is not None else False,
         IS_CAUSAL=is_causal,
         BLOCK_M=BLOCK_M,
         BLOCK_N=BLOCK_N,
