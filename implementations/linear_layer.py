@@ -171,6 +171,8 @@ def kernel_fma(
         acc = activation_func.gelu(acc)
     if ACTIVATION == "fast_gelu":
         acc = activation_func.fast_gelu(acc)
+    if ACTIVATION == "relu":
+        acc = activation_func.relu(acc)
     # rematerialize rm and rn to save registers
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
