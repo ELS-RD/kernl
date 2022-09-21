@@ -63,9 +63,9 @@ except ImportError as e:
 
 try:
     # check imports and initialize tensorrt model
-    from test.models.bert import get_bert_tensorrt
-    _ = get_bert_tensorrt()
-    implementations["tensorrt"] = Implementation(get_bert_tensorrt, is_causal=False)
+    from test.models.bert import get_bert_fp16_tensorrt
+    _ = get_bert_fp16_tensorrt()
+    implementations["tensorrt"] = Implementation(get_bert_fp16_tensorrt, is_causal=False)
 except ImportError as e:
     error = f"It seems that you are missing some dependencies: tensorrt won't be included in benchmarks. \n {str(e)}"
     warnings.warn(UserWarning(error))

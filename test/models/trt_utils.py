@@ -1,5 +1,4 @@
 import dataclasses
-import logging
 import os.path
 from dataclasses import dataclass
 from time import time
@@ -9,6 +8,8 @@ import tensorrt as trt
 import torch
 from tensorrt import ICudaEngine, IExecutionContext, ILayer, INetworkDefinition, Logger, Runtime
 from tensorrt.tensorrt import Builder, IBuilderConfig, IElementWiseLayer, IOptimizationProfile, IReduceLayer, OnnxParser
+
+trt_version = [int(n) for n in trt.__version__.split('.')]
 
 
 @dataclass
@@ -64,8 +65,7 @@ def build_engine(
     runtime: Runtime,
     onnx_file_path: str,
     logger: Logger,
-    fp16: bool,
-    int8: bool,
+    fp16_layer_selection: bool,
     workspace_size: Optional[int] = None,
     fp16_fix: Callable[[INetworkDefinition], INetworkDefinition] = fix_fp16_network,
     **kwargs,
@@ -91,15 +91,15 @@ def build_engine(
     config: IBuilderConfig = builder.create_builder_config()
     if workspace_size is not None:
         config.set_memory_pool_limit(trt.tensorrt.MemoryPoolType.DLA_GLOBAL_DRAM, workspace_size)
-    config.set_tactic_sources(
-        tactic_sources=1 << int(trt.TacticSource.CUBLAS)
-        | 1 << int(trt.TacticSource.CUBLAS_LT)
-        | 1 << int(trt.TacticSource.CUDNN)  # trt advised to use cuDNN for transfo architecture
-    )
-    if int8:
-        config.set_flag(trt.BuilderFlag.INT8)
-    if fp16:
+    # tactic_sources example from TensorRT Bert demo:
+    # https://github.com/NVIDIA/TensorRT/blob/e5f9ead4a4826cc774325720a26dbf4ec47203ea/demo/BERT/builder.py#L428
+    if trt_version[0] >= 8:
+        tactic_source = config.get_tactic_sources() & ~(1 << int(trt.TacticSource.CUDNN))
+        config.set_tactic_sources(tactic_source)
+    if fp16_layer_selection:
         config.set_flag(trt.BuilderFlag.FP16)
+    # The cache is incompatible with algorithm selection:
+    # https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#builder-layer-timing
     config.set_flag(trt.BuilderFlag.DISABLE_TIMING_CACHE)
     # https://github.com/NVIDIA/TensorRT/issues/1196 (sometimes big diff in output when using FP16)
     config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
@@ -131,7 +131,7 @@ def build_engine(
                 max=shape.max_shape,
             )
     config.add_optimization_profile(profile)
-    if fp16:
+    if fp16_layer_selection:
         network_def = fp16_fix(network_def)
 
     logger.log(msg="building engine. depending on model size this may take a while", severity=trt.ILogger.WARNING)
@@ -181,7 +181,6 @@ def infer_tensorrt(
         assert tensor.device.type == "cuda", f"unexpected device type (trt only works on CUDA): {tensor.device.type}"
         # warning: small changes in output if int64 is used instead of int32
         if tensor.dtype in [torch.int64, torch.long]:
-            logging.warning(f"using {tensor.dtype} instead of int32 for {tensor_name}, will be casted to int32")
             tensor = tensor.type(torch.int32)
         input_tensors.append(tensor)
     # calculate input shape, bind it, allocate GPU memory for the output
@@ -233,12 +232,18 @@ def get_binding_idxs(engine: trt.ICudaEngine, profile_index: int):
     return input_binding_idxs, output_binding_idxs
 
 
-def build_model_tensorrt(model_name: str, model_dir: str):
+def build_model_tensorrt(
+    model_name: str,
+    model_dir: str,
+    trt_input_shapes: List[TensorRTShape],
+    trt_output_shapes: List[TensorRTShape],
+    fp16_layer_selection: bool = False
+):
     import tensorrt as trt
     from tensorrt.tensorrt import Logger, Runtime, ICudaEngine
     from test.models.onnx_utils import get_model_onnx
 
-    trt_model_name = f"{model_name}.plan"
+    trt_model_name = f"{model_name}_fp16.plan" if fp16_layer_selection else f"{model_name}_fp32.plan"
     trt_model_path = os.path.join(model_dir, trt_model_name)
     trt_logger: Logger = trt.Logger(trt.Logger.ERROR)
     runtime: Runtime = trt.Runtime(trt_logger)
@@ -247,32 +252,15 @@ def build_model_tensorrt(model_name: str, model_dir: str):
         return model_trt
     if not os.path.exists(os.path.join(model_dir, f"{model_name}.onnx")):
         _ = get_model_onnx(model_name, model_dir)
-    input_id_shape = TensorRTShape(
-        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[16, 512], input_name="input_ids"
-    )
-    attention_mask_shape = TensorRTShape(
-        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[16, 512], input_name="attention_mask"
-    )
-    token_type_id_shape = TensorRTShape(
-        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[16, 512], input_name="token_type_ids"
-    )
-    input_shapes = [input_id_shape, attention_mask_shape, token_type_id_shape]
-    output_shape = TensorRTShape(
-        min_shape=[1],
-        optimal_shape=[1],
-        max_shape=[1],
-        input_name="last_hidden_state",
-    )
-    shape_tensors = [output_shape]
+
     engine: ICudaEngine = build_engine(
         runtime=runtime,
         onnx_file_path=os.path.join(model_dir, f"{model_name}.onnx"),
         logger=trt_logger,
         workspace_size=20000 * 1024 ** 2,
-        fp16=False,
-        int8=False,
-        input_shapes=input_shapes,
-        shape_tensors=shape_tensors,
+        fp16_layer_selection=fp16_layer_selection,
+        input_shapes=trt_input_shapes,
+        shape_tensors=trt_output_shapes,
     )
     # save engine:
     with open(trt_model_name, "wb") as f:
@@ -281,10 +269,16 @@ def build_model_tensorrt(model_name: str, model_dir: str):
     return model_trt
 
 
-def get_trt_model(model_name: str, model_dir: str):
+def get_model_tensorrt(
+    model_name: str,
+    model_dir: str,
+    trt_input_shapes: List[TensorRTShape],
+    trt_output_shapes: List[TensorRTShape],
+    fp16_layer_selection: bool = False
+):
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
-    model_trt = build_model_tensorrt(model_name, model_dir)
+    model_trt = build_model_tensorrt(model_name, model_dir, trt_input_shapes, trt_output_shapes, fp16_layer_selection)
 
     def run(*args, **kwargs):
         inputs = {

@@ -35,9 +35,38 @@ def get_bert_optim_fp16_onnx():
     return get_model_optim_fp16_onnx(model_name, models_dir)
 
 
-def get_bert_tensorrt():
-    from test.models.trt_utils import get_trt_model
-    return get_trt_model(model_name, models_dir)
+def get_bert_tensorrt_shapes():
+    from test.models.trt_utils import TensorRTShape
+    input_id_shape = TensorRTShape(
+        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[16, 512], input_name="input_ids"
+    )
+    attention_mask_shape = TensorRTShape(
+        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[16, 512], input_name="attention_mask"
+    )
+    token_type_id_shape = TensorRTShape(
+        min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[16, 512], input_name="token_type_ids"
+    )
+    input_shapes = [input_id_shape, attention_mask_shape, token_type_id_shape]
+    output_shape = TensorRTShape(
+        min_shape=[1],
+        optimal_shape=[1],
+        max_shape=[1],
+        input_name="last_hidden_state",
+    )
+    shape_tensors = [output_shape]
+    return input_shapes, shape_tensors
+
+
+def get_bert_fp32_tensorrt():
+    from test.models.trt_utils import get_model_tensorrt
+    input_shapes, output_shapes = get_bert_tensorrt_shapes()
+    return get_model_tensorrt(model_name, models_dir, input_shapes, output_shapes, fp16_layer_selection=False)
+
+
+def get_bert_fp16_tensorrt():
+    from test.models.trt_utils import get_model_tensorrt
+    input_shapes, output_shapes = get_bert_tensorrt_shapes()
+    return get_model_tensorrt(model_name, models_dir, input_shapes, output_shapes, fp16_layer_selection=True)
 
 
 def get_model_dynamo_dropout_removed():
