@@ -240,7 +240,7 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False, mask=None):
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
     if mask is not None:
-        assert mask.size() == (batch, heads, seq_length, seq_length) or mask.size(1) == 1 and mask.size(2) == 1
+        assert mask.size() == (batch, heads, seq_length, seq_length) or mask.size() == (batch, 1, 1, seq_length)
 
     _fwd_kernel[grid](
         heads,
