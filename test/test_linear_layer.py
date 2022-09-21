@@ -26,13 +26,13 @@ class Shape:
                          [Shape(bs=bs, M=M, N=768, K=768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
                          ids=lambda x: f"{x.bs}x{x.M}x{x.N}x{x.K}")
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
-@pytest.mark.parametrize("implementation", ["triton", "triton_cuda_graphs", "pytorch", "pytorch_cuda_graphs"])
-def test_benchmark(benchmark, shape: Shape, dtype: torch.dtype, bias: bool, activation: str, contiguous: bool, implementation: str):
+@pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
+@pytest.mark.parametrize("implementation", ["triton", "pytorch"])
+def test_benchmark(benchmark, implementation: str, cuda_graphs: bool, shape: Shape, dtype: torch.dtype, bias: bool, activation: str, contiguous: bool):
     torch.manual_seed(0)
     batch, M, N, K = dataclasses.astuple(shape)
 
     # order of dimensions is wrong so we force contiguous call
-
     a = torch.randn((batch, K, M), device='cuda', dtype=dtype, requires_grad=False)
     a = a.mT
     if contiguous:
@@ -62,19 +62,17 @@ def test_benchmark(benchmark, shape: Shape, dtype: torch.dtype, bias: bool, acti
     cuda_graph_pool = torch.cuda.graph_pool_handle()
 
     if implementation == "pytorch":
-        value = benchmark(torch_linear_activation, a)
-    elif implementation == "pytorch_cuda_graphs":
-        run = cuda_graphs_wrapper(model=torch_linear_activation, inputs=[a], pool=cuda_graph_pool)
-        (value,) = benchmark(run, a)
+        fn = torch_linear_activation
     elif implementation == "triton":
-        value = benchmark(linear_layer, a, layer_weight, torch_linear_layer.bias, activation)
-    elif implementation == "triton_cuda_graphs":
-        def wrapper(x):
+        def fn(x):
             return linear_layer(x, layer_weight, torch_linear_layer.bias, activation)
-
-        run = cuda_graphs_wrapper(model=wrapper, inputs=[a], pool=cuda_graph_pool, copy_outputs=False)
-        (value,) = benchmark(run, a)
     else:
         raise ValueError(f"Unknown implementation {implementation}")
+
+    if cuda_graphs:
+        run = cuda_graphs_wrapper(model=fn, inputs=[a], pool=cuda_graph_pool)
+        (value,) = benchmark(run, a)
+    else:
+        value = benchmark(fn, a)
 
     assert torch.allclose(value, expected, rtol=1e-1, atol=1e-1), f"max diff: {torch.abs(value - expected).max()}"
