@@ -189,6 +189,7 @@ def _layer_norm_fwd_fused_multi_pass(
 
 @custom_fwd(cast_inputs=torch.float16)
 def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction = _layer_norm_fwd_fused_single_pass):
+    assert a.dtype == weight.dtype == bias.dtype, "input, weight and bias must have the same dtype"
     # catch eps being too small if the tensors are fp16
     if a.dtype == torch.float16:
         eps = max(eps, 1.6e-5)

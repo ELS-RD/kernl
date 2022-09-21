@@ -47,7 +47,7 @@ def replace_linear(gm: torch.fx.GraphModule):
             self.linear = torch.nn.Linear(1, 1)
 
         def forward(self, v):
-            output, _ = linear_layer(v, self.linear.weight.data, self.linear.bias.data)
+            output = linear_layer(v, self.linear.weight.data, self.linear.bias.data)
             return output
 
     replace_pattern(gm, Pattern(), Replacement())

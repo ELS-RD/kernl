@@ -201,7 +201,9 @@ def linear_layer(
     :return: result tensor
     """
     x_ = x if x.ndim == 2 else x.flatten(0, 1)
-
+    assert x.dtype == weight.dtype, f"Input and weight must have the same dtype, got {x.dtype} and {weight.dtype}"
+    if bias is not None:
+        assert x.dtype == bias.dtype, f"Input and bias must have the same dtype, got {x.dtype} and {bias.dtype}"
     assert x_.shape[1] == weight.shape[1], f"Incompatible dimensions: {x_.shape} - {weight.shape}"
     assert bias is None or bias.is_contiguous()
     assert bias is None or bias.shape[0] == weight.shape[0], "Incompatible dimensions in between weight and bias"
