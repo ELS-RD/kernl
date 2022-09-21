@@ -228,7 +228,7 @@ def linear_layer(
         x_.stride(1),
         weight.stride(0),
         weight.stride(1),
-        ACTIVATION=activation,  # optional fused activation
+        ACTIVATION=activation if not None else x,  # optional fused activation
         BIAS=bias is not None,  # optional fused bias
         GROUP_M=8,  # speed optimization: group the programs
         SAVE_ACT_INPUTS=act_inputs is not None,  # optional save activation inputs
