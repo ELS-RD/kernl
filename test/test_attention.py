@@ -25,7 +25,6 @@ implementations = {
                          ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
 # fp32 not yet possible because of a bug in triton
-# https://github.com/openai/triton/issues/674
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable, dtype: torch.dtype, is_causal: bool):

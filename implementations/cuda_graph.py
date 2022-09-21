@@ -1,10 +1,6 @@
-import logging
 from typing import Callable, Union
 
-import triton
 import torch
-
-from implementations.linear_layer import kernel_fma
 
 
 def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]], copy_outputs: bool = False, pool: (int, int) = torch.cuda.graph_pool_handle()):

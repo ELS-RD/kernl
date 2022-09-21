@@ -8,6 +8,7 @@ from typing import Optional
 import torch
 import triton
 import triton.language as tl
+from torch.cuda.amp import custom_fwd
 
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
@@ -180,17 +181,24 @@ def kernel_fma(
     tl.store(C, acc, mask=mask)
 
 
-# Activation needs to be a triton kernel
+@custom_fwd(cast_inputs=torch.float16)
 def linear_layer(
         x: torch.Tensor,
         weight: torch.Tensor,
         bias: Optional[torch.Tensor],
         activation="",
-        save_act_inputs: bool = False
-):
+        act_inputs: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
     """
     Compute e = activation(x @ weight + bias).
     This wrapper kicks the `kernel_fma` Triton kernel
+
+    :param x: input tensor
+    :param weight: weight matrix
+    :param bias: an optional bias tensor
+    :param activation: Activation name. Needs to be a Triton kernel.
+    :param act_inputs: an optional tensor to save the activation inputs (for backward)
+    :return: result tensor
     """
     x_ = x if x.ndim == 2 else x.flatten(0, 1)
 
@@ -203,7 +211,6 @@ def linear_layer(
     N, K = weight.shape
 
     outputs = torch.empty((M, N), device=x.device, dtype=x.dtype)
-    act_inputs = torch.empty_like(outputs) if save_act_inputs else x  # will not be used in that case
 
     # 1D launch kernel where each block gets its own program.
     grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
@@ -222,9 +229,9 @@ def linear_layer(
         ACTIVATION=activation,  # optional fused activation
         BIAS=bias is not None,  # optional fused bias
         GROUP_M=8,  # speed optimization: group the programs
-        SAVE_ACT_INPUTS=save_act_inputs
+        SAVE_ACT_INPUTS=act_inputs is not None,  # optional save activation inputs
     )
 
     outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
 
-    return outputs, act_inputs if save_act_inputs else None
+    return outputs

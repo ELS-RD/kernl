@@ -2,6 +2,7 @@ import torch
 
 import triton
 import triton.language as tl
+from torch.cuda.amp import custom_fwd
 from triton import JITFunction
 
 
@@ -186,6 +187,7 @@ def _layer_norm_fwd_fused_multi_pass(
         tl.store(Out + cols, out, mask=mask)
 
 
+@custom_fwd(cast_inputs=torch.float16)
 def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction = _layer_norm_fwd_fused_single_pass):
     # catch eps being too small if the tensors are fp16
     if a.dtype == torch.float16:

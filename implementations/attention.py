@@ -1,6 +1,7 @@
 import torch
 import triton
 import triton.language as tl
+from torch.cuda.amp import custom_fwd
 
 
 # CREDITS: Initially inspired by the Triton tutorial
@@ -178,9 +179,12 @@ def _fwd_kernel(
     tl.store(out_ptrs, acc)
 
 
+@custom_fwd(cast_inputs=torch.float16)
 def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool = False):
     """
-    Computes attention
+    Computes attention.
+    FP32 input and output are not supported.
+    https://github.com/openai/triton/issues/674
 
     @param q: Query matrix size (batch, heads, seq_length, dhead)
     @param k: Key matrix size (batch, heads, seq_length, dhead)
@@ -193,10 +197,12 @@ def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output:
     # Constraints
     # Queries and keys have the same d_k size
     assert q.shape[-1] == k.shape[-1]
+    assert q.dtype == k.dtype == v.dtype == output.dtype, f"All tensors must have the same dtype: {q.dtype}, {k.dtype}, {v.dtype}, {output.dtype}"
+    assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
     batch, heads, seq_length, dhead = q.size()
 
     # Todo: Ensure 2^n only ?
-    BLOCK_M = BLOCK_N = min(128, seq_length)  # 64 for fp32, but is buggy so not used
+    BLOCK_M = BLOCK_N = min(128, seq_length)
     assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
 
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
