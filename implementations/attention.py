@@ -109,7 +109,7 @@ def _fwd_kernel(
         n_end = (m_block_idx + 1) * BLOCK_M,
     # loop over k, v and update accumulator
     # n_row_offset is the row offset on dimension N of the current block
-    # It's used for booth the N dimension of K and V because they are handled at the same time
+    # It's used for both the N dimension of K and V because they are handled at the same time
     for n_row_offset in range(0, n_end, BLOCK_N):
         n_row_offset = tl.multiple_of(n_row_offset, BLOCK_N)
         # We load the current block in K in SRAM
@@ -159,8 +159,8 @@ def _fwd_kernel(
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
-        v = tl.load(v_ptrs + n_row_offset * v_k_stride).to(tl.float16)
-        qk_softmax = qk_softmax.to(tl.float16)
+        v = tl.load(v_ptrs + n_row_offset * v_k_stride).to(Q.dtype.element_ty)
+        qk_softmax = qk_softmax.to(Q.dtype.element_ty)
         acc += tl.dot(qk_softmax, v)
 
         # We update the normalizer for the next iteration
@@ -178,7 +178,7 @@ def _fwd_kernel(
     tl.store(out_ptrs, acc)
 
 
-def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal=False):
+def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool = False):
     """
     Computes attention
 
@@ -196,8 +196,7 @@ def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output:
     batch, heads, seq_length, dhead = q.size()
 
     # Todo: Ensure 2^n only ?
-    BLOCK_M = min(128, seq_length)
-    BLOCK_N = min(128, seq_length)
+    BLOCK_M = BLOCK_N = min(128, seq_length)  # 64 for fp32, but is buggy so not used
     assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
 
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)

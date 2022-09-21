@@ -24,20 +24,22 @@ implementations = {
 @pytest.mark.parametrize("shape", [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 64, 128, 256, 384, 512]],
                          ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
+# fp32 not yet possible because of a bug in triton
+# https://github.com/openai/triton/issues/674
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable, dtype: torch.dtype, is_causal: bool):
     batch, seq_length = shape
-    if implementation == "original" and (dtype == torch.float32 or seq_length != 512):
+    if implementation == "original" and (dtype == torch.bfloat16 or seq_length != 512):
         pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
 
     torch.manual_seed(0)
     # batch, heads, seq_length, dhead
     mat_shape = (batch, 48, seq_length, 64)
     args = {
-        "q": torch.rand(mat_shape, device="cuda") * 2,
-        "k": torch.rand(mat_shape, device="cuda") * 2,
-        "v": torch.rand(mat_shape, device="cuda") * 2,
+        "q": torch.rand(mat_shape, device="cuda"),
+        "k": torch.rand(mat_shape, device="cuda"),
+        "v": torch.rand(mat_shape, device="cuda"),
         "output": torch.empty(mat_shape, device="cuda"),
         "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
         "is_causal": is_causal,
