@@ -214,6 +214,8 @@ class SubgraphMatcher:
                     match_candidates[pattern_anchor].append(node)
         match_candidates_list = list(match_candidates.items())
         matches: List[InternalMatch] = []
+        if len(match_candidates_list) == 0:
+            return []
 
         def backtracking(anchor_index, match):
             if anchor_index == len(match_candidates_list):

@@ -61,6 +61,6 @@ def replace_linear(gm: torch.fx.GraphModule):
 
 def replace_all_linear(gm: torch.fx.GraphModule):
     replace_linear_activation(gm, torch.nn.Tanh(), "tanh")
-    # replace_linear_activation(gm, torch.nn.ReLU(), "relu")
+    replace_linear_activation(gm, torch.nn.ReLU(), "relu")
     replace_linear_activation(gm, torch.nn.functional.gelu, "gelu")
     replace_linear(gm)
