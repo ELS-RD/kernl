@@ -4,14 +4,14 @@ import torch
 import pytest
 
 from implementations.cuda_graph import cuda_graphs_wrapper
-from implementations.layer_norm import layer_norm_forward, _layer_norm_fwd_fused_single_pass, \
+from implementations.layer_norm import layer_norm, _layer_norm_fwd_fused_single_pass, \
     _layer_norm_fwd_fused_multi_pass, layer_norm_xformers, pytorch_naive_layernorm
 
 implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, float], torch.Tensor]] = {
     "pytorch": lambda x, weight, bias, eps: torch.nn.functional.layer_norm(x, weight.shape, weight, bias, eps),
-    "triton_original": lambda x, weight, bias, eps: layer_norm_forward(x, weight, bias, eps, _layer_norm_fwd_fused_multi_pass),
-    "triton_improved": lambda x, weight, bias, eps: layer_norm_forward(x, weight, bias, eps, _layer_norm_fwd_fused_single_pass),
-    "triton_xformer": lambda x, weight, bias, eps: layer_norm_forward(x, weight, bias, eps, layer_norm_xformers),
+    "triton_original": lambda x, weight, bias, eps: layer_norm(x, weight, bias, eps, _layer_norm_fwd_fused_multi_pass),
+    "triton_improved": lambda x, weight, bias, eps: layer_norm(x, weight, bias, eps, _layer_norm_fwd_fused_single_pass),
+    "triton_xformer": lambda x, weight, bias, eps: layer_norm(x, weight, bias, eps, layer_norm_xformers),
     "pytorch_naive": lambda x, weight, bias, eps: pytorch_naive_layernorm(x, weight, bias, eps),
 }
 

@@ -2,6 +2,7 @@ import torch
 
 import triton
 import triton.language as tl
+from torch.autograd.function import FunctionCtx
 from torch.cuda.amp import custom_fwd
 from triton import JITFunction
 
@@ -187,38 +188,48 @@ def _layer_norm_fwd_fused_multi_pass(
         tl.store(Out + cols, out, mask=mask)
 
 
-@custom_fwd(cast_inputs=torch.float16)
-def layer_norm_forward(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction = _layer_norm_fwd_fused_single_pass):
-    assert a.dtype == weight.dtype == bias.dtype, "input, weight and bias must have the same dtype"
-    # catch eps being too small if the tensors are fp16
-    if a.dtype == torch.float16:
-        eps = max(eps, 1.6e-5)
-    # allocate output
-    out = torch.empty_like(a)
-    # reshape input data into 2D tensor
-    a_arg = a.reshape(-1, a.shape[-1])
-    M, N = a_arg.shape
-    # tensors below for backward pass
-    mean = torch.empty((M,), dtype=torch.float32, device="cuda")
-    std = torch.empty((M,), dtype=torch.float32, device="cuda")
-    # Less than 64KB per feature: enqueue fused kernel
-    MAX_FUSED_SIZE = 65536 // a.element_size()
-    BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
-    BLOCK_SIZE = max(BLOCK_SIZE, 128)
-    if layer_norm_xformers == implementation:
-        assert N <= 4096*2, "LayerNorm: N is too large for xformers implementation"
-    BLOCK_SIZE = min(BLOCK_SIZE, 4096*2)
-    # heuristics for number of warps
-    num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
-    implementation[(M,)](
-        out,
-        a_arg,
-        weight,
-        bias,
-        mean, std,
-        a_arg.stride(0),
-        N, eps,
-        BLOCK_SIZE=BLOCK_SIZE,
-        num_warps=num_warps,
-    )
-    return out
+class LayerNorm(torch.autograd.Function):
+
+    @staticmethod
+    @custom_fwd(cast_inputs=torch.float16)
+    def forward(ctx: FunctionCtx, x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction):
+        assert x.dtype == weight.dtype == bias.dtype, f"input, weight and bias must have the same dtype: {x.dtype}, {weight.dtype}, {bias.dtype}"
+        # catch eps being too small if the tensors are fp16
+        if x.dtype == torch.float16:
+            eps = max(eps, 1.6e-5)
+        # allocate output
+        out = torch.empty_like(x)
+        # reshape input data into 2D tensor
+        a_arg = x.reshape(-1, x.shape[-1])
+        M, N = a_arg.shape
+        # tensors below for backward pass
+        mean = torch.empty((M,), dtype=torch.float32, device="cuda")
+        std = torch.empty((M,), dtype=torch.float32, device="cuda")
+        # Less than 64KB per feature: enqueue fused kernel
+        MAX_FUSED_SIZE = 65536 // x.element_size()
+        BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
+        BLOCK_SIZE = max(BLOCK_SIZE, 128)
+        if layer_norm_xformers == implementation:
+            assert N <= 4096*2, "LayerNorm: N is too large for xformers implementation"
+        BLOCK_SIZE = min(BLOCK_SIZE, 4096*2)
+        # heuristics for number of warps
+        num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
+        implementation[(M,)](
+            out,
+            a_arg,
+            weight,
+            bias,
+            mean, std,
+            a_arg.stride(0),
+            N, eps,
+            BLOCK_SIZE=BLOCK_SIZE,
+            num_warps=num_warps,
+        )
+        ctx.save_for_backward(x, mean, std, weight)
+        ctx.BLOCK_SIZE = BLOCK_SIZE
+        ctx.num_warps = num_warps
+        return out
+
+
+def layer_norm(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction = _layer_norm_fwd_fused_single_pass):
+    return LayerNorm.apply(x, weight, bias, eps, implementation)
