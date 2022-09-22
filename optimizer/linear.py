@@ -7,7 +7,14 @@ from utils.extended_matcher import replace_pattern
 
 
 def linear_wrapper(v, linear, activation=""):
-    return linear_layer(v, linear.weight, linear.bias if linear.bias is not None else None, activation=activation)
+    if not hasattr(linear, "weight_h"):
+        linear.weight_h = linear.weight.half()
+        linear.weight = None
+    if not hasattr(linear, "bias_h") and linear.bias is not None:
+        linear.bias_h = linear.bias.half()
+        linear.bias = None
+
+    return linear_layer(v, linear.weight_h, linear.bias_h if hasattr(linear, "bias_h") is not None else None, activation=activation)
 
 
 torch.fx.wrap('linear_wrapper')

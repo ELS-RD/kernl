@@ -3,11 +3,12 @@ import torch
 from implementations.attention import attention_forward
 from utils.extended_matcher import replace_pattern
 
-torch.fx.wrap('attention_wrapper')
-
 
 def attention_wrapper(q, k, v, output, sm_scale, is_causal, *args):
     return attention_forward(q, k, v, output, sm_scale, is_causal=is_causal)
+
+
+torch.fx.wrap('attention_wrapper')
 
 
 def fuse_attention(gm: torch.fx.GraphModule, is_causal: bool):
