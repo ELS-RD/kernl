@@ -14,7 +14,7 @@ from test.models.data_utils import get_input_non_causal, get_input_causal
 
 @pytest.fixture
 def model_reference_fp32():
-    return get_model_baseline(float_16=False)
+    return get_model_baseline()
 
 
 @dataclasses.dataclass
@@ -75,13 +75,13 @@ def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int,
     with torch.inference_mode():
         expected = model_reference_fp32(**inputs)
         model = model_tested.model()
-        value = benchmark(model, **inputs)
+        with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
+            value = benchmark(model, **inputs)
 
     torchdynamo.reset()
 
-    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"], rtol=1e-1,
-                          atol=1e-1)
-    assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"], rtol=1e-1, atol=1e-1)
+    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1)
+    assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
 
 
 def test_support_shape_change(model_reference_fp32):
@@ -91,8 +91,10 @@ def test_support_shape_change(model_reference_fp32):
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
             pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
-            expected = model_reference_fp32(**pytorch_input)
-            result = model_tested(**pytorch_input)
+            with torch.inference_mode():
+                expected = model_reference_fp32(**pytorch_input)
+                with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
+                    result = model_tested(**pytorch_input)
             max_diff = torch.max(torch.abs(result["last_hidden_state"].float() - expected["last_hidden_state"]))
             assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"],
-                                  atol=1e-1), f"[{name}] failed with shape {shape}, max diff: {max_diff}"
+                                  atol=1e-1, rtol=1e-1), f"[{name}] failed with shape {shape}, max diff: {max_diff}"
