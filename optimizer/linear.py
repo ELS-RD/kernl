@@ -31,9 +31,7 @@ def replace_linear_activation(gm: torch.fx.GraphModule, activation_module: Calla
             self.activation = activation_module
 
         def forward(self, v):
-            linear = linear_wrapper(v, self.linear, activation=activation)
-            out = linear[0]
-            return out
+            return linear_wrapper(v, self.linear, activation=activation)
 
     replace_pattern(gm, Pattern(), Replacement())
 
@@ -53,8 +51,7 @@ def replace_linear(gm: torch.fx.GraphModule):
             self.linear = torch.nn.Linear(1, 1)
 
         def forward(self, v):
-            output = linear_wrapper(v, self.linear)
-            return output
+            return linear_wrapper(v, self.linear)
 
     replace_pattern(gm, Pattern(), Replacement())
 
