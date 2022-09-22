@@ -1,11 +1,11 @@
 import dataclasses
-import warnings
 from typing import Callable, Dict
 
 import pytest
 import torch
 import torchdynamo
 
+import test
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
     get_model_optimized, get_model_optimized_causal_cuda_graphs
@@ -32,43 +32,11 @@ implementations: Dict[str, Implementation] = {
     "dynamo_optimized": Implementation(get_model_optimized, is_causal=False),
     "dynamo_optimized_cuda_graphs": Implementation(get_model_optimized_cuda_graphs, is_causal=False),
     "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, is_causal=True),
+    "onnx": Implementation(test.models.bert.get_bert_onnx, is_causal=False),
+    "onnx_optim_fp32": Implementation(test.models.bert.get_bert_optim_fp32_onnx, is_causal=False),
+    "onnx_optim_fp16": Implementation(test.models.bert.get_bert_optim_fp16_onnx, is_causal=False),
+    "tensorrt": Implementation(test.models.bert.get_bert_tensorrt, is_causal=False),
 }
-
-try:
-    # check imports and initialize onnx model
-    from test.models.bert import get_bert_onnx
-    _ = get_bert_onnx()
-    implementations["onnx"] = Implementation(get_bert_onnx, is_causal=False)
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: onnx won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
-
-try:
-    # check imports and initialize optimized fp32 onnx model
-    from test.models.bert import get_bert_optim_fp32_onnx
-    _ = get_bert_optim_fp32_onnx()
-    implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=False)
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: onnx_optim_fp32 won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
-
-try:
-    # check imports and initialize optimized fp16 onnx model
-    from test.models.bert import get_bert_optim_fp16_onnx
-    _ = get_bert_optim_fp16_onnx()
-    implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=False)
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
-
-try:
-    # check imports and initialize tensorrt model
-    from test.models.bert import get_bert_fp16_tensorrt
-    _ = get_bert_fp16_tensorrt()
-    implementations["tensorrt"] = Implementation(get_bert_fp16_tensorrt, is_causal=False)
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: tensorrt won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
 
 
 @pytest.mark.parametrize("shape", [(1, 16), (1, 128), (1, 256), (1, 384), (1, 512),

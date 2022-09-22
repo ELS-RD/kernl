@@ -243,7 +243,7 @@ def build_model_tensorrt(
     from tensorrt.tensorrt import Logger, Runtime, ICudaEngine
     from test.models.onnx_utils import get_model_onnx
 
-    trt_model_name = f"{model_name}_fp16.plan" if fp16_layer_selection else f"{model_name}_fp32.plan"
+    trt_model_name = f"{model_name}.plan"
     trt_model_path = os.path.join(model_dir, trt_model_name)
     trt_logger: Logger = trt.Logger(trt.Logger.ERROR)
     runtime: Runtime = trt.Runtime(trt_logger)

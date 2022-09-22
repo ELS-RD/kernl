@@ -6,7 +6,7 @@ import torchdynamo
 from torchdynamo.optimizations import BACKENDS
 from transformers import AutoModel
 
-from implementations.cuda_graph import cuda_graphs_wrapper
+#from implementations.cuda_graph import cuda_graphs_wrapper
 from optimizer.dropout import remove_dropout
 from optimizer.dynamo_backend import dynamo_backend_ofi
 
@@ -53,17 +53,11 @@ def get_bert_tensorrt_shapes():
         max_shape=[1],
         input_name="last_hidden_state",
     )
-    shape_tensors = [output_shape]
-    return input_shapes, shape_tensors
+    output_shapes = [output_shape]
+    return input_shapes, output_shapes
 
 
-def get_bert_fp32_tensorrt():
-    from test.models.trt_utils import get_model_tensorrt
-    input_shapes, output_shapes = get_bert_tensorrt_shapes()
-    return get_model_tensorrt(model_name, models_dir, input_shapes, output_shapes, fp16_layer_selection=False)
-
-
-def get_bert_fp16_tensorrt():
+def get_bert_tensorrt():
     from test.models.trt_utils import get_model_tensorrt
     input_shapes, output_shapes = get_bert_tensorrt_shapes()
     return get_model_tensorrt(model_name, models_dir, input_shapes, output_shapes, fp16_layer_selection=True)
