@@ -2,9 +2,9 @@ from typing import Callable
 
 import torch
 import pytest
-from implementations.attention_masked_original import attention_reference, masked_attention_forward_original
+from implementations.attention_masked_original import masked_attention_forward_original
 from implementations.attention_original import attention_forward_original
-from implementations.attention import attention_forward
+from implementations.attention import attention_forward, attention_reference
 
 
 def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
