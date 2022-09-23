@@ -28,16 +28,16 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
     x = -20 + 0.5 * torch.randn((M, N), **factory_kwargs)
     expected = torch.nn.functional.layer_norm(x, layer_weight.shape, layer_weight, layer_bias, eps)
 
-    # cast tensors
+    # tensors casting
     layer_weight = layer_weight.to(dtype)
     layer_bias = layer_bias.to(dtype)
     x = x.to(dtype)
 
-    inference = implementations[implementation](layer_weight, layer_bias, eps)
+    fn = implementations[implementation](layer_weight, layer_bias, eps)
     if cuda_graphs:
-        run = cuda_graphs_wrapper(model=inference, inputs=[x], copy_outputs=False)
-        inference = lambda tensor: run(tensor)[0]  # cuda graphs wraps output in a tuple
+        run = cuda_graphs_wrapper(model=fn, inputs=[x], copy_outputs=False)
+        fn = lambda tensor: run(tensor)[0]  # cuda graphs wraps output in a tuple
 
-    value = benchmark(inference, x)
+    value = benchmark(fn, x)
 
     assert torch.allclose(value.float(), expected, atol=1e-1)
