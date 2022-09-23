@@ -6,15 +6,14 @@ from implementations.linear_layer import linear_layer
 from utils.extended_matcher import replace_pattern
 
 
-def linear_wrapper(v, linear, activation=""):
-    if not hasattr(linear, "weight_h"):
-        linear.weight_h = linear.weight.half()
-        linear.weight = None
-    if not hasattr(linear, "bias_h") and linear.bias is not None:
-        linear.bias_h = linear.bias.half()
-        linear.bias = None
+def linear_wrapper(v: torch.Tensor, linear: torch.nn.Linear, activation=""):
+    # small hack to avoid casting weights/bias at each call
+    if linear.weight.dtype == torch.float32:
+        linear.weight.data = linear.weight.data.half()
+    if linear.bias is not None and linear.bias.dtype == torch.float32:
+        linear.bias.data = linear.bias.data.half()
 
-    return linear_layer(v, linear.weight_h, linear.bias_h if hasattr(linear, "bias_h") is not None else None, activation=activation)
+    return linear_layer(v, linear.weight, linear.bias, activation=activation)
 
 
 torch.fx.wrap('linear_wrapper')

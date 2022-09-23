@@ -4,16 +4,14 @@ from implementations.layer_norm import layer_norm
 from utils.extended_matcher import replace_pattern
 
 
-def layer_norm_wrapper(v, layernorm):
+def layer_norm_wrapper(v: torch.Tensor, layernorm: torch.nn.LayerNorm):
     # small hack to avoid casting weights/bias at each call
-    if not hasattr(layernorm, "weight_h"):
-        layernorm.weight_h = layernorm.weight.half()
-        layernorm.weight = None
-    if not hasattr(layernorm, "bias_h"):
-        layernorm.bias_h = layernorm.bias.half()
-        layernorm.bias = None
+    if layernorm.weight.dtype == torch.float32:
+        layernorm.weight.data = layernorm.weight.data.half()
+    if layernorm.bias.dtype == torch.float32:
+        layernorm.bias.data = layernorm.bias.data.half()
 
-    return layer_norm(v, layernorm.weight_h, layernorm.bias_h, layernorm.eps)
+    return layer_norm(v, layernorm.weight, layernorm.bias, layernorm.eps)
 
 
 torch.fx.wrap('layer_norm_wrapper')
