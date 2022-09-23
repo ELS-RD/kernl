@@ -1,5 +1,3 @@
-from typing import Callable
-
 import torch
 import pytest
 
@@ -7,12 +5,12 @@ from implementations.cuda_graph import cuda_graphs_wrapper
 from implementations.layer_norm import layer_norm, _layer_norm_fwd_fused_single_pass, \
     _layer_norm_fwd_fused_multi_pass, layer_norm_xformers, pytorch_naive_layernorm
 
-implementations: dict[str, Callable[[torch.Tensor, torch.Tensor, torch.Tensor, float], torch.Tensor]] = {
-    "pytorch": lambda x, weight, bias, eps: torch.nn.functional.layer_norm(x, weight.shape, weight, bias, eps),
-    "triton_original": lambda x, weight, bias, eps: layer_norm(x, weight, bias, eps, _layer_norm_fwd_fused_multi_pass),
-    "triton_improved": lambda x, weight, bias, eps: layer_norm(x, weight, bias, eps, _layer_norm_fwd_fused_single_pass),
-    "triton_xformer": lambda x, weight, bias, eps: layer_norm(x, weight, bias, eps, layer_norm_xformers),
-    "pytorch_naive": lambda x, weight, bias, eps: pytorch_naive_layernorm(x, weight, bias, eps),
+implementations = {
+    "pytorch": lambda weight, bias, eps: lambda x: torch.nn.functional.layer_norm(x, weight.shape, weight, bias, eps),
+    "triton_original": lambda weight, bias, eps: lambda x: layer_norm(x, weight, bias, eps, _layer_norm_fwd_fused_multi_pass),
+    "triton_improved": lambda weight, bias, eps: lambda x: layer_norm(x, weight, bias, eps, _layer_norm_fwd_fused_single_pass),
+    "triton_xformer": lambda weight, bias, eps: lambda x: layer_norm(x, weight, bias, eps, layer_norm_xformers),
+    "pytorch_naive": lambda weight, bias, eps: lambda x: pytorch_naive_layernorm(x, weight, bias, eps),
 }
 
 
@@ -24,22 +22,24 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
     torch.manual_seed(0)
     M = N = shape
     eps = 1e-5
+    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
+    layer_weight = torch.rand((N,), **factory_kwargs)
+    layer_bias = torch.randn_like(layer_weight)
+    x = -20 + 0.5 * torch.randn((M, N), **factory_kwargs)
+    expected = torch.nn.functional.layer_norm(x, layer_weight.shape, layer_weight, layer_bias, eps)
 
-    weight = torch.rand((N,), dtype=dtype, device='cuda', requires_grad=False)
-    bias = torch.randn_like(weight, dtype=dtype, device='cuda', requires_grad=False)
-    x = -20 + 0.5 * torch.randn((M, N), dtype=dtype, device='cuda', requires_grad=False)
-    expected = torch.nn.functional.layer_norm(x, weight.shape, weight, bias, eps)
+    # cast tensors
+    layer_weight = layer_weight.to(dtype)
+    layer_bias = layer_bias.to(dtype)
+    x = x.to(dtype)
 
-    inference = implementations[implementation]
+    inference = implementations[implementation](layer_weight, layer_bias, eps)
     if cuda_graphs:
-        def func_wrapper(tensor):
-            return inference(tensor, weight, bias, eps)
+        run = cuda_graphs_wrapper(model=inference, inputs=[x], copy_outputs=False)
 
-        run = cuda_graphs_wrapper(model=func_wrapper, inputs=[x], copy_outputs=False)
+        def inference(tensor: torch.Tensor):
+            return run(tensor)[0]
 
-        def inference(x, *args, **kwargs):
-            return run(x)[0]
+    value = benchmark(inference, x)
 
-    value = benchmark(inference, x, weight, bias, eps)
-
-    assert torch.allclose(value, expected, atol=1e-1)
+    assert torch.allclose(value.float(), expected, atol=1e-1)
