@@ -36,9 +36,7 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
     inference = implementations[implementation](layer_weight, layer_bias, eps)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=inference, inputs=[x], copy_outputs=False)
-
-        def inference(tensor: torch.Tensor):
-            return run(tensor)[0]
+        inference = lambda tensor: run(tensor)[0]  # cuda graphs wraps output in a tuple
 
     value = benchmark(inference, x)
 

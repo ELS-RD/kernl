@@ -80,9 +80,9 @@ def test_benchmark(benchmark, implementation: str, cuda_graphs: bool, shape: Sha
 
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x], pool=cuda_graph_pool)
-        (value,) = benchmark(run, x)
-    else:
-        value = benchmark(fn, x)
+        fn = lambda tensor: run(tensor)[0]
+
+    value = benchmark(fn, x)
 
     assert torch.allclose(expected, value.float(), rtol=1e-1,
                           atol=1e-1), f"max diff: {torch.abs(value.float() - expected).max()}"
