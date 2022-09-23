@@ -86,8 +86,8 @@ def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int,
 
 def test_support_shape_change(model_reference_fp32):
     """Test that the model can handle shape changes without being reloaded/rebuilt."""
+    torch.manual_seed(0)
     for name, implementation in implementations.items():
-        torch.manual_seed(0)
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
             pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)

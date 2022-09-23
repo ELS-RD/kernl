@@ -45,10 +45,10 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
     }
 
     expected = attention_reference(**args)
-    args = {k: v.to(dtype).clone() if isinstance(v, torch.Tensor) else v for k, v in args.items()}
+    cast_args = {k: v.to(dtype).clone() if isinstance(v, torch.Tensor) else v for k, v in args.items()}
 
     func = implementations[implementation]
-    value = benchmark(func, **args)
+    value = benchmark(func, **cast_args)
 
     assert torch.allclose(value.float(), expected, atol=1e-1)
 
