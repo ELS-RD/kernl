@@ -67,7 +67,6 @@ except ImportError as e:
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int, int), implementation: str):
     torch.manual_seed(0)
-    assert implementation in implementations, f"unknown implementation: {implementation}"
     model_tested = implementations[implementation]
 
     inputs = get_input_causal(shape) if model_tested.is_causal else get_input_non_causal(shape)
