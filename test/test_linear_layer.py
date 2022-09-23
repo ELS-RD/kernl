@@ -76,10 +76,8 @@ def test_benchmark(benchmark, implementation: str, cuda_graphs: bool, shape: Sha
 
     fn = implementations[implementation](layer_weight, layer_bias, activation)
 
-    cuda_graph_pool = torch.cuda.graph_pool_handle()
-
     if cuda_graphs:
-        run = cuda_graphs_wrapper(model=fn, inputs=[x], pool=cuda_graph_pool)
+        run = cuda_graphs_wrapper(model=fn, inputs=[x])
         fn = lambda tensor: run(tensor)[0]
 
     value = benchmark(fn, x)
