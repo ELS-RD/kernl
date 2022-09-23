@@ -6,7 +6,7 @@ import torchdynamo
 from torchdynamo.optimizations import BACKENDS
 from transformers import AutoModel
 
-#from implementations.cuda_graph import cuda_graphs_wrapper
+from implementations.cuda_graph import cuda_graphs_wrapper
 from optimizer.dropout import remove_dropout
 from optimizer.dynamo_backend import dynamo_backend_ofi
 
