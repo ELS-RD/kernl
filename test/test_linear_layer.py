@@ -8,7 +8,6 @@ from implementations.cuda_graph import cuda_graphs_wrapper
 from implementations.linear_layer import linear_layer
 
 
-@lru_cache
 def get_pytorch_activation(activation: str) -> Callable:
     if activation == "gelu":
         return torch.nn.functional.gelu
