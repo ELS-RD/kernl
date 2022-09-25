@@ -4,6 +4,7 @@ import pytest
 from implementations.cuda_graph import cuda_graphs_wrapper
 from implementations.layer_norm import layer_norm, _layer_norm_fwd_fused_single_pass, \
     _layer_norm_fwd_fused_multi_pass, layer_norm_xformers, pytorch_naive_layernorm
+from conftest import set_seed
 
 implementations = {
     "pytorch": lambda weight, bias, eps: lambda x: torch.nn.functional.layer_norm(x, weight.shape, weight, bias, eps),
@@ -14,12 +15,12 @@ implementations = {
 }
 
 
+@set_seed()
 @pytest.mark.parametrize("shape", [128, 512, 1024, 2048, 4096, 8192], ids=lambda x: f"shape={x}x{x}")
 @pytest.mark.parametrize("cuda_graphs", [True, False], ids=["cuda_graphs", "no_cuda_graphs"])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32], ids=["fp16", "fp32"])
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, implementation: str):
-    torch.manual_seed(0)
     M = N = shape
     eps = 1e-5
     factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}

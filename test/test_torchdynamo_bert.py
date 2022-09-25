@@ -6,6 +6,7 @@ import pytest
 import torch
 import torchdynamo
 
+from conftest import set_seed
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
     get_model_optimized, get_model_optimized_causal_cuda_graphs
@@ -62,11 +63,11 @@ except ImportError as e:
     warnings.warn(UserWarning(error))
 
 
+@set_seed()
 @pytest.mark.parametrize("shape", [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 128, 256, 384, 512]
                                    if bs * seq_l < 10000], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int, int), implementation: str):
-    torch.manual_seed(0)
     model_tested = implementations[implementation]
 
     inputs = get_input_causal(shape) if model_tested.is_causal else get_input_non_causal(shape)
@@ -83,9 +84,9 @@ def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int,
     assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
 
 
+@set_seed()
 def test_support_shape_change(model_reference_fp32):
     """Test that the model can handle shape changes without being reloaded/rebuilt."""
-    torch.manual_seed(0)
     for name, implementation in implementations.items():
         model_tested = implementation.model()
         for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:

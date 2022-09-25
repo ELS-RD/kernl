@@ -5,6 +5,7 @@ import pytest
 from implementations.attention_masked_original import masked_attention_forward_original
 from implementations.attention_original import attention_forward_original
 from implementations.attention import attention_forward, attention_reference
+from conftest import set_seed
 
 
 def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
@@ -21,6 +22,7 @@ implementations = {
 }
 
 
+@set_seed()
 @pytest.mark.parametrize("shape", [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 64, 128, 256, 384, 512]],
                          ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
@@ -32,7 +34,6 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
     if implementation == "original" and (dtype == torch.bfloat16 or seq_length != 512):
         pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
 
-    torch.manual_seed(0)
     # batch, heads, seq_length, dhead
     mat_shape = (batch, 48, seq_length, 64)
     args = {
@@ -53,8 +54,8 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
     assert torch.allclose(value.float(), expected, atol=1e-1)
 
 
+@set_seed()
 def test_mixed_stride():
-    torch.manual_seed(0)
     # Column major
     q = torch.transpose(torch.rand((4, 48, 64, 512), dtype=torch.float16, device="cuda"), -1, -2)
     # Interlaced batch

@@ -1,11 +1,16 @@
-from functools import lru_cache
 from typing import Callable, Tuple
 
 import torch
 import pytest
 
+from conftest import set_seed
 from implementations.cuda_graph import cuda_graphs_wrapper
 from implementations.linear_layer import linear_layer
+
+
+@pytest.fixture
+def cuda_graphs_pool() -> (int, int):
+    return torch.cuda.graph_pool_handle()
 
 
 def get_pytorch_activation(activation: str) -> Callable:
@@ -27,6 +32,7 @@ implementations = {
 }
 
 
+@set_seed()
 @pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
 @pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
 @pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
@@ -37,8 +43,7 @@ implementations = {
 @pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
 @pytest.mark.parametrize("implementation", ["triton", "pytorch"])
 def test_benchmark(benchmark, implementation: str, cuda_graphs: bool, shape: Tuple[int, int, int, int],
-                   dtype: torch.dtype, bias: bool, activation: str, contiguous: bool):
-    torch.manual_seed(0)
+                   dtype: torch.dtype, bias: bool, activation: str, contiguous: bool, cuda_graphs_pool: (int, int)):
     batch, M, N, K = shape
 
     # order of dimensions is wrong so we force contiguous call
@@ -62,7 +67,7 @@ def test_benchmark(benchmark, implementation: str, cuda_graphs: bool, shape: Tup
 
     fn = implementations[implementation](layer_weight, layer_bias, activation)
     if cuda_graphs:
-        run = cuda_graphs_wrapper(model=fn, inputs=[x])
+        run = cuda_graphs_wrapper(model=fn, inputs=[x], pool=cuda_graphs_pool)
         fn = lambda tensor: run(tensor)[0]  # cuda graphs wraps output in a tuple
 
     value = benchmark(fn, x)
