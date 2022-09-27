@@ -17,10 +17,12 @@ def _fwd_kernel(
         TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
         output,
         q_batch_stride, q_head_stride, q_m_stride, q_k_stride,
-        k_batch_stride, k_head_stride, k_n_stride, k_k_stride, # n et k inversé ici (naming only) ???????????????????????????????????
+        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,
+        # n et k inversé ici (naming only) ???????????????????????????????????
         v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
         o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
         mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
+        HAS_MASK: tl.constexpr,
         IS_MASK_BROADCAST: tl.constexpr,
         IS_CAUSAL: tl.constexpr,
         BLOCK_M: tl.constexpr,
@@ -127,15 +129,15 @@ def _fwd_kernel(
         if IS_CAUSAL:
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
-        # Todo: Try to extract outside of this loop to see if perf improvement
-        if mask is not None:
+        if HAS_MASK:
             offs_mask = current_batch_idx * mask_batch_stride \
                         + (offs_n[None, :] + n_row_offset) * mask_k_stride
-            if not IS_MASK_BROADCAST:
+            if IS_MASK_BROADCAST:
+                m = tl.load(mask + offs_mask)
+            else:
                 offs_mask += offs_m[:, None] * mask_m_stride \
                              + current_head_idx * mask_head_stride
-            mask_ptrs = mask + offs_mask
-            m = tl.load(mask_ptrs)
+                m = tl.load(mask + offs_mask, eviction_policy="evict_first")
             qk += m
 
         # We compute softmax normalization like in Milakov et al.
@@ -239,8 +241,12 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False, mask=None):
     grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
     tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
+    HAS_MASK = False
+    IS_MASK_BROADCAST = False
     if mask is not None:
         assert mask.size() == (batch, heads, seq_length, seq_length) or mask.size() == (batch, 1, 1, seq_length)
+        HAS_MASK = True
+        IS_MASK_BROADCAST = mask.size() != (batch, heads, seq_length, seq_length)
 
     _fwd_kernel[grid](
         heads,
@@ -249,18 +255,19 @@ def attention_forward(q, k, v, output, sm_scale, is_causal=False, mask=None):
         k,
         v,
         sm_scale,
-        mask,
+        mask if HAS_MASK else q,
         tmp,
         output,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         v.stride(0), v.stride(1), v.stride(2), v.stride(3),
         output.stride(0), output.stride(1), output.stride(2), output.stride(3),
-        mask.stride(0) if mask is not None else 0,
-        mask.stride(1) if mask is not None else 0,
-        mask.stride(2) if mask is not None else 0,
-        mask.stride(3) if mask is not None else 0,
-        IS_MASK_BROADCAST=mask.size() != (batch, heads, seq_length, seq_length) if mask is not None else False,
+        mask.stride(0) if HAS_MASK else 0,
+        mask.stride(1) if HAS_MASK else 0,
+        mask.stride(2) if HAS_MASK else 0,
+        mask.stride(3) if HAS_MASK else 0,
+        HAS_MASK=HAS_MASK,
+        IS_MASK_BROADCAST=IS_MASK_BROADCAST,
         IS_CAUSAL=is_causal,
         BLOCK_M=BLOCK_M,
         BLOCK_N=BLOCK_N,

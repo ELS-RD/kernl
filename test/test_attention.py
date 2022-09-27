@@ -36,10 +36,10 @@ def test_benchmark_masked(benchmark, batch, implementation):
     diff_tested = torch.abs(expected - value.to(torch.float32)).max()
     assert diff_reference >= diff_tested, f"{diff_reference=}, {diff_tested=}"
 
-
+@pytest.mark.parametrize("mask_type", ["no-mask", "bias-mask", "broadcast-mask"])
 @pytest.mark.parametrize("batch", [1, 8, 32, 64])
-@pytest.mark.parametrize("implementation", ["torch", "triton_original", "triton"])
-def test_benchmark(benchmark, batch, implementation):
+@pytest.mark.parametrize("implementation", ["torch", "triton"])
+def test_benchmark(benchmark, mask_type, batch, implementation):
     torch.manual_seed(0)
     # batch, heads, seqlength, dhead
     q = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
@@ -47,16 +47,19 @@ def test_benchmark(benchmark, batch, implementation):
     v = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
     # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
     sm_scale = 0.3
+    mask = None
+    if mask_type == "bias-mask":
+        mask = torch.rand((batch, 48, 512, 512), dtype=torch.float32, device="cuda")
+    if mask_type == "broadcast-mask":
+        mask = generate_rand_mask(batch, 512, dtype=torch.float32)
 
-    expected = attention_reference(q, k, v, sm_scale)
+    expected = attention_reference(q, k, v, sm_scale, mask)
     value = None
-    if implementation == "triton_original":
-        value = benchmark(attention_forward_original, q, k, v, sm_scale)
     if implementation == "triton":
         output = torch.empty_like(q)
-        value = benchmark(attention_forward, q, k, v, output, sm_scale)
+        value = benchmark(attention_forward, q, k, v, output, sm_scale, mask=mask)
     if implementation == "torch":
-        value = benchmark(attention_reference, q, k, v, sm_scale)
+        value = benchmark(attention_reference, q, k, v, sm_scale, attention_mask=mask)
 
     assert torch.allclose(value, expected, atol=1e-2)
 
