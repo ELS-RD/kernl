@@ -17,8 +17,7 @@ def _fwd_kernel(
         TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
         output,
         q_batch_stride, q_head_stride, q_m_stride, q_k_stride,
-        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,
-        # n et k inversé ici (naming only) ???????????????????????????????????
+        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,  # We name n,k instead of k,n because of the transpose
         v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
         o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
         mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
