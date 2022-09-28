@@ -1,3 +1,5 @@
+from typing import Union
+
 import torch
 import triton
 import triton.language as tl
@@ -9,15 +11,29 @@ from torch.cuda.amp import custom_fwd
 
 
 # Similar to https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py#L213
-def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool):
+def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool, attention_mask: Union[torch.Tensor, None]):
+    """
+    Reference implementation for attention
+    @param q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param k: Key matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param v: Value matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param sm_scale: Scaling factor applied after operation QxK
+    @param attention_mask: Size (batch, 1, 1, seq_length) or (batch, heads, seq_length, seq_length). Warning the mask isn't a binary mask
+    like the one you use normally. This mask is directly added to QxK.
+    @return:
+    """
     seq_length = q.size(2)
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
+
+    if attention_mask is not None:
+        p += attention_mask
     if is_causal:
         M = torch.tril(torch.ones((seq_length, seq_length), device="cuda"))
         p = torch.where(M == 0, float("-inf"), p)
-    p = torch.softmax(p.float(), dim=-1).to(q.dtype)
+    p = torch.nn.functional.softmax(p, dim=-1)
     ref_out = torch.matmul(p, v, out=output)
     return ref_out
+
 
 
 @triton.jit
@@ -28,12 +44,16 @@ def _fwd_kernel(
         K,
         V,
         sm_scale,
+        mask,
         TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
         output,
         q_batch_stride, q_head_stride, q_m_stride, q_k_stride,
-        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,
+        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,  # We name n,k instead of k,n because of the transpose
         v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
         o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
+        mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
+        HAS_MASK: tl.constexpr,
+        IS_MASK_BROADCAST: tl.constexpr,
         IS_CAUSAL: tl.constexpr,
         BLOCK_M: tl.constexpr,
         BLOCK_DHEAD: tl.constexpr,
@@ -137,6 +157,18 @@ def _fwd_kernel(
         if IS_CAUSAL:
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
+
+        if HAS_MASK:
+            offs_mask = current_batch_idx * mask_batch_stride \
+                        + (offs_n[None, :] + n_row_offset) * mask_k_stride
+            if IS_MASK_BROADCAST:
+                m = tl.load(mask + offs_mask)
+            else:
+                offs_mask += offs_m[:, None] * mask_m_stride \
+                             + current_head_idx * mask_head_stride
+                m = tl.load(mask + offs_mask, eviction_policy="evict_first")
+            qk += m
+
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions
         # We start with the current block qk
@@ -197,7 +229,7 @@ class Attention(torch.autograd.Function):
 
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx: FunctionCtx, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool):
+    def forward(ctx: FunctionCtx, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool, attention_mask: torch.Tensor = None):
         """
         Computes attention.
         FP32 input and output are not supported.
@@ -226,6 +258,13 @@ class Attention(torch.autograd.Function):
         grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
         tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
+        HAS_MASK = False
+        IS_MASK_BROADCAST = False
+        if attention_mask is not None:
+            assert attention_mask.size() == (batch, heads, seq_length, seq_length) or attention_mask.size() == (batch, 1, 1, seq_length)
+            HAS_MASK = True
+            IS_MASK_BROADCAST = attention_mask.size() != (batch, heads, seq_length, seq_length)
+
         _fwd_kernel[grid](
             heads,
             seq_length,
@@ -233,12 +272,19 @@ class Attention(torch.autograd.Function):
             k,
             v,
             sm_scale,
+            attention_mask,
             tmp,
             output,
             q.stride(0), q.stride(1), q.stride(2), q.stride(3),
             k.stride(0), k.stride(1), k.stride(2), k.stride(3),
             v.stride(0), v.stride(1), v.stride(2), v.stride(3),
             output.stride(0), output.stride(1), output.stride(2), output.stride(3),
+            attention_mask.stride(0) if HAS_MASK else 0,
+            attention_mask.stride(1) if HAS_MASK else 0,
+            attention_mask.stride(2) if HAS_MASK else 0,
+            attention_mask.stride(3) if HAS_MASK else 0,
+            HAS_MASK=HAS_MASK,
+            IS_MASK_BROADCAST=IS_MASK_BROADCAST,
             IS_CAUSAL=is_causal,
             BLOCK_M=BLOCK_M,
             BLOCK_N=BLOCK_N,
@@ -250,5 +296,5 @@ class Attention(torch.autograd.Function):
         return output
 
 
-def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool = False):
-    return Attention.apply(q, k, v, output, sm_scale, is_causal)
+def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool = False, attention_mask: torch.Tensor = None):
+    return Attention.apply(q, k, v, output, sm_scale, is_causal, attention_mask)
