@@ -2,12 +2,11 @@ import random
 
 import torch
 
+from conftest import set_seed
 from utils.debugger import TritonDebugger
 
-torch.random.manual_seed(123)
-random.seed(123)
 
-
+@set_seed()
 def test_add():
     vec_len = 25
     block_size = 64  # not a vec len multiple to test masks
@@ -58,6 +57,7 @@ def test_add():
     assert tl.total_gm_write == o.numel()
 
 
+@set_seed()
 def test_softmax():
     ncols = 250
     nrows = 16
@@ -106,6 +106,7 @@ def test_softmax():
     assert tl.total_gm_write == o.nelement()
 
 
+@set_seed()
 def test_matmul():
     m, n, k = 16, 4, 32
     assert k % 32 == 0
@@ -113,7 +114,8 @@ def test_matmul():
     A = torch.rand((m, k), device="cuda", dtype=torch.float16)
     B = torch.rand((k, n), device="cuda", dtype=torch.float16)
     C = torch.zeros((m, n), device="cuda", dtype=torch.float16)
-    tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C],
+                        shuffle=True)
 
     def leaky_relu(x):
         x = x + 1
@@ -228,12 +230,15 @@ def test_matmul():
     def leaky_relu_pytorch(x):
         x = x + 1
         return torch.where(x >= 0, x, 0.01 * x)
+
     assert torch.allclose(C, leaky_relu_pytorch(A @ B), atol=1e-1)
     assert tl.total_gm_write == m * n
     # we load tile a and tile b for each position on M and N, and repeat along K axis
-    assert tl.total_gm_read == ((block_m * block_k) + (block_k * block_n)) * (k / block_k) * (n / block_n) * (m / block_m)
+    assert tl.total_gm_read == ((block_m * block_k) + (block_k * block_n)) * (k / block_k) * (n / block_n) * (
+                m / block_m)
 
 
+@set_seed()
 def test_dropout():
     p = 0.5
     x = torch.randn(size=(10, 1000), device="cuda")
@@ -280,11 +285,12 @@ def test_dropout():
     assert tl.total_gm_write == o.numel() == x.numel()
 
 
+@set_seed()
 def test_layernorm():
     M, N = 32, 64
     BLOCK_SIZE = 16  # need to be a power of 2
     x_shape = (M, N)
-    w_shape = (N, )
+    w_shape = (N,)
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
@@ -359,21 +365,22 @@ def test_layernorm():
         )
 
     assert torch.allclose(mean, torch.mean(x, dim=1), atol=0.1)
-    assert torch.allclose(rstd, 1/torch.sqrt(torch.var(x, dim=1, unbiased=False)+eps), atol=0.1)
-    assert torch.allclose(out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1)
+    assert torch.allclose(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
+    assert torch.allclose(out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps),
+                          atol=0.1)
     # read M times a block size of the 5 inputs
-    assert tl.total_gm_read == M * (5 * BLOCK_SIZE * (N/BLOCK_SIZE))
+    assert tl.total_gm_read == M * (5 * BLOCK_SIZE * (N / BLOCK_SIZE))
     # mean + std + output
-    assert tl.total_gm_write == M + M + M*N
+    assert tl.total_gm_write == M + M + M * N
 
 
+@set_seed()
 def test_layernorm_welford_variance():
     import torch
-    torch.random.manual_seed(123)
     M, N = 2, 200
     BLOCK_SIZE = 16  # need to be a power of 2
     x_shape = (M, N)
-    w_shape = (N, )
+    w_shape = (N,)
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
@@ -385,6 +392,7 @@ def test_layernorm_welford_variance():
     eps = 1e-5
 
     tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=False)
+
     def _layer_norm_fwd_fused(
             Out,
             A,
@@ -403,7 +411,7 @@ def test_layernorm_welford_variance():
         var = 0.0
         # _mean = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
         for start in range(0, N, BLOCK_SIZE):
-            end = min((start+BLOCK_SIZE), N)
+            end = min((start + BLOCK_SIZE), N)
             nb_block_col = end - start
             cols = start + tl.arange(0, BLOCK_SIZE)
             mask = cols < N
@@ -455,14 +463,16 @@ def test_layernorm_welford_variance():
         )
 
     assert torch.allclose(mean, torch.mean(x, dim=1), atol=0.1)
-    assert torch.allclose(rstd, 1/torch.sqrt(torch.var(x, dim=1, unbiased=False)+eps), atol=0.1)
-    assert torch.allclose(out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1)
+    assert torch.allclose(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
+    assert torch.allclose(out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps),
+                          atol=0.1)
     # read M times a block size of the 5 inputs
-    assert tl.total_gm_read == M * (4 * BLOCK_SIZE * (N/BLOCK_SIZE))
+    assert tl.total_gm_read == M * (4 * BLOCK_SIZE * (N / BLOCK_SIZE))
     # mean + std + output
-    assert tl.total_gm_write == M + M + M*N
+    assert tl.total_gm_write == M + M + M * N
 
 
+@set_seed()
 def test_flash_attention():
     Z, H, N_CTX, D_HEAD = 3, 2, 2048, 64
     q = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=.5)
@@ -487,7 +497,8 @@ def test_flash_attention():
     assert Lq == Lk and Lk == Lv
     assert Lk in {16, 32, 64, 128}
     BLOCK = 128
-    tl = TritonDebugger([TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]], inputs=[q, k, v, dout, L, m, tmp], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]],
+                        inputs=[q, k, v, dout, L, m, tmp], shuffle=True)
 
     def _fwd_kernel(
             Q, K, V, sm_scale,

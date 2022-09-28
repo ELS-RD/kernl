@@ -8,6 +8,8 @@ from typing import Optional
 import torch
 import triton
 import triton.language as tl
+from torch.autograd.function import FunctionCtx
+from torch.cuda.amp import custom_fwd
 
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
@@ -182,51 +184,72 @@ def kernel_fma(
     tl.store(C, acc, mask=mask)
 
 
-# Activation needs to be a triton kernel
-def linear_layer(
-        x: torch.Tensor,
-        weight: torch.Tensor,
-        bias: Optional[torch.Tensor],
-        activation="",
-        save_act_inputs: bool = False
-):
-    """
-    Compute e = activation(x @ weight + bias).
-    This wrapper kicks the `kernel_fma` Triton kernel
-    """
-    x_ = x if x.ndim == 2 else x.flatten(0, 1)
+class LinearLayer(torch.autograd.Function):
 
-    assert x_.shape[1] == weight.shape[1], f"Incompatible dimensions: {x_.shape} - {weight.shape}"
-    assert bias is None or bias.is_contiguous()
-    assert bias is None or bias.shape[0] == weight.shape[0], "Incompatible dimensions in between weight and bias"
-    assert weight.is_contiguous()
+    @staticmethod
+    @custom_fwd(cast_inputs=torch.float16)
+    def forward(
+            ctx: FunctionCtx,
+            x: torch.Tensor,
+            weight: torch.Tensor,
+            bias: Optional[torch.Tensor],
+            activation: str,
+            act_inputs: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        """
+        Compute e = activation(x @ weight + bias).
+        This wrapper kicks the `kernel_fma` Triton kernel
+        :param ctx: context for autograd
+        :param x: input tensor
+        :param weight: weight matrix
+        :param bias: an optional bias tensor
+        :param activation: Activation name. Needs to be a Triton kernel.
+        :param act_inputs: an optional tensor to save the activation inputs (for backward)
+        :return: result tensor
+        """
+        x_ = x if x.ndim == 2 else x.flatten(0, 1)
+        assert x.dtype == weight.dtype, f"Input and weight must have the same dtype, got {x.dtype} and {weight.dtype}"
+        if bias is not None:
+            assert x.dtype == bias.dtype, f"Input and bias must have the same dtype, got {x.dtype} and {bias.dtype}"
+        assert x_.shape[1] == weight.shape[1], f"Incompatible dimensions: {x_.shape} - {weight.shape}"
+        assert bias is None or bias.is_contiguous()
+        assert bias is None or bias.shape[0] == weight.shape[0], "Incompatible dimensions in between weight and bias"
+        assert weight.is_contiguous()
 
-    M, K = x_.shape
-    N, K = weight.shape
+        M, K = x_.shape
+        N, K = weight.shape
 
-    outputs = torch.empty((M, N), device=x.device, dtype=x.dtype)
-    act_inputs = torch.empty_like(outputs) if save_act_inputs else x  # will not be used in that case
+        outputs = torch.empty((M, N), device=x.device, dtype=x.dtype)
 
-    # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
+        # 1D launch kernel where each block gets its own program.
+        grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
 
-    # fmt: off
-    kernel_fma[grid](
-        outputs, act_inputs, x_, weight,  # data ptrs
-        bias if bias is not None else x,  # auto skip bias if not present
-        M, N, K,  # shapes
-        outputs.stride(0),  # strides
-        outputs.stride(1),
-        x_.stride(0),
-        x_.stride(1),
-        weight.stride(0),
-        weight.stride(1),
-        ACTIVATION=activation,  # optional fused activation
-        BIAS=bias is not None,  # optional fused bias
-        GROUP_M=8,  # speed optimization: group the programs
-        SAVE_ACT_INPUTS=save_act_inputs
-    )
+        # fmt: off
+        kernel_fma[grid](
+            outputs, act_inputs, x_, weight,  # data ptrs
+            bias if bias is not None else x,  # auto skip bias if not present
+            M, N, K,  # shapes
+            outputs.stride(0),  # strides
+            outputs.stride(1),
+            x_.stride(0),
+            x_.stride(1),
+            weight.stride(0),
+            weight.stride(1),
+            ACTIVATION=activation if not None else x,  # optional fused activation
+            BIAS=bias is not None,  # optional fused bias
+            GROUP_M=8,  # speed optimization: group the programs
+            SAVE_ACT_INPUTS=act_inputs is not None,  # optional save activation inputs
+        )
 
-    outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
+        outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
+        ctx.save_for_backward(weight, bias, x)
+        return outputs
 
-    return outputs, act_inputs if save_act_inputs else None
+
+def linear_layer(x: torch.Tensor,
+                 weight: torch.Tensor,
+                 bias: Optional[torch.Tensor],
+                 activation="",
+                 act_inputs: Optional[torch.Tensor] = None,
+                 ) -> torch.Tensor:
+    return LinearLayer.apply(x, weight, bias, activation, act_inputs)

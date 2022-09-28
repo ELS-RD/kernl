@@ -1,84 +1,61 @@
+from typing import Callable
+
 import torch
 import pytest
-from implementations.attention_masked_original import masked_attention_reference, masked_attention_forward_original
-from implementations.attention_original import attention_reference, attention_forward_original
-from implementations.attention import attention_forward
+from implementations.attention_masked_original import masked_attention_forward_original
+from implementations.attention_original import attention_forward_original
+from implementations.attention import attention_forward, attention_reference
+from conftest import set_seed
 
 
-@pytest.mark.parametrize("batch", [1, 8, 32])
-@pytest.mark.parametrize("implementation", ["torch", "triton", "triton_original"])
-def test_benchmark_masked(benchmark, batch, implementation):
-    torch.manual_seed(0)
-    # batch, heads, seqlength, dhead
-    q = torch.rand((batch, 48, 512, 64), device="cuda") * 2
-    k = torch.rand((batch, 48, 512, 64), device="cuda") * 2
-    v = torch.rand((batch, 48, 512, 64), device="cuda") * 2
-
-    q_half = q.half()
-    k_half = k.half()
-    v_half = v.half()
-
-    # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
-    sm_scale = 0.3
-
-    expected = masked_attention_reference(q, k, v, sm_scale)
-    expected_fp16 = masked_attention_reference(q_half, k_half, v_half, sm_scale)
-    value = None
-    if implementation == "triton_original":
-        value = benchmark(masked_attention_forward_original, q_half, k_half, v_half, sm_scale)
-    if implementation == "triton":
-        output = torch.empty_like(q)
-        value = benchmark(attention_forward, q_half, k_half, v_half, output, sm_scale, is_causal=True)
-    if implementation == "torch":
-        value = benchmark(masked_attention_reference, q_half, k_half, v_half, sm_scale)
-
-    diff_reference = torch.abs(expected-expected_fp16.to(torch.float32)).max()
-    diff_tested = torch.abs(expected-value.to(torch.float32)).max()
-    assert diff_reference >= diff_tested, f"{diff_reference=}, {diff_tested=}"
+def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
+    if is_causal:
+        return masked_attention_forward_original(*args, **kwargs)
+    else:
+        return attention_forward_original(*args, **kwargs)
 
 
-@pytest.mark.parametrize("batch", [1, 8, 32, 64])
-@pytest.mark.parametrize("implementation", ["torch", "triton_original", "triton"])
-def test_benchmark(benchmark, batch, implementation):
-    torch.manual_seed(0)
-    # batch, heads, seqlength, dhead
-    q = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    v = torch.rand((batch, 48, 512, 64), dtype=torch.float16, device="cuda")
-    # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
-    sm_scale = 0.3
-
-    expected = attention_reference(q, k, v, sm_scale)
-    value = None
-    if implementation == "triton_original":
-        value = benchmark(attention_forward_original, q, k, v, sm_scale)
-    if implementation == "triton":
-        output = torch.empty_like(q)
-        value = benchmark(attention_forward, q, k, v, output, sm_scale)
-    if implementation == "torch":
-        value = benchmark(attention_reference, q, k, v, sm_scale)
-
-    assert torch.allclose(value, expected, atol=1e-2)
+implementations = {
+    "original": lambda q, k, v, output, sm_scale, is_causal: original_triton_flash_attention(is_causal, q, k, v, output, sm_scale),
+    "triton": lambda q, k, v, output, sm_scale, is_causal: attention_forward(q, k, v, output, sm_scale, is_causal),
+    "torch": lambda q, k, v, output, sm_scale, is_causal: attention_reference(q, k, v, output, sm_scale, is_causal),
+}
 
 
-@pytest.mark.parametrize("seq_length", [16, 64, 128, 256, 512], ids=lambda x: f"seq_length={x}")
-@pytest.mark.parametrize("batch", [1, 8, 16, 32, 64], ids=lambda x: f"batch={x}")
-def test_optimized(batch, seq_length):
-    torch.manual_seed(0)
-    # batch, heads, seqlength, dhead
-    q = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
-    v = torch.rand((batch, 48, seq_length, 64), dtype=torch.float16, device="cuda")
-    sm_scale = 0.3
+@set_seed()
+@pytest.mark.parametrize("shape", [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 64, 128, 256, 384, 512]],
+                         ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
+# fp32 not yet possible because of a bug in triton
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
+@pytest.mark.parametrize("implementation", implementations.keys())
+def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable, dtype: torch.dtype, is_causal: bool):
+    batch, seq_length = shape
+    if implementation == "original" and (dtype == torch.bfloat16 or seq_length != 512):
+        pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
 
-    expected = attention_reference(q, k, v, sm_scale)
-    output = torch.empty_like(q)
-    attention_forward(q, k, v, output, sm_scale)
-    assert torch.allclose(output, expected, atol=1e-2)
+    # batch, heads, seq_length, dhead
+    mat_shape = (batch, 48, seq_length, 64)
+    args = {
+        "q": torch.rand(mat_shape, device="cuda"),
+        "k": torch.rand(mat_shape, device="cuda"),
+        "v": torch.rand(mat_shape, device="cuda"),
+        "output": torch.empty(mat_shape, device="cuda"),
+        "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
+        "is_causal": is_causal,
+    }
+
+    expected = attention_reference(**args)
+    cast_args = {k: v.to(dtype).clone() if isinstance(v, torch.Tensor) else v for k, v in args.items()}
+
+    func = implementations[implementation]
+    value = benchmark(func, **cast_args)
+
+    assert torch.allclose(value.float(), expected, atol=1e-1)
 
 
+@set_seed()
 def test_mixed_stride():
-    torch.manual_seed(0)
     # Column major
     q = torch.transpose(torch.rand((4, 48, 64, 512), dtype=torch.float16, device="cuda"), -1, -2)
     # Interlaced batch
@@ -86,7 +63,7 @@ def test_mixed_stride():
     v = torch.rand_like(q)
     sm_scale = 0.3
 
-    expected = attention_reference(q, k, v, sm_scale)
+    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False)
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale)
     assert torch.allclose(output, expected, atol=1e-2)

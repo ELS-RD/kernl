@@ -85,20 +85,11 @@ def _fwd_kernel_original(
     tl.store(out_ptrs, acc)
 
 
-def attention_reference(q, k, v, sm_scale):
-    # reference implementation
-    p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
-    p = torch.softmax(p.float(), dim=-1).half()
-    ref_out = torch.matmul(p, v)
-    return ref_out
-
-
-def attention_forward_original(q, k, v, sm_scale):
+def attention_forward_original(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float):
     BLOCK = 128
     # shape constraints
     Lq, Lk = q.shape[-1], k.shape[-1]
     assert Lq == Lk
-    o = torch.empty_like(q)
     grid = (triton.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1])
     tmp = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
     L = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
@@ -106,14 +97,14 @@ def attention_forward_original(q, k, v, sm_scale):
     _fwd_kernel_original[grid](
         q, k, v, sm_scale,
         tmp, L, m,
-        o,
+        output,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         v.stride(0), v.stride(1), v.stride(2), v.stride(3),
-        o.stride(0), o.stride(1), o.stride(2), o.stride(3),
+        output.stride(0), output.stride(1), output.stride(2), output.stride(3),
         q.shape[0], q.shape[1], q.shape[2],
         BLOCK_M=BLOCK, BLOCK_N=BLOCK,
         BLOCK_DMODEL=64, num_warps=4,
         num_stages=1,
     )
-    return o
+    return output

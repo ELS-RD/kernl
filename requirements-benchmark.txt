@@ -1,0 +1,3 @@
+onnx
+onnxruntime-gpu
+cupy-cuda117

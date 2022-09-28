@@ -1,9 +1,24 @@
 import torch
 import triton
 import triton.language as tl
+from torch.autograd.function import FunctionCtx
+from torch.cuda.amp import custom_fwd
 
 
 # CREDITS: Initially inspired by the Triton tutorial
+
+
+# Similar to https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py#L213
+def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool):
+    seq_length = q.size(2)
+    p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
+    if is_causal:
+        M = torch.tril(torch.ones((seq_length, seq_length), device="cuda"))
+        p = torch.where(M == 0, float("-inf"), p)
+    p = torch.softmax(p.float(), dim=-1).to(q.dtype)
+    ref_out = torch.matmul(p, v, out=output)
+    return ref_out
+
 
 @triton.jit
 def _fwd_kernel(
@@ -109,7 +124,7 @@ def _fwd_kernel(
         n_end = (m_block_idx + 1) * BLOCK_M,
     # loop over k, v and update accumulator
     # n_row_offset is the row offset on dimension N of the current block
-    # It's used for booth the N dimension of K and V because they are handled at the same time
+    # It's used for both the N dimension of K and V because they are handled at the same time
     for n_row_offset in range(0, n_end, BLOCK_N):
         n_row_offset = tl.multiple_of(n_row_offset, BLOCK_N)
         # We load the current block in K in SRAM
@@ -159,8 +174,8 @@ def _fwd_kernel(
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
-        v = tl.load(v_ptrs + n_row_offset * v_k_stride)
-        qk_softmax = qk_softmax.to(tl.float16)
+        v = tl.load(v_ptrs + n_row_offset * v_k_stride).to(Q.dtype.element_ty)
+        qk_softmax = qk_softmax.to(Q.dtype.element_ty)
         acc += tl.dot(qk_softmax, v)
 
         # We update the normalizer for the next iteration
@@ -178,49 +193,62 @@ def _fwd_kernel(
     tl.store(out_ptrs, acc)
 
 
-def attention_forward(q, k, v, output, sm_scale, is_causal=False):
-    """
-    Computes attention
+class Attention(torch.autograd.Function):
 
-    @param q: Query matrix size (batch, heads, seq_length, dhead)
-    @param k: Key matrix size (batch, heads, seq_length, dhead)
-    @param v: Value matrix size (batch, heads, seq_length, dhead)
-    @param output: Output matrix size (batch, heads, seq_length, dhead)
-    @param sm_scale: Scaling factor applied after operation QxK
-    @param is_causal: Autoregressive decoder attention
-    @return:
-    """
-    # Constraints
-    # Queries and keys have the same d_k size
-    assert q.shape[-1] == k.shape[-1]
-    batch, heads, seq_length, dhead = q.size()
+    @staticmethod
+    @custom_fwd(cast_inputs=torch.float16)
+    def forward(ctx: FunctionCtx, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool):
+        """
+        Computes attention.
+        FP32 input and output are not supported.
+        https://github.com/openai/triton/issues/674
 
-    # Todo: Ensure 2^n only ?
-    BLOCK_M = min(128, seq_length)
-    BLOCK_N = min(128, seq_length)
-    assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
+        @param ctx: context for autograd
+        @param q: Query matrix size (batch, heads, seq_length, dhead)
+        @param k: Key matrix size (batch, heads, seq_length, dhead)
+        @param v: Value matrix size (batch, heads, seq_length, dhead)
+        @param output: Output matrix size (batch, heads, seq_length, dhead)
+        @param sm_scale: Scaling factor applied after operation QxK
+        @param is_causal: Autoregressive decoder attention
+        @return:
+        """
+        # Constraints
+        # Queries and keys have the same d_k size
+        assert q.shape[-1] == k.shape[-1]
+        assert q.dtype == k.dtype == v.dtype == output.dtype, f"All tensors must have the same dtype: {q.dtype}, {k.dtype}, {v.dtype}, {output.dtype}"
+        assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
+        batch, heads, seq_length, dhead = q.size()
 
-    grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
-    tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
+        # Todo: Ensure 2^n only ?
+        BLOCK_M = BLOCK_N = min(128, seq_length)
+        assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
 
-    _fwd_kernel[grid](
-        heads,
-        seq_length,
-        q,
-        k,
-        v,
-        sm_scale,
-        tmp,
-        output,
-        q.stride(0), q.stride(1), q.stride(2), q.stride(3),
-        k.stride(0), k.stride(1), k.stride(2), k.stride(3),
-        v.stride(0), v.stride(1), v.stride(2), v.stride(3),
-        output.stride(0), output.stride(1), output.stride(2), output.stride(3),
-        IS_CAUSAL=is_causal,
-        BLOCK_M=BLOCK_M,
-        BLOCK_N=BLOCK_N,
-        BLOCK_DHEAD=dhead,
-        num_warps=4,
-        num_stages=1,
-    )
-    return output
+        grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
+        tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
+
+        _fwd_kernel[grid](
+            heads,
+            seq_length,
+            q,
+            k,
+            v,
+            sm_scale,
+            tmp,
+            output,
+            q.stride(0), q.stride(1), q.stride(2), q.stride(3),
+            k.stride(0), k.stride(1), k.stride(2), k.stride(3),
+            v.stride(0), v.stride(1), v.stride(2), v.stride(3),
+            output.stride(0), output.stride(1), output.stride(2), output.stride(3),
+            IS_CAUSAL=is_causal,
+            BLOCK_M=BLOCK_M,
+            BLOCK_N=BLOCK_N,
+            BLOCK_DHEAD=dhead,
+            num_warps=4,
+            num_stages=1,
+        )
+        ctx.save_for_backward(q, k, v, output)
+        return output
+
+
+def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool = False):
+    return Attention.apply(q, k, v, output, sm_scale, is_causal)

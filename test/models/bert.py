@@ -14,9 +14,8 @@ model_name = "bert-base-uncased"
 models_dir = tempfile.TemporaryDirectory().name
 
 
-def get_model_baseline(float_16: bool = True):
-    model_dtype = torch.float16 if float_16 else torch.float32
-    model = AutoModel.from_pretrained(pretrained_model_name_or_path=model_name, torch_dtype=model_dtype)
+def get_model_baseline():
+    model = AutoModel.from_pretrained(pretrained_model_name_or_path=model_name)
     return model.eval().cuda()
 
 

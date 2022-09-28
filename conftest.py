@@ -1,6 +1,17 @@
 import pytest
 from benchmark.benchmark_fixture import BenchmarkFixture
 from benchmark.benchmark_session import BenchmarkSession
+import random
+
+from decorator import contextmanager
+import torch
+
+
+@contextmanager
+def set_seed(seed: int = 0):
+    torch.manual_seed(seed=seed)
+    random.seed(seed)
+    yield
 
 
 @pytest.fixture(scope="function")

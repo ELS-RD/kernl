@@ -1,10 +1,6 @@
-import logging
 from typing import Callable, Union
 
-import triton
 import torch
-
-from implementations.linear_layer import kernel_fma
 
 
 def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]], copy_outputs: bool = False, pool: (int, int) = torch.cuda.graph_pool_handle()):
@@ -18,7 +14,10 @@ def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple
     stream = torch.cuda.Stream()
     stream.wait_stream(torch.cuda.current_stream())
     with torch.cuda.stream(stream):
-        model(*inputs)
+        # 2 rounds, 1 to build the model (triton kernels, casting, etc.),
+        # and 1 for warmup
+        for _ in range(2):
+            model(*inputs)
     stream.synchronize()
     torch.cuda.current_stream().wait_stream(stream)
     torch.cuda.synchronize()
