@@ -19,7 +19,8 @@ def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, outpu
     @param k: Key matrix size (batch, heads, seq_length, BLOCK_DHEAD)
     @param v: Value matrix size (batch, heads, seq_length, BLOCK_DHEAD)
     @param sm_scale: Scaling factor applied after operation QxK
-    @param attention_mask: Size (batch, 1, 1, seq_length) or (batch, heads, seq_length, seq_length). Warning the mask isn't a binary mask
+    @param attention_mask: Attention mask broadcastable to (batch, heads, seq_length, seq_length). Warning the mask
+    isn't a binary mask
     like the one you use normally. This mask is directly added to QxK.
     @return:
     """
@@ -90,6 +91,17 @@ def _fwd_kernel(
     @param o_head_stride: output matrix stride for head dimension
     @param o_m_stride: output matrix stride for rows
     @param o_n_stride: output matrix stride for columns
+    @param mask: Attention mask matrix broadcastable to (batch, heads, seq_length, seq_length)
+    @param mask_batch_stride: Matrix mask stride for batch dimension
+    @param mask_head_stride: Matrix mask stride for head dimension
+    @param mask_m_stride: Matrix mask stride for rows
+    @param mask_k_stride: Matrix mask stride for columns
+    @param MASK_BATCH_SIZE: Matrix mask size for batch dimension
+    @param MASK_HEAD_SIZE: Matrix mask size for head dimension
+    @param MASK_M_SIZE: Matrix mask size for rows
+    @param MASK_K_SIZE: Matrix mask size for columns
+    @param HAS_MASK: Whether the mask is applied
+    @param IS_CAUSAL: Whether the mask is applied
     @param BLOCK_M: number of rows computed in a single instance for matrix Q
     @param BLOCK_DHEAD: number of columns per head
     @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
