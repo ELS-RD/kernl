@@ -262,6 +262,8 @@ class Attention(torch.autograd.Function):
         IS_MASK_BROADCAST = False
         if attention_mask is not None:
             assert attention_mask.size() == (batch, heads, seq_length, seq_length) or attention_mask.size() == (batch, 1, 1, seq_length)
+            # Move inside kernel ?
+            attention_mask = attention_mask.clamp(min=torch.finfo(attention_mask.dtype).min, max=torch.finfo(attention_mask.dtype).max)
             HAS_MASK = True
             IS_MASK_BROADCAST = attention_mask.size() != (batch, heads, seq_length, seq_length)
 

@@ -22,7 +22,9 @@ implementations = {
 }
 
 def generate_broadcast_mask(batch, seq_length, dtype=torch.float32):
-    attention_mask = torch.randint(0, 2, size=(batch, seq_length), device="cuda").to(dtype)
+    attention_mask = torch.randint(1, seq_length, (batch,), device="cuda")[:, None] > torch.arange(0, seq_length, device="cuda")[
+                                                                      None, :]
+    attention_mask = attention_mask.to(dtype)
     attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
     attention_mask = (1.0 - attention_mask) * torch.finfo(dtype).min
     return attention_mask
@@ -68,7 +70,7 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
 
-    assert torch.allclose(value.float(), expected, atol=1e-2)
+    assert torch.allclose(value.float(), expected, atol=1e-1)
 
 
 @set_seed()
