@@ -49,8 +49,6 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
         pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
     if implementation == "original" and mask_fn != generate_none_mask:
         pytest.skip("Original Triton implementation doesn't support masks")
-    if is_causal and mask_fn != generate_none_mask:
-        pytest.skip("Not supported")
 
     # batch, heads, seq_length, dhead
     mat_shape = (batch, 48, seq_length, 64)
