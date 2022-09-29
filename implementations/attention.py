@@ -52,8 +52,8 @@ def _fwd_kernel(
         v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
         o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
         mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
+        mask_batch_size: tl.constexpr, mask_head_size: tl.constexpr, mask_m_size: tl.constexpr, mask_k_size: tl.constexpr,
         HAS_MASK: tl.constexpr,
-        IS_MASK_BROADCAST: tl.constexpr,
         IS_CAUSAL: tl.constexpr,
         BLOCK_M: tl.constexpr,
         BLOCK_DHEAD: tl.constexpr,
@@ -159,13 +159,22 @@ def _fwd_kernel(
 
 
         if HAS_MASK:
-            offs_mask = current_batch_idx * mask_batch_stride \
+            mask_batch_idx = current_batch_idx,
+            if mask_batch_size == 1:
+                mask_batch_idx = 0
+
+            mask_head_idx = current_head_idx
+            if mask_head_size == 1:
+                mask_head_idx = 0
+
+            offs_mask = mask_batch_idx * mask_batch_stride \
+                        + mask_head_idx * mask_head_stride \
                         + (offs_n[None, :] + n_row_offset) * mask_k_stride
-            if IS_MASK_BROADCAST:
+
+            if mask_m_size == 1:
                 m = tl.load(mask + offs_mask)
             else:
-                offs_mask += offs_m[:, None] * mask_m_stride \
-                             + current_head_idx * mask_head_stride
+                offs_mask += offs_m[:, None] * mask_m_stride
                 m = tl.load(mask + offs_mask, eviction_policy="evict_first")
             qk += m
 
@@ -259,13 +268,15 @@ class Attention(torch.autograd.Function):
         tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
-        IS_MASK_BROADCAST = False
         if attention_mask is not None:
-            assert attention_mask.size() == (batch, heads, seq_length, seq_length) or attention_mask.size() == (batch, 1, 1, seq_length)
+            assert attention_mask.size(0) == batch or attention_mask.size(0) == 1
+            assert attention_mask.size(1) == heads or attention_mask.size(1) == 1
+            assert attention_mask.size(2) == seq_length or attention_mask.size(2) == 1
+            assert attention_mask.size(3) == seq_length
+
             # Move inside kernel ?
             attention_mask = attention_mask.clamp(min=torch.finfo(attention_mask.dtype).min, max=torch.finfo(attention_mask.dtype).max)
             HAS_MASK = True
-            IS_MASK_BROADCAST = attention_mask.size() != (batch, heads, seq_length, seq_length)
 
         _fwd_kernel[grid](
             heads,
@@ -285,8 +296,11 @@ class Attention(torch.autograd.Function):
             attention_mask.stride(1) if HAS_MASK else 0,
             attention_mask.stride(2) if HAS_MASK else 0,
             attention_mask.stride(3) if HAS_MASK else 0,
+            attention_mask.size(0) if HAS_MASK else 0,
+            attention_mask.size(1) if HAS_MASK else 0,
+            attention_mask.size(2) if HAS_MASK else 0,
+            attention_mask.size(3) if HAS_MASK else 0,
             HAS_MASK=HAS_MASK,
-            IS_MASK_BROADCAST=IS_MASK_BROADCAST,
             IS_CAUSAL=is_causal,
             BLOCK_M=BLOCK_M,
             BLOCK_N=BLOCK_N,
