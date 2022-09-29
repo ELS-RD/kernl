@@ -11,7 +11,8 @@ from torch.cuda.amp import custom_fwd
 
 
 # Similar to https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py#L213
-def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool, attention_mask: Union[torch.Tensor, None]):
+def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float,
+                        is_causal: bool, attention_mask: Union[torch.Tensor, None]):
     """
     Reference implementation for attention
     @param q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
@@ -35,7 +36,6 @@ def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, outpu
     return ref_out
 
 
-
 @triton.jit
 def _fwd_kernel(
         heads,
@@ -52,7 +52,10 @@ def _fwd_kernel(
         v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
         o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
         mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
-        mask_batch_size: tl.constexpr, mask_head_size: tl.constexpr, mask_m_size: tl.constexpr, mask_k_size: tl.constexpr,
+        MASK_BATCH_SIZE: tl.constexpr,
+        MASK_HEAD_SIZE: tl.constexpr,
+        MASK_M_SIZE: tl.constexpr,
+        MASK_K_SIZE: tl.constexpr,
         HAS_MASK: tl.constexpr,
         IS_CAUSAL: tl.constexpr,
         BLOCK_M: tl.constexpr,
@@ -157,21 +160,20 @@ def _fwd_kernel(
         if IS_CAUSAL:
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
-
         if HAS_MASK:
             mask_batch_idx = current_batch_idx,
-            if mask_batch_size == 1:
+            if MASK_BATCH_SIZE == 1:
                 mask_batch_idx = 0
 
             mask_head_idx = current_head_idx
-            if mask_head_size == 1:
+            if MASK_HEAD_SIZE == 1:
                 mask_head_idx = 0
 
             offs_mask = mask_batch_idx * mask_batch_stride \
                         + mask_head_idx * mask_head_stride \
                         + (offs_n[None, :] + n_row_offset) * mask_k_stride
 
-            if mask_m_size == 1:
+            if MASK_M_SIZE == 1:
                 m = tl.load(mask + offs_mask)
             else:
                 offs_mask += offs_m[:, None] * mask_m_stride
@@ -238,7 +240,8 @@ class Attention(torch.autograd.Function):
 
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx: FunctionCtx, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool, attention_mask: torch.Tensor = None):
+    def forward(ctx: FunctionCtx, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor,
+                sm_scale: float, is_causal: bool, attention_mask: torch.Tensor = None):
         """
         Computes attention.
         FP32 input and output are not supported.
@@ -275,7 +278,8 @@ class Attention(torch.autograd.Function):
             assert attention_mask.size(3) == seq_length
 
             # Move inside kernel ?
-            attention_mask = attention_mask.clamp(min=torch.finfo(attention_mask.dtype).min, max=torch.finfo(attention_mask.dtype).max)
+            attention_mask = attention_mask.clamp(min=torch.finfo(attention_mask.dtype).min,
+                                                  max=torch.finfo(attention_mask.dtype).max)
             HAS_MASK = True
 
         _fwd_kernel[grid](
@@ -296,10 +300,10 @@ class Attention(torch.autograd.Function):
             attention_mask.stride(1) if HAS_MASK else 0,
             attention_mask.stride(2) if HAS_MASK else 0,
             attention_mask.stride(3) if HAS_MASK else 0,
-            attention_mask.size(0) if HAS_MASK else 0,
-            attention_mask.size(1) if HAS_MASK else 0,
-            attention_mask.size(2) if HAS_MASK else 0,
-            attention_mask.size(3) if HAS_MASK else 0,
+            MASK_BATCH_SIZE=attention_mask.size(0) if HAS_MASK else 0,
+            MASK_HEAD_SIZE=attention_mask.size(1) if HAS_MASK else 0,
+            MASK_M_SIZE=attention_mask.size(2) if HAS_MASK else 0,
+            MASK_K_SIZE=attention_mask.size(3) if HAS_MASK else 0,
             HAS_MASK=HAS_MASK,
             IS_CAUSAL=is_causal,
             BLOCK_M=BLOCK_M,
@@ -312,5 +316,6 @@ class Attention(torch.autograd.Function):
         return output
 
 
-def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float, is_causal: bool = False, attention_mask: torch.Tensor = None):
+def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float,
+                      is_causal: bool = False, attention_mask: torch.Tensor = None):
     return Attention.apply(q, k, v, output, sm_scale, is_causal, attention_mask)
