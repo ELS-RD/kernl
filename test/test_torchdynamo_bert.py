@@ -33,7 +33,7 @@ implementations: Dict[str, Implementation] = {
     "dynamo_optimized": Implementation(get_model_optimized, is_causal=False),
     "dynamo_optimized_cuda_graphs": Implementation(get_model_optimized_cuda_graphs, is_causal=False),
     # In this implementation both causal mask and the assume causal mask optimization will be applied, leads to slower
-    # benchmark
+    # benchmark. It's not needed if we are sure the mask is causal, we can use the "assume causal mask optimization".
     "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, is_causal=True),
 }
 

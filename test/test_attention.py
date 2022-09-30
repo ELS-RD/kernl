@@ -47,7 +47,7 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
     batch, seq_length = shape
     if implementation == "original" and (dtype == torch.bfloat16 or seq_length != 512):
         pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
-    if implementation == "original" and mask_fn != generate_none_mask:
+    elif implementation == "original" and mask_fn != generate_none_mask:
         pytest.skip("Original Triton implementation doesn't support masks")
 
     # batch, heads, seq_length, dhead
@@ -74,13 +74,18 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
 @set_seed()
 def test_mixed_stride():
     # Column major
-    q = torch.transpose(torch.rand((4, 48, 64, 512), dtype=torch.float16, device="cuda"), -1, -2)
+    q = torch.rand((4, 48, 64, 512), dtype=torch.float16, device="cuda").transpose(-1, -2)
     # Interlaced batch
-    k = torch.transpose(torch.rand((48, 4, 512, 64), dtype=torch.float16, device="cuda"), 0, 1)
+    k = torch.rand((48, 4, 512, 64), dtype=torch.float16, device="cuda").transpose(0, 1)
     v = torch.rand_like(q)
+    mask = torch.rand((48, 4, 512, 512), dtype=torch.float16, device="cuda").transpose(0, 1).transpose(-1, -2)
     sm_scale = 0.3
 
-    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=None)
+    assert not q.is_contiguous()
+    assert not k.is_contiguous()
+    assert not mask.is_contiguous()
+
+    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask)
     output = torch.empty_like(q)
-    attention_forward(q, k, v, output, sm_scale)
+    attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     assert torch.allclose(output, expected, atol=1e-2)

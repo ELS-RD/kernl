@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 
 import torch
 import triton
@@ -12,7 +12,7 @@ from torch.cuda.amp import custom_fwd
 
 # Similar to https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py#L213
 def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float,
-                        is_causal: bool, attention_mask: Union[torch.Tensor, None]):
+                        is_causal: bool, attention_mask: Union[torch.Tensor, None]) -> torch.Tensor:
     """
     Reference implementation for attention
     @param q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
@@ -53,6 +53,7 @@ def _fwd_kernel(
         v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
         o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
         mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
+        min_clamp_value,
         MASK_BATCH_SIZE: tl.constexpr,
         MASK_HEAD_SIZE: tl.constexpr,
         MASK_M_SIZE: tl.constexpr,
@@ -157,6 +158,18 @@ def _fwd_kernel(
     n_end = seq_length
     if IS_CAUSAL:
         n_end = (m_block_idx + 1) * BLOCK_M,
+
+    if HAS_MASK:
+        mask_batch_idx = current_batch_idx,
+        if MASK_BATCH_SIZE == 1:
+            mask_batch_idx = 0
+
+        mask_head_idx = current_head_idx
+        if MASK_HEAD_SIZE == 1:
+            mask_head_idx = 0
+
+        offs_base_mask = mask_batch_idx * mask_batch_stride + mask_head_idx * mask_head_stride
+
     # loop over k, v and update accumulator
     # n_row_offset is the row offset on dimension N of the current block
     # It's used for both the N dimension of K and V because they are handled at the same time
@@ -173,23 +186,16 @@ def _fwd_kernel(
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
         if HAS_MASK:
-            mask_batch_idx = current_batch_idx,
-            if MASK_BATCH_SIZE == 1:
-                mask_batch_idx = 0
-
-            mask_head_idx = current_head_idx
-            if MASK_HEAD_SIZE == 1:
-                mask_head_idx = 0
-
-            offs_mask = mask_batch_idx * mask_batch_stride \
-                        + mask_head_idx * mask_head_stride \
-                        + (offs_n[None, :] + n_row_offset) * mask_k_stride
-
+            offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * mask_k_stride
+            # If it's a broadcast we only load vector size BLOCK_N else a matrix size (BLOCK_M, BLOCK_N)
             if MASK_M_SIZE == 1:
                 m = tl.load(mask + offs_mask)
             else:
                 offs_mask += offs_m[:, None] * mask_m_stride
+                # The mask matrix is never reused
                 m = tl.load(mask + offs_mask, eviction_policy="evict_first")
+            # Avoids NaN
+            m = tl.where(m == float("-inf"), min_clamp_value, m)
             qk += m
 
         # We compute softmax normalization like in Milakov et al.
@@ -253,7 +259,7 @@ class Attention(torch.autograd.Function):
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
     def forward(ctx: FunctionCtx, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor,
-                sm_scale: float, is_causal: bool, attention_mask: torch.Tensor = None):
+                sm_scale: float, is_causal: bool, attention_mask: Optional[torch.Tensor] = None):
         """
         Computes attention.
         FP32 input and output are not supported.
@@ -284,34 +290,32 @@ class Attention(torch.autograd.Function):
 
         HAS_MASK = False
         if attention_mask is not None:
-            assert attention_mask.size(0) == batch or attention_mask.size(0) == 1
-            assert attention_mask.size(1) == heads or attention_mask.size(1) == 1
-            assert attention_mask.size(2) == seq_length or attention_mask.size(2) == 1
-            assert attention_mask.size(3) == seq_length
+            assert attention_mask.size(0) == batch or attention_mask.size(0) == 1, "Incompatible broadcast batch dimension"
+            assert attention_mask.size(1) == heads or attention_mask.size(1) == 1, "Incompatible broadcast heads dimension"
+            assert attention_mask.size(2) == seq_length or attention_mask.size(2) == 1, "Incompatible broadcast seq_length dimension"
+            assert attention_mask.size(3) == seq_length, "Last size of mask must be seq_length to broadcast on QK^t"
 
-            # Move inside kernel ?
-            attention_mask = attention_mask.clamp(min=torch.finfo(attention_mask.dtype).min,
-                                                  max=torch.finfo(attention_mask.dtype).max)
             HAS_MASK = True
 
         _fwd_kernel[grid](
-            heads,
-            seq_length,
-            q,
-            k,
-            v,
-            sm_scale,
-            attention_mask,
-            tmp,
-            output,
-            q.stride(0), q.stride(1), q.stride(2), q.stride(3),
-            k.stride(0), k.stride(1), k.stride(2), k.stride(3),
-            v.stride(0), v.stride(1), v.stride(2), v.stride(3),
-            output.stride(0), output.stride(1), output.stride(2), output.stride(3),
-            attention_mask.stride(0) if HAS_MASK else 0,
-            attention_mask.stride(1) if HAS_MASK else 0,
-            attention_mask.stride(2) if HAS_MASK else 0,
-            attention_mask.stride(3) if HAS_MASK else 0,
+            heads=heads,
+            seq_length=seq_length,
+            Q=q,
+            K=k,
+            V=v,
+            sm_scale=sm_scale,
+            mask=attention_mask,
+            TMP=tmp,
+            output=output,
+            q_batch_stride=q.stride(0), q_head_stride=q.stride(1), q_m_stride=q.stride(2), q_k_stride=q.stride(3),
+            k_batch_stride=k.stride(0), k_head_stride=k.stride(1), k_n_stride=k.stride(2), k_k_stride=k.stride(3),
+            v_batch_stride=v.stride(0), v_head_stride=v.stride(1), v_k_stride=v.stride(2), v_n_stride=v.stride(3),
+            o_batch_stride=output.stride(0), o_head_stride=output.stride(1), o_m_stride=output.stride(2), o_n_stride=output.stride(3),
+            mask_batch_stride=attention_mask.stride(0) if HAS_MASK else 0,
+            mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
+            mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
+            mask_k_stride=attention_mask.stride(3) if HAS_MASK else 0,
+            min_clamp_value=torch.finfo(attention_mask.dtype).min,
             MASK_BATCH_SIZE=attention_mask.size(0) if HAS_MASK else 0,
             MASK_HEAD_SIZE=attention_mask.size(1) if HAS_MASK else 0,
             MASK_M_SIZE=attention_mask.size(2) if HAS_MASK else 0,
@@ -329,5 +333,5 @@ class Attention(torch.autograd.Function):
 
 
 def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float,
-                      is_causal: bool = False, attention_mask: torch.Tensor = None):
+                      is_causal: bool = False, attention_mask: Optional[torch.Tensor] = None):
     return Attention.apply(q, k, v, output, sm_scale, is_causal, attention_mask)
