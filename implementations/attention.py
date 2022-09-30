@@ -315,7 +315,7 @@ class Attention(torch.autograd.Function):
             mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
             mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
             mask_k_stride=attention_mask.stride(3) if HAS_MASK else 0,
-            min_clamp_value=torch.finfo(attention_mask.dtype).min,
+            min_clamp_value=torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,
             MASK_BATCH_SIZE=attention_mask.size(0) if HAS_MASK else 0,
             MASK_HEAD_SIZE=attention_mask.size(1) if HAS_MASK else 0,
             MASK_M_SIZE=attention_mask.size(2) if HAS_MASK else 0,
