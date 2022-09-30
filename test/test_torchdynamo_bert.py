@@ -87,16 +87,17 @@ def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int,
 
 
 @set_seed()
-def test_support_shape_change(model_reference_fp32):
+@pytest.mark.parametrize("name", implementations.keys())
+def test_support_shape_change(name, model_reference_fp32):
     """Test that the model can handle shape changes without being reloaded/rebuilt."""
-    for name, implementation in implementations.items():
-        model_tested = implementation.model()
-        for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
-            pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
-            with torch.inference_mode():
-                expected = model_reference_fp32(**pytorch_input)
-                with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
-                    result = model_tested(**pytorch_input)
-            max_diff = torch.max(torch.abs(result["last_hidden_state"].float() - expected["last_hidden_state"]))
-            assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"],
-                                  atol=1e-1, rtol=1e-1), f"[{name}] failed with shape {shape}, max diff: {max_diff}"
+    implementation = implementations[name]
+    model_tested = implementation.model()
+    for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
+        pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
+        with torch.inference_mode():
+            expected = model_reference_fp32(**pytorch_input)
+            with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
+                result = model_tested(**pytorch_input)
+        max_diff = torch.max(torch.abs(result["last_hidden_state"].float() - expected["last_hidden_state"]))
+        assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"],
+                              atol=1e-1, rtol=1e-1), f"[{name}] failed with shape {shape}, max diff: {max_diff}"
