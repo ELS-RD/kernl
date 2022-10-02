@@ -7,6 +7,8 @@ Optimized kernels for `transformer` models.
 ```shell
 git clone https://github.com/ELS-RD/nucle-ai
 pip install -e .
+# or to enable all benchmarks
+pip install -e ".[benchmark]"
 ```
 
 ## Test and Benchmark
