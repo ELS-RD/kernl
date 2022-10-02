@@ -5,15 +5,16 @@ import ctypes as C
 from ctypes.util import find_library
 from typing import Dict, Optional, Tuple
 
+import cupy as cp
 import numpy as np
 import torch
+
 # noinspection PyUnresolvedReferences
-from onnxruntime import ExecutionMode, GraphOptimizationLevel, InferenceSession, IOBinding, OrtValue, SessionOptions
+from onnxruntime import GraphOptimizationLevel, InferenceSession, IOBinding, OrtValue, SessionOptions
+
 
 libc = C.CDLL(find_library("c"))
 libc.malloc.restype = C.c_void_p
-
-import cupy as cp
 
 
 def create_model_for_provider(path: str) -> InferenceSession:

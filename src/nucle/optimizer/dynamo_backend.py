@@ -1,9 +1,9 @@
 import torch
 
-from optimizer.attention import fuse_attention
-from optimizer.dropout import remove_dropout
-from optimizer.layer_norm import replace_layer_norm
-from optimizer.linear import replace_all_linear
+from nucle.optimizer.attention import fuse_attention
+from nucle.optimizer.dropout import remove_dropout
+from nucle.optimizer.layer_norm import replace_layer_norm
+from nucle.optimizer.linear import replace_all_linear
 
 
 def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):

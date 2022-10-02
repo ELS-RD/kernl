@@ -5,7 +5,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor
 
-from utils.range_dict import RangeKeyDict
+from nucle.utils.range_dict import RangeKeyDict
 
 
 class TritonDebugger:
@@ -35,7 +35,9 @@ class TritonDebugger:
             previous_boundary = previous_boundary + t.nelement()
 
         self.range_tensor_dict = RangeKeyDict(range_tensor_dict)
-        self.tensor_ptr: dict[torch.Tensor, int] = {tensor: range_ptrs[0] for range_ptrs, tensor in range_tensor_dict.items()}
+        self.tensor_ptr: dict[torch.Tensor, int] = {
+            tensor: range_ptrs[0] for range_ptrs, tensor in range_tensor_dict.items()
+        }
         self.total_gm_read = 0
         self.total_gm_write = 0
 
@@ -72,7 +74,7 @@ class TritonDebugger:
         coordinates: list[torch.Tensor] = list()
         for dim in range(0, tensor.ndim):
             dim_stride = tensor.stride(dim)
-            dim_index = torch.div(offsets, dim_stride, rounding_mode='floor')
+            dim_index = torch.div(offsets, dim_stride, rounding_mode="floor")
             coordinates.append(dim_index.long())
             offsets -= dim_index * dim_stride
 
@@ -102,7 +104,9 @@ class TritonDebugger:
         indexes: list[Tensor] = self.offset_to_indexes(tensor=tensor, offsets=offsets)
         return indexes
 
-    def load(self, ptr: torch.Tensor, mask: Optional[torch.Tensor] = None, other: float = 0., eviction_policy: str = "") -> torch.Tensor:
+    def load(
+        self, ptr: torch.Tensor, mask: Optional[torch.Tensor] = None, other: float = 0.0, eviction_policy: str = ""
+    ) -> torch.Tensor:
         """
         Load data from the provided pointers / mask.
         :param ptr: pointers to the data.
@@ -150,7 +154,7 @@ class TritonDebugger:
         @param end: end of the interval. Must be a power of two >= start.
         @return: a tensor of size (end - start) with values in [start, end).
         """
-        assert (end & (end-1) == 0) and end != 0, f"end must be a power of 2: {end}"
+        assert (end & (end - 1) == 0) and end != 0, f"end must be a power of 2: {end}"
         assert start < end, f"start must be less than end: {start} > {end}"
         return torch.arange(start=start, end=end, device="cuda")
 
@@ -182,7 +186,9 @@ class TritonDebugger:
         return torch.zeros(size=shape, dtype=dtype, device="cuda")
 
     @staticmethod
-    def dot(input: torch.Tensor, other: torch.Tensor, trans_a: bool = False, trans_b: bool = False, allow_tf32=True) -> torch.Tensor:
+    def dot(
+        input: torch.Tensor, other: torch.Tensor, trans_a: bool = False, trans_b: bool = False, allow_tf32=True
+    ) -> torch.Tensor:
         if trans_a:
             input = input.T
         if trans_b:

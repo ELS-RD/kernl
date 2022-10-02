@@ -1,16 +1,18 @@
 import copy
-from typing import NamedTuple, Dict, Optional, Callable, List, Set, Iterable
+from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Callable, Dict, List, NamedTuple, Optional, Set
 
 import torch
 from torch import Graph
-from torch.fx import symbolic_trace, Node, GraphModule
-from dataclasses import dataclass, field
-from collections import defaultdict
+from torch.fx import GraphModule, Node, symbolic_trace
 
-from utils.fx import static_args_are_equal
+from nucle.utils.fx import static_args_are_equal
 
 
-# Originaly taken from https://github.com/pytorch/pytorch/blob/a27a4a02fecfdd626b25794a84954731b80f29fb/torch/fx/passes/utils/matcher_utils.py
+# Originaly taken from
+# https://github.com/pytorch/pytorch/blob/a27a4a02fecfdd626b25794a84954731b80f29fb/torch/fx/passes/utils/matcher_utils.py
+
 
 @dataclass
 class InternalMatch:
@@ -28,16 +30,22 @@ class InternalMatch:
     returning_nodes: List[Node] = field(default_factory=list)
 
     def __copy__(self):
-        return InternalMatch(anchors=self.anchors, nodes_map=self.nodes_map.copy(),
-                             placeholder_nodes=self.placeholder_nodes.copy(),
-                             returning_nodes=self.returning_nodes.copy())
+        return InternalMatch(
+            anchors=self.anchors,
+            nodes_map=self.nodes_map.copy(),
+            placeholder_nodes=self.placeholder_nodes.copy(),
+            returning_nodes=self.returning_nodes.copy(),
+        )
 
 
 class SubgraphMatcher:
-    def __init__(self, pattern: Graph,
-                 match_output: bool = False,
-                 match_placeholder: bool = False,
-                 remove_overlapping_matches: bool = True) -> None:
+    def __init__(
+        self,
+        pattern: Graph,
+        match_output: bool = False,
+        match_placeholder: bool = False,
+        remove_overlapping_matches: bool = True,
+    ) -> None:
         """
         Args:
             pattern: the targeted matching pattern, represented in fx.Graph.
@@ -59,8 +67,7 @@ class SubgraphMatcher:
 
         for node in pattern.nodes:
             if node.op != "output":
-                assert len(node.users) > 0, \
-                    "SubgraphMatcher cannot be initialized with an pattern with dead code"
+                assert len(node.users) > 0, "SubgraphMatcher cannot be initialized with an pattern with dead code"
 
         # TODO: assert pattern is a connected graph
 
@@ -167,9 +174,9 @@ class SubgraphMatcher:
 
         # Recursively traverse upwards to check if `pn` is a true
         # match for `gn`
-        match_found = (len(pn.all_input_nodes) == len(gn.all_input_nodes) and
-                       all(self._match_nodes(pn_, gn_, match) for pn_, gn_
-                           in zip(pn.all_input_nodes, gn.all_input_nodes)))
+        match_found = len(pn.all_input_nodes) == len(gn.all_input_nodes) and all(
+            self._match_nodes(pn_, gn_, match) for pn_, gn_ in zip(pn.all_input_nodes, gn.all_input_nodes)
+        )
 
         if not match_found:
             match.nodes_map.pop(pn)
@@ -298,13 +305,16 @@ def _replace_submodules(gm: GraphModule, replacement: torch.nn.Module) -> None:
             # CASE 3: The target doesn't exist as a submodule in `gm`
             # or `replacement`
             else:
-                raise RuntimeError("Attempted to create a \"", node.op,
-                                   "\" node during subgraph rewriting "
-                                   f"with target {node.target}, but "
-                                   "the referenced submodule does not "
-                                   "exist in either the original "
-                                   "GraphModule `gm` or the replacement"
-                                   " GraphModule `replacement`")
+                raise RuntimeError(
+                    'Attempted to create a "',
+                    node.op,
+                    '" node during subgraph rewriting '
+                    f"with target {node.target}, but "
+                    "the referenced submodule does not "
+                    "exist in either the original "
+                    "GraphModule `gm` or the replacement"
+                    " GraphModule `replacement`",
+                )
 
     gm.graph.lint()
 
@@ -402,8 +412,9 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
     original_graph: Graph = gm.graph
     pattern_graph: Graph = symbolic_trace(pattern).graph
 
-    matcher = SubgraphMatcher(pattern_graph, match_output=False, match_placeholder=False,
-                              remove_overlapping_matches=True)
+    matcher = SubgraphMatcher(
+        pattern_graph, match_output=False, match_placeholder=False, remove_overlapping_matches=True
+    )
     _matches: List[InternalMatch] = matcher.match(original_graph)
 
     # As we progressively replace nodes, we'll need to keep track of how the match results should change

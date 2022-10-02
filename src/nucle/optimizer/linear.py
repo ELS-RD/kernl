@@ -2,8 +2,8 @@ from typing import Callable
 
 import torch
 
-from implementations.linear_layer import linear_layer
-from utils.extended_matcher import replace_pattern
+from nucle.implementations.linear_layer import linear_layer
+from nucle.utils.extended_matcher import replace_pattern
 
 
 def linear_wrapper(v: torch.Tensor, linear: torch.nn.Linear, activation=""):
@@ -16,7 +16,7 @@ def linear_wrapper(v: torch.Tensor, linear: torch.nn.Linear, activation=""):
     return linear_layer(v, linear.weight, linear.bias, activation=activation)
 
 
-torch.fx.wrap('linear_wrapper')
+torch.fx.wrap("linear_wrapper")
 
 
 def replace_linear_activation(gm: torch.fx.GraphModule, activation_module: Callable, activation: str):

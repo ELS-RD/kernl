@@ -1,4 +1,4 @@
-from typing import Union, Optional
+from typing import Optional, Union
 
 import torch
 import triton
@@ -11,8 +11,15 @@ from torch.cuda.amp import custom_fwd
 
 
 # Similar to https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py#L213
-def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float,
-                        is_causal: bool, attention_mask: Union[torch.Tensor, None]) -> torch.Tensor:
+def attention_reference(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    output: torch.Tensor,
+    sm_scale: float,
+    is_causal: bool,
+    attention_mask: Union[torch.Tensor, None],
+) -> torch.Tensor:
     """
     Reference implementation for attention
     @param q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
@@ -39,30 +46,45 @@ def attention_reference(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, outpu
 
 @triton.jit
 def _fwd_kernel(
-        heads,
-        seq_length,
-        Q,
-        K,
-        V,
-        sm_scale,
-        mask,
-        TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
-        output,
-        q_batch_stride, q_head_stride, q_m_stride, q_k_stride,
-        k_batch_stride, k_head_stride, k_n_stride, k_k_stride,  # We name n,k instead of k,n because of the transpose
-        v_batch_stride, v_head_stride, v_k_stride, v_n_stride,
-        o_batch_stride, o_head_stride, o_m_stride, o_n_stride,
-        mask_batch_stride, mask_head_stride, mask_m_stride, mask_k_stride,
-        min_clamp_value,
-        MASK_BATCH_SIZE: tl.constexpr,
-        MASK_HEAD_SIZE: tl.constexpr,
-        MASK_M_SIZE: tl.constexpr,
-        MASK_K_SIZE: tl.constexpr,
-        HAS_MASK: tl.constexpr,
-        IS_CAUSAL: tl.constexpr,
-        BLOCK_M: tl.constexpr,
-        BLOCK_DHEAD: tl.constexpr,
-        BLOCK_N: tl.constexpr,
+    heads,
+    seq_length,
+    Q,
+    K,
+    V,
+    sm_scale,
+    mask,
+    TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
+    output,
+    q_batch_stride,
+    q_head_stride,
+    q_m_stride,
+    q_k_stride,
+    k_batch_stride,
+    k_head_stride,
+    k_n_stride,
+    k_k_stride,  # We name n,k instead of k,n because of the transpose
+    v_batch_stride,
+    v_head_stride,
+    v_k_stride,
+    v_n_stride,
+    o_batch_stride,
+    o_head_stride,
+    o_m_stride,
+    o_n_stride,
+    mask_batch_stride,
+    mask_head_stride,
+    mask_m_stride,
+    mask_k_stride,
+    min_clamp_value,
+    MASK_BATCH_SIZE: tl.constexpr,
+    MASK_HEAD_SIZE: tl.constexpr,
+    MASK_M_SIZE: tl.constexpr,
+    MASK_K_SIZE: tl.constexpr,
+    HAS_MASK: tl.constexpr,
+    IS_CAUSAL: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_DHEAD: tl.constexpr,
+    BLOCK_N: tl.constexpr,
 ):
     """
     Computes attention
@@ -121,19 +143,28 @@ def _fwd_kernel(
     current_head_idx = head_idx % heads
     # memory offsets matrices on whole Q, K, V matrices
     # Offsets for the current block on matrix Q
-    off_q = current_batch_idx * q_batch_stride \
-            + current_head_idx * q_head_stride \
-            + offs_m[:, None] * q_m_stride + offs_d[None, :] * q_k_stride
+    off_q = (
+        current_batch_idx * q_batch_stride
+        + current_head_idx * q_head_stride
+        + offs_m[:, None] * q_m_stride
+        + offs_d[None, :] * q_k_stride
+    )
 
     # Offsets for the first block on matrix K
-    off_k = current_batch_idx * k_batch_stride \
-            + current_head_idx * k_head_stride + offs_n[:, None] * k_n_stride \
-            + offs_d[None, :] * k_k_stride
+    off_k = (
+        current_batch_idx * k_batch_stride
+        + current_head_idx * k_head_stride
+        + offs_n[:, None] * k_n_stride
+        + offs_d[None, :] * k_k_stride
+    )
 
     # Offsets for the first block on matrix V
-    off_v = current_batch_idx * v_batch_stride \
-            + current_head_idx * v_head_stride + offs_n[:, None] * q_m_stride \
-            + offs_d[None, :] * q_k_stride
+    off_v = (
+        current_batch_idx * v_batch_stride
+        + current_head_idx * v_head_stride
+        + offs_n[:, None] * q_m_stride
+        + offs_d[None, :] * q_k_stride
+    )
 
     # pointers to blocks in Q, K, V
     q_ptrs = Q + off_q
@@ -157,10 +188,10 @@ def _fwd_kernel(
 
     n_end = seq_length
     if IS_CAUSAL:
-        n_end = (m_block_idx + 1) * BLOCK_M,
+        n_end = ((m_block_idx + 1) * BLOCK_M,)
 
     if HAS_MASK:
-        mask_batch_idx = current_batch_idx,
+        mask_batch_idx = (current_batch_idx,)
         if MASK_BATCH_SIZE == 1:
             mask_batch_idx = 0
 
@@ -246,20 +277,30 @@ def _fwd_kernel(
     # For some reason we need to re-init this variable
     # The other variables in the original implementations seem not needed
     offs_n = tl.arange(0, BLOCK_DHEAD)
-    off_o = current_batch_idx * o_batch_stride \
-            + current_head_idx * o_head_stride + offs_m[:, None] * o_m_stride \
-            + offs_n[None, :] * o_n_stride
+    off_o = (
+        current_batch_idx * o_batch_stride
+        + current_head_idx * o_head_stride
+        + offs_m[:, None] * o_m_stride
+        + offs_n[None, :] * o_n_stride
+    )
 
     out_ptrs = output + off_o
     tl.store(out_ptrs, acc)
 
 
 class Attention(torch.autograd.Function):
-
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx: FunctionCtx, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor,
-                sm_scale: float, is_causal: bool, attention_mask: Optional[torch.Tensor] = None):
+    def forward(
+        ctx: FunctionCtx,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        output: torch.Tensor,
+        sm_scale: float,
+        is_causal: bool,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
         """
         Computes attention.
         FP32 input and output are not supported.
@@ -277,7 +318,9 @@ class Attention(torch.autograd.Function):
         # Constraints
         # Queries and keys have the same d_k size
         assert q.shape[-1] == k.shape[-1]
-        assert q.dtype == k.dtype == v.dtype == output.dtype, f"All tensors must have the same dtype: {q.dtype}, {k.dtype}, {v.dtype}, {output.dtype}"
+        assert (
+            q.dtype == k.dtype == v.dtype == output.dtype
+        ), f"All tensors must have the same dtype: {q.dtype}, {k.dtype}, {v.dtype}, {output.dtype}"
         assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
         batch, heads, seq_length, dhead = q.size()
 
@@ -290,9 +333,15 @@ class Attention(torch.autograd.Function):
 
         HAS_MASK = False
         if attention_mask is not None:
-            assert attention_mask.size(0) == batch or attention_mask.size(0) == 1, "Incompatible broadcast batch dimension"
-            assert attention_mask.size(1) == heads or attention_mask.size(1) == 1, "Incompatible broadcast heads dimension"
-            assert attention_mask.size(2) == seq_length or attention_mask.size(2) == 1, "Incompatible broadcast seq_length dimension"
+            assert (
+                attention_mask.size(0) == batch or attention_mask.size(0) == 1
+            ), "Incompatible broadcast batch dimension"
+            assert (
+                attention_mask.size(1) == heads or attention_mask.size(1) == 1
+            ), "Incompatible broadcast heads dimension"
+            assert (
+                attention_mask.size(2) == seq_length or attention_mask.size(2) == 1
+            ), "Incompatible broadcast seq_length dimension"
             assert attention_mask.size(3) == seq_length, "Last size of mask must be seq_length to broadcast on QK^t"
 
             HAS_MASK = True
@@ -307,10 +356,22 @@ class Attention(torch.autograd.Function):
             mask=attention_mask,
             TMP=tmp,
             output=output,
-            q_batch_stride=q.stride(0), q_head_stride=q.stride(1), q_m_stride=q.stride(2), q_k_stride=q.stride(3),
-            k_batch_stride=k.stride(0), k_head_stride=k.stride(1), k_n_stride=k.stride(2), k_k_stride=k.stride(3),
-            v_batch_stride=v.stride(0), v_head_stride=v.stride(1), v_k_stride=v.stride(2), v_n_stride=v.stride(3),
-            o_batch_stride=output.stride(0), o_head_stride=output.stride(1), o_m_stride=output.stride(2), o_n_stride=output.stride(3),
+            q_batch_stride=q.stride(0),
+            q_head_stride=q.stride(1),
+            q_m_stride=q.stride(2),
+            q_k_stride=q.stride(3),
+            k_batch_stride=k.stride(0),
+            k_head_stride=k.stride(1),
+            k_n_stride=k.stride(2),
+            k_k_stride=k.stride(3),
+            v_batch_stride=v.stride(0),
+            v_head_stride=v.stride(1),
+            v_k_stride=v.stride(2),
+            v_n_stride=v.stride(3),
+            o_batch_stride=output.stride(0),
+            o_head_stride=output.stride(1),
+            o_m_stride=output.stride(2),
+            o_n_stride=output.stride(3),
             mask_batch_stride=attention_mask.stride(0) if HAS_MASK else 0,
             mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
             mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
@@ -332,6 +393,13 @@ class Attention(torch.autograd.Function):
         return output
 
 
-def attention_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float,
-                      is_causal: bool = False, attention_mask: Optional[torch.Tensor] = None):
+def attention_forward(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    output: torch.Tensor,
+    sm_scale: float,
+    is_causal: bool = False,
+    attention_mask: Optional[torch.Tensor] = None,
+):
     return Attention.apply(q, k, v, output, sm_scale, is_causal, attention_mask)

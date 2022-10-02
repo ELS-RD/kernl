@@ -1,7 +1,8 @@
-import torch
 import pytest
-from implementations.batched_matmul import batched_matmul
+import torch
+
 from conftest import set_seed
+from nucle.implementations.batched_matmul import batched_matmul
 
 
 @set_seed()
@@ -11,8 +12,8 @@ from conftest import set_seed
 @pytest.mark.parametrize("batch", [1, 16], ids=lambda x: f"batch={x}")
 @pytest.mark.parametrize("implementation", ["pytorch", "triton"])
 def test_benchmark(benchmark, m, n, k, batch, implementation):
-    a = torch.randn((batch, m, k), device='cuda', dtype=torch.float16, requires_grad=False)
-    b = torch.randn((batch, k, n), device='cuda', dtype=torch.float16, requires_grad=False)
+    a = torch.randn((batch, m, k), device="cuda", dtype=torch.float16, requires_grad=False)
+    b = torch.randn((batch, k, n), device="cuda", dtype=torch.float16, requires_grad=False)
     expected = torch.matmul(a, b)
     if implementation == "pytorch":
         value = benchmark(torch.matmul, a, b)

@@ -10,13 +10,13 @@ import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
 from torch.cuda.amp import custom_fwd
-
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
-from implementations import activation_func
+from nucle.implementations import activation_func
 
 
 # CREDITS: Initially inspired by the Triton tutorial on matrix multiplications
+
 
 def init_to_zero(name):
     return lambda nargs: nargs[name].zero_()
@@ -30,8 +30,12 @@ def get_configs_io_bound():
                 for block_n in [32, 64, 128, 256]:
                     num_warps = 2 if block_n <= 64 else 4
                     configs.append(
-                        triton.Config({'BLOCK_M': block_m, 'BLOCK_N': block_n, 'BLOCK_K': block_k, 'SPLIT_K': 1},
-                                      num_stages=num_stages, num_warps=num_warps))
+                        triton.Config(
+                            {"BLOCK_M": block_m, "BLOCK_N": block_n, "BLOCK_K": block_k, "SPLIT_K": 1},
+                            num_stages=num_stages,
+                            num_warps=num_warps,
+                        )
+                    )
                     # split_k not used
                     # for split_k in [2, 4, 8, 16]:
                     #     configs.append(triton.Config(
@@ -40,69 +44,70 @@ def get_configs_io_bound():
     return configs
 
 
-@triton.heuristics({
-    'EVEN_K': lambda args: args['K'] % (args['BLOCK_K'] * args['SPLIT_K']) == 0,
-})
+@triton.heuristics(
+    {
+        "EVEN_K": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
+    }
+)
 @triton.autotune(
     configs=[
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
-                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=3, num_warps=8),
-                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 32, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
-                # good for int8
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3,
-                              num_warps=8),
-                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=3,
-                              num_warps=8),
-                triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 256, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 128, 'SPLIT_K': 1}, num_stages=4,
-                              num_warps=4),
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 128, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=4, num_warps=4),
-                triton.Config({'BLOCK_M': 64, 'BLOCK_N': 32, 'BLOCK_K': 64, 'SPLIT_K': 1}, num_stages=5, num_warps=2),
-            ] + get_configs_io_bound(),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 64, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 256, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 32, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=5, num_warps=2),
+        # good for int8
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 64, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 256, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 32, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=5, num_warps=2),
+    ]
+    + get_configs_io_bound(),
     key=["M", "N", "K"],
-    prune_configs_by={
-        'early_config_prune': early_config_prune,
-        'perf_model': estimate_matmul_time,
-        'top_k': 10
-    },
+    prune_configs_by={"early_config_prune": early_config_prune, "perf_model": estimate_matmul_time, "top_k": 10},
 )
 @triton.jit
 def kernel_fma(
-        # Pointers to matrices
-        C, ACT_INPUTS, A, B, bias,
-        # Matrix dimensions
-        M,
-        N,
-        K,
-        # The stride variables represent how much to increase the ptr by when moving by 1
-        # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
-        # by to get the element one row down (A has M rows)
-        stride_om,
-        stride_on,
-        stride_im,
-        stride_ik,
-        stride_wn,
-        stride_wk,
-        # Meta-parameters
-        BLOCK_M: tl.constexpr, GROUP_M: tl.constexpr,
-        BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
-        # split k not used, not performant with activation, kept because early_config_prune is expecting it
-        SPLIT_K: tl.constexpr,
-        EVEN_K: tl.constexpr,
-        BIAS: tl.constexpr,
-        SAVE_ACT_INPUTS: tl.constexpr,
-        ACTIVATION: tl.constexpr,
+    # Pointers to matrices
+    C,
+    ACT_INPUTS,
+    A,
+    B,
+    bias,
+    # Matrix dimensions
+    M,
+    N,
+    K,
+    # The stride variables represent how much to increase the ptr by when moving by 1
+    # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
+    # by to get the element one row down (A has M rows)
+    stride_om,
+    stride_on,
+    stride_im,
+    stride_ik,
+    stride_wn,
+    stride_wk,
+    # Meta-parameters
+    BLOCK_M: tl.constexpr,
+    GROUP_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+    # split k not used, not performant with activation, kept because early_config_prune is expecting it
+    SPLIT_K: tl.constexpr,
+    EVEN_K: tl.constexpr,
+    BIAS: tl.constexpr,
+    SAVE_ACT_INPUTS: tl.constexpr,
+    ACTIVATION: tl.constexpr,
 ):
-    # fmt: on
 
     """
     Kernel for computing Out = activation(A x W + C)
@@ -153,8 +158,8 @@ def kernel_fma(
             a = tl.load(A)
             b = tl.load(B)
         else:
-            a = tl.load(A, mask=rk[None, :] < k, other=0.)
-            b = tl.load(B, mask=rk[:, None] < k, other=0.)
+            a = tl.load(A, mask=rk[None, :] < k, other=0.0)
+            b = tl.load(B, mask=rk[:, None] < k, other=0.0)
         acc += tl.dot(a, b)
 
         A += BLOCK_K * stride_ik
@@ -185,16 +190,15 @@ def kernel_fma(
 
 
 class LinearLayer(torch.autograd.Function):
-
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
     def forward(
-            ctx: FunctionCtx,
-            x: torch.Tensor,
-            weight: torch.Tensor,
-            bias: Optional[torch.Tensor],
-            activation: str,
-            act_inputs: Optional[torch.Tensor],
+        ctx: FunctionCtx,
+        x: torch.Tensor,
+        weight: torch.Tensor,
+        bias: Optional[torch.Tensor],
+        activation: str,
+        act_inputs: Optional[torch.Tensor],
     ) -> torch.Tensor:
         """
         Compute e = activation(x @ weight + bias).
@@ -208,10 +212,12 @@ class LinearLayer(torch.autograd.Function):
         :return: result tensor
         """
         x_ = x if x.ndim == 2 else x.flatten(0, 1)
+
         assert x.dtype == weight.dtype, f"Input and weight must have the same dtype, got {x.dtype} and {weight.dtype}"
         if bias is not None:
             assert x.dtype == bias.dtype, f"Input and bias must have the same dtype, got {x.dtype} and {bias.dtype}"
         assert x_.shape[1] == weight.shape[1], f"Incompatible dimensions: {x_.shape} - {weight.shape}"
+
         assert bias is None or bias.is_contiguous()
         assert bias is None or bias.shape[0] == weight.shape[0], "Incompatible dimensions in between weight and bias"
         assert weight.is_contiguous()
@@ -224,11 +230,15 @@ class LinearLayer(torch.autograd.Function):
         # 1D launch kernel where each block gets its own program.
         grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
 
-        # fmt: off
         kernel_fma[grid](
-            outputs, act_inputs, x_, weight,  # data ptrs
+            outputs,
+            act_inputs,
+            x_,
+            weight,  # data ptrs
             bias if bias is not None else x,  # auto skip bias if not present
-            M, N, K,  # shapes
+            M,
+            N,
+            K,  # shapes
             outputs.stride(0),  # strides
             outputs.stride(1),
             x_.stride(0),
@@ -246,10 +256,11 @@ class LinearLayer(torch.autograd.Function):
         return outputs
 
 
-def linear_layer(x: torch.Tensor,
-                 weight: torch.Tensor,
-                 bias: Optional[torch.Tensor],
-                 activation="",
-                 act_inputs: Optional[torch.Tensor] = None,
-                 ) -> torch.Tensor:
+def linear_layer(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    bias: Optional[torch.Tensor],
+    activation="",
+    act_inputs: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
     return LinearLayer.apply(x, weight, bias, activation, act_inputs)

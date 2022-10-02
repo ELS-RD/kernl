@@ -5,7 +5,8 @@ Optimized kernels for `transformer` models.
 ## Install dependencies
 
 ```shell
-pip install -r requirements.txt
+git clone https://github.com/ELS-RD/nucle-ai
+pip install -e .
 ```
 
 ## Test and Benchmark
@@ -59,3 +60,12 @@ print it with `utils.graph_report` or by printing the code `print(you_graph_modu
 Then you can use [replace_pattern](https://pytorch.org/docs/stable/fx.html#torch.fx.replace_pattern) to replace the
 pattern in the graph. We have our own version of `replace_pattern` with some enhancements to work with modules for
 example. You can find examples of that in `optimizer` folder.
+
+## Code formatting
+
+We use `black` / `isort` / `flake8` to format the code. You can run them with:
+
+```shell
+make source_code_format
+make source_code_check_format
+```

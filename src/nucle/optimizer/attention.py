@@ -1,14 +1,14 @@
 import torch
 
-from implementations.attention import attention_forward
-from utils.extended_matcher import replace_pattern
+from nucle.implementations.attention import attention_forward
+from nucle.utils.extended_matcher import replace_pattern
 
 
 def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
     return attention_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
 
 
-torch.fx.wrap('attention_wrapper')
+torch.fx.wrap("attention_wrapper")
 
 
 def fuse_attention(gm: torch.fx.GraphModule, is_causal: bool):

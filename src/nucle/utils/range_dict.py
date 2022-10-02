@@ -13,6 +13,7 @@ class RangeKeyDict:
 
     def __getitem__(self, number):
         from functools import reduce
+
         _my_dict = self._my_dict
         try:
             result = next((_my_dict[key] for key in _my_dict if list(reduce(lambda s, f: filter(f, s), key, [number]))))

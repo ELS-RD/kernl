@@ -1,9 +1,7 @@
-import random
-
 import torch
 
 from conftest import set_seed
-from utils.debugger import TritonDebugger
+from nucle.utils.debugger import TritonDebugger
 
 
 @set_seed()
@@ -16,12 +14,12 @@ def test_add():
     tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, y, o], shuffle=True)
 
     def add_kernel(
-            x_ptr,  # *Pointer* to first input vector
-            y_ptr,  # *Pointer* to second input vector
-            output_ptr,  # *Pointer* to output vector
-            n_elements,  # Size of the vector
-            BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process
-            # NOTE: `constexpr` so it can be used as a shape value
+        x_ptr,  # *Pointer* to first input vector
+        y_ptr,  # *Pointer* to second input vector
+        output_ptr,  # *Pointer* to output vector
+        n_elements,  # Size of the vector
+        BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process
+        # NOTE: `constexpr` so it can be used as a shape value
     ):
         # There are multiple 'program's processing different data. We identify which program
         # we are here
@@ -66,10 +64,7 @@ def test_softmax():
     o = torch.zeros_like(x, device="cuda")
     tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], inputs=[x, o], shuffle=True)
 
-    def softmax_kernel(
-            output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols,
-            BLOCK_SIZE: tl.constexpr
-    ):
+    def softmax_kernel(output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols, BLOCK_SIZE: tl.constexpr):
         # The rows of the softmax are independent, so we parallelize across those
         row_idx = tl.program_id(0)
         # The stride represents how much we need to increase the pointer to advance 1 row
@@ -79,7 +74,7 @@ def test_softmax():
         col_offsets = tl.arange(0, BLOCK_SIZE)
         input_ptrs = row_start_ptr + col_offsets
         # Load the row into SRAM, using a mask since BLOCK_SIZE may be > than n_cols
-        row = tl.load(input_ptrs, mask=col_offsets < n_cols, other=-float('inf'))
+        row = tl.load(input_ptrs, mask=col_offsets < n_cols, other=-float("inf"))
         # Substract maximum for numerical stability
         row_minus_max = row - tl.max(row, axis=0)
         # Note that exponentials in Triton are fast but approximate (i.e., think __expf in CUDA)
@@ -114,28 +109,38 @@ def test_matmul():
     A = torch.rand((m, k), device="cuda", dtype=torch.float16)
     B = torch.rand((k, n), device="cuda", dtype=torch.float16)
     C = torch.zeros((m, n), device="cuda", dtype=torch.float16)
-    tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C],
-                        shuffle=True)
+    tl = TritonDebugger(
+        [TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C], shuffle=True
+    )
 
     def leaky_relu(x):
         x = x + 1
         return tl.where(x >= 0, x, 0.01 * x)
 
     def matmul_kernel(
-            # Pointers to matrices
-            a_ptr, b_ptr, c_ptr,
-            # Matrix dimensions
-            M, N, K,
-            # The stride variables represent how much to increase the ptr by when moving by 1
-            # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
-            # by to get the element one row down (A has M rows)
-            stride_am, stride_ak,
-            stride_bk, stride_bn,
-            stride_cm, stride_cn,
-            # Meta-parameters
-            BLOCK_SIZE_M: tl.constexpr, BLOCK_SIZE_N: tl.constexpr, BLOCK_SIZE_K: tl.constexpr,
-            GROUP_SIZE_M: tl.constexpr,
-            ACTIVATION: tl.constexpr,
+        # Pointers to matrices
+        a_ptr,
+        b_ptr,
+        c_ptr,
+        # Matrix dimensions
+        M,
+        N,
+        K,
+        # The stride variables represent how much to increase the ptr by when moving by 1
+        # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
+        # by to get the element one row down (A has M rows)
+        stride_am,
+        stride_ak,
+        stride_bk,
+        stride_bn,
+        stride_cm,
+        stride_cn,
+        # Meta-parameters
+        BLOCK_SIZE_M: tl.constexpr,
+        BLOCK_SIZE_N: tl.constexpr,
+        BLOCK_SIZE_K: tl.constexpr,
+        GROUP_SIZE_M: tl.constexpr,
+        ACTIVATION: tl.constexpr,
     ):
         """Kernel for computing the matmul C = A x B.
         A has shape (M, K), B has shape (K, N) and C has shape (M, N)
@@ -235,7 +240,8 @@ def test_matmul():
     assert tl.total_gm_write == m * n
     # we load tile a and tile b for each position on M and N, and repeat along K axis
     assert tl.total_gm_read == ((block_m * block_k) + (block_k * block_n)) * (k / block_k) * (n / block_n) * (
-                m / block_m)
+        m / block_m
+    )
 
 
 @set_seed()
@@ -247,12 +253,12 @@ def test_dropout():
     tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], inputs=[x, o], shuffle=True)
 
     def _seeded_dropout(
-            x_ptr,
-            output_ptr,
-            n_elements,
-            p,
-            seed,
-            BLOCK_SIZE: tl.constexpr,
+        x_ptr,
+        output_ptr,
+        n_elements,
+        p,
+        seed,
+        BLOCK_SIZE: tl.constexpr,
     ):
         # compute memory offsets of elements handled by this instance
         pid = tl.program_id(axis=0)
@@ -270,13 +276,14 @@ def test_dropout():
 
     while tl.has_next():
         tl.new_program()
-        _seeded_dropout(x_ptr=tl.get_ptr(x),
-                        output_ptr=tl.get_ptr(o),
-                        n_elements=x.numel(),
-                        p=p,
-                        seed=123,
-                        BLOCK_SIZE=block_m,
-                        )
+        _seeded_dropout(
+            x_ptr=tl.get_ptr(x),
+            output_ptr=tl.get_ptr(o),
+            n_elements=x.numel(),
+            p=p,
+            seed=123,
+            BLOCK_SIZE=block_m,
+        )
 
     assert torch.allclose(torch.sum(o == 0) / x.numel(), torch.tensor(p), atol=0.1)
     # check L1 norm are similar (+/- 10%)
@@ -294,7 +301,7 @@ def test_layernorm():
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
-    dy = .1 * torch.randn_like(x)
+    dy = 0.1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
     mean = torch.zeros((M,), device="cuda")
@@ -304,13 +311,16 @@ def test_layernorm():
     tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=True)
 
     def _layer_norm_fwd_fused(
-            Out,
-            A,
-            Weight,
-            Bias,
-            Mean, Rstd,
-            stride, N, eps,
-            BLOCK_SIZE: tl.constexpr,
+        Out,
+        A,
+        Weight,
+        Bias,
+        Mean,
+        Rstd,
+        stride,
+        N,
+        eps,
+        BLOCK_SIZE: tl.constexpr,
     ):
         # position of elements processed by this program
         row = tl.program_id(0)
@@ -321,15 +331,15 @@ def test_layernorm():
         _mean = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
         for off in range(0, N, BLOCK_SIZE):
             cols = off + tl.arange(0, BLOCK_SIZE)
-            a = tl.load(A + cols, mask=cols < N, other=0., eviction_policy="evict_last").to(tl.float32)
+            a = tl.load(A + cols, mask=cols < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
             _mean += a
         mean = tl.sum(_mean, axis=0) / N
         # compute variance
         _var = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
         for off in range(0, N, BLOCK_SIZE):
             cols = off + tl.arange(0, BLOCK_SIZE)
-            a = tl.load(A + cols, mask=cols < N, other=0., eviction_policy="evict_last").to(tl.float32)
-            a = tl.where(cols < N, a - mean, 0.)
+            a = tl.load(A + cols, mask=cols < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
+            a = tl.where(cols < N, a - mean, 0.0)
             _var += a * a
         var = tl.sum(_var, axis=0) / N
         rstd = 1 / tl.sqrt(var + eps)
@@ -343,7 +353,7 @@ def test_layernorm():
             mask = cols < N
             weight = tl.load(Weight + cols, mask=mask)
             bias = tl.load(Bias + cols, mask=mask)
-            a = tl.load(A + cols, mask=mask, other=0., eviction_policy="evict_first").to(tl.float32)
+            a = tl.load(A + cols, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
             a_hat = (a - mean) * rstd
             out = a_hat * weight + bias
             # # write-back
@@ -366,8 +376,9 @@ def test_layernorm():
 
     assert torch.allclose(mean, torch.mean(x, dim=1), atol=0.1)
     assert torch.allclose(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
-    assert torch.allclose(out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps),
-                          atol=0.1)
+    assert torch.allclose(
+        out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1
+    )
     # read M times a block size of the 5 inputs
     assert tl.total_gm_read == M * (5 * BLOCK_SIZE * (N / BLOCK_SIZE))
     # mean + std + output
@@ -377,6 +388,7 @@ def test_layernorm():
 @set_seed()
 def test_layernorm_welford_variance():
     import torch
+
     M, N = 2, 200
     BLOCK_SIZE = 16  # need to be a power of 2
     x_shape = (M, N)
@@ -384,7 +396,7 @@ def test_layernorm_welford_variance():
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
-    dy = .1 * torch.randn_like(x)
+    dy = 0.1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
     mean = torch.zeros((M,), device="cuda")
@@ -394,13 +406,16 @@ def test_layernorm_welford_variance():
     tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=False)
 
     def _layer_norm_fwd_fused(
-            Out,
-            A,
-            Weight,
-            Bias,
-            Mean, Rstd,
-            stride, N, eps,
-            BLOCK_SIZE: tl.constexpr,
+        Out,
+        A,
+        Weight,
+        Bias,
+        Mean,
+        Rstd,
+        stride,
+        N,
+        eps,
+        BLOCK_SIZE: tl.constexpr,
     ):
         # position of elements processed by this program
         row = tl.program_id(0)
@@ -415,7 +430,7 @@ def test_layernorm_welford_variance():
             nb_block_col = end - start
             cols = start + tl.arange(0, BLOCK_SIZE)
             mask = cols < N
-            a = tl.load(A + cols, mask=mask, other=0., eviction_policy="evict_last").to(tl.float32)
+            a = tl.load(A + cols, mask=mask, other=0.0, eviction_policy="evict_last").to(tl.float32)
 
             old_mean = mean
             block_mean = tl.sum(a * mask, axis=0) / nb_block_col
@@ -441,7 +456,7 @@ def test_layernorm_welford_variance():
             mask = cols < N
             weight = tl.load(Weight + cols, mask=mask)
             bias = tl.load(Bias + cols, mask=mask)
-            a = tl.load(A + cols, mask=mask, other=0., eviction_policy="evict_first").to(tl.float32)
+            a = tl.load(A + cols, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
             a_hat = (a - mean) * rstd
             out = a_hat * weight + bias
             # # write-back
@@ -464,8 +479,9 @@ def test_layernorm_welford_variance():
 
     assert torch.allclose(mean, torch.mean(x, dim=1), atol=0.1)
     assert torch.allclose(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
-    assert torch.allclose(out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps),
-                          atol=0.1)
+    assert torch.allclose(
+        out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1
+    )
     # read M times a block size of the 5 inputs
     assert tl.total_gm_read == M * (4 * BLOCK_SIZE * (N / BLOCK_SIZE))
     # mean + std + output
@@ -475,9 +491,9 @@ def test_layernorm_welford_variance():
 @set_seed()
 def test_flash_attention():
     Z, H, N_CTX, D_HEAD = 3, 2, 2048, 64
-    q = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=.5)
-    k = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=.5)
-    v = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=.5)
+    q = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=0.5)
+    k = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=0.5)
+    v = torch.empty((Z, H, N_CTX, D_HEAD), device="cuda", dtype=torch.float16).normal_(mean=0, std=0.5)
     sm_scale = 0.3
     dout = torch.randn_like(q).float()
     # reference implementation
@@ -497,20 +513,43 @@ def test_flash_attention():
     assert Lq == Lk and Lk == Lv
     assert Lk in {16, 32, 64, 128}
     BLOCK = 128
-    tl = TritonDebugger([TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]],
-                        inputs=[q, k, v, dout, L, m, tmp], shuffle=True)
+    tl = TritonDebugger(
+        [TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]],
+        inputs=[q, k, v, dout, L, m, tmp],
+        shuffle=True,
+    )
 
     def _fwd_kernel(
-            Q, K, V, sm_scale,
-            TMP, L, M,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
-            Out,
-            stride_qz, stride_qh, stride_qm, stride_qk,
-            stride_kz, stride_kh, stride_kn, stride_kk,
-            stride_vz, stride_vh, stride_vk, stride_vn,
-            stride_oz, stride_oh, stride_om, stride_on,
-            Z, H, N_CTX,
-            BLOCK_M: tl.constexpr, BLOCK_DMODEL: tl.constexpr,
-            BLOCK_N: tl.constexpr,
+        Q,
+        K,
+        V,
+        sm_scale,
+        TMP,
+        L,
+        M,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
+        Out,
+        stride_qz,
+        stride_qh,
+        stride_qm,
+        stride_qk,
+        stride_kz,
+        stride_kh,
+        stride_kn,
+        stride_kk,
+        stride_vz,
+        stride_vh,
+        stride_vk,
+        stride_vn,
+        stride_oz,
+        stride_oh,
+        stride_om,
+        stride_on,
+        Z,
+        H,
+        N_CTX,
+        BLOCK_M: tl.constexpr,
+        BLOCK_DMODEL: tl.constexpr,
+        BLOCK_N: tl.constexpr,
     ):
         start_m = tl.program_id(0)
         off_hz = tl.program_id(1)
@@ -591,13 +630,28 @@ def test_flash_attention():
             tl.get_ptr(L),
             tl.get_ptr(m),
             tl.get_ptr(dout),
-            q.stride(0), q.stride(1), q.stride(2), q.stride(3),
-            k.stride(0), k.stride(1), k.stride(2), k.stride(3),
-            v.stride(0), v.stride(1), v.stride(2), v.stride(3),
-            dout.stride(0), dout.stride(1), dout.stride(2), dout.stride(3),
-            q.shape[0], q.shape[1], q.shape[2],
-            BLOCK_M=BLOCK, BLOCK_N=BLOCK,
-            BLOCK_DMODEL=Lk
+            q.stride(0),
+            q.stride(1),
+            q.stride(2),
+            q.stride(3),
+            k.stride(0),
+            k.stride(1),
+            k.stride(2),
+            k.stride(3),
+            v.stride(0),
+            v.stride(1),
+            v.stride(2),
+            v.stride(3),
+            dout.stride(0),
+            dout.stride(1),
+            dout.stride(2),
+            dout.stride(3),
+            q.shape[0],
+            q.shape[1],
+            q.shape[2],
+            BLOCK_M=BLOCK,
+            BLOCK_N=BLOCK,
+            BLOCK_DMODEL=Lk,
         )
 
     assert torch.allclose(dout, ref_out.float(), atol=1e-2)

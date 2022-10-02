@@ -1,7 +1,7 @@
 import torch
 
-from implementations.layer_norm import layer_norm
-from utils.extended_matcher import replace_pattern
+from nucle.implementations.layer_norm import layer_norm
+from nucle.utils.extended_matcher import replace_pattern
 
 
 def layer_norm_wrapper(v: torch.Tensor, layernorm: torch.nn.LayerNorm):
@@ -14,7 +14,7 @@ def layer_norm_wrapper(v: torch.Tensor, layernorm: torch.nn.LayerNorm):
     return layer_norm(v, layernorm.weight, layernorm.bias, layernorm.eps)
 
 
-torch.fx.wrap('layer_norm_wrapper')
+torch.fx.wrap("layer_norm_wrapper")
 
 
 def replace_layer_norm(gm: torch.fx.GraphModule):

@@ -3,7 +3,12 @@ from typing import Callable, Union
 import torch
 
 
-def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]], copy_outputs: bool = False, pool: (int, int) = torch.cuda.graph_pool_handle()):
+def cuda_graphs_wrapper(
+    model: Callable,
+    inputs: Union[list[torch.Tensor], tuple[torch.Tensor]],
+    copy_outputs: bool = False,
+    pool: (int, int) = torch.cuda.graph_pool_handle(),
+):
     """
     From torchdynamo
     """

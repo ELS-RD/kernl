@@ -1,14 +1,19 @@
+import time
+from typing import Any, Dict, List
+
+import numpy as np
+import tabulate
 import torch
 import torch.fx
-import tabulate, time
-import numpy as np
-from typing import Any, Dict, List
-from torch.fx import Interpreter, GraphModule
+from torch.fx import GraphModule, Interpreter
 
-# Originaly taken from https://github.com/pytorch/tutorials/blob/4918fe4bf3df96b233ca134c985ffb09ea45f92c/intermediate_source/fx_profiling_tutorial.py
+
+# Originaly taken from
+# https://github.com/pytorch/tutorials/blob/4918fe4bf3df96b233ca134c985ffb09ea45f92c/intermediate_source/fx_profiling_tutorial.py
+
 
 class ProfilingInterpreter(Interpreter):
-    def __init__(self, module : GraphModule, mode: str = "cpu"):
+    def __init__(self, module: GraphModule, mode: str = "cpu"):
         super().__init__(module)
         self.mode = mode
         # We are going to store away two things here:
@@ -98,8 +103,7 @@ class ProfilingInterpreter(Interpreter):
             name = str(node)
             if node.op == "call_module":
                 name += str(type(dict(self.module.named_modules())[node.target]))
-            node_summaries.append(
-                [node.op, name, mean_runtime, pct_total])
+            node_summaries.append([node.op, name, mean_runtime, pct_total])
 
         # One of the most important questions to answer when doing performance
         # profiling is "Which op(s) took the longest?". We can make this easy
@@ -109,7 +113,5 @@ class ProfilingInterpreter(Interpreter):
 
         # Use the ``tabulate`` library to create a well-formatted table
         # presenting our summary information
-        headers: List[str] = [
-            'Op type', 'Op', 'Average runtime (s)', 'Pct total runtime'
-        ]
+        headers: List[str] = ["Op type", "Op", "Average runtime (s)", "Pct total runtime"]
         return tabulate.tabulate(node_summaries, headers=headers)

@@ -1,5 +1,4 @@
 import torch
-
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
@@ -20,16 +19,7 @@ def pytorch_naive_layernorm(a: torch.Tensor, weight: torch.Tensor, bias: torch.T
 
 
 @triton.jit
-def layer_norm_xformers(Y,
-                        X,
-                        W,
-                        B,
-                        M,
-                        V,
-                        x_stride,
-                        N,
-                        eps,
-                        BLOCK_SIZE: tl.constexpr):
+def layer_norm_xformers(Y, X, W, B, M, V, x_stride, N, eps, BLOCK_SIZE: tl.constexpr):
     """
     LayerNorm forward pass for a single feature.
     Won't work for very large tensors.
@@ -66,16 +56,16 @@ def layer_norm_xformers(Y,
 
 @triton.jit
 def _layer_norm_fwd_fused_single_pass(
-        Out,
-        A,
-        Weight,
-        Bias,
-        Mean,
-        std,
-        stride_row_a,
-        N,
-        eps,
-        BLOCK_SIZE: tl.constexpr,
+    Out,
+    A,
+    Weight,
+    Bias,
+    Mean,
+    std,
+    stride_row_a,
+    N,
+    eps,
+    BLOCK_SIZE: tl.constexpr,
 ):
     """
     Layernorm based on Welford's variance computation algorithm.
@@ -108,7 +98,7 @@ def _layer_norm_fwd_fused_single_pass(
         mask = column_offset < N
         # eviction policy below have little impact now because of new implementation. Kept as is.
         # float32 is used to avoid overflow in the square
-        a = tl.load(a_ptr + column_offset, mask=mask, other=0., eviction_policy="evict_last").to(tl.float32)
+        a = tl.load(a_ptr + column_offset, mask=mask, other=0.0, eviction_policy="evict_last").to(tl.float32)
 
         block_mean = tl.sum(a, axis=0) / nb_block_cols
         # mean is 0 or has a mask applied to it, no need to mask delta_mean!
@@ -134,7 +124,7 @@ def _layer_norm_fwd_fused_single_pass(
         weight = tl.load(Weight + column_offset, mask=mask)
         bias = tl.load(Bias + column_offset, mask=mask)
         # eviction policy helps to keep weights in cache (reused by other threads)
-        a = tl.load(a_ptr + column_offset, mask=mask, other=0., eviction_policy="evict_first").to(tl.float32)
+        a = tl.load(a_ptr + column_offset, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
         a_hat = (a - mean) * rstd
         out = a_hat * weight + bias
         # write-back
@@ -143,13 +133,16 @@ def _layer_norm_fwd_fused_single_pass(
 
 @triton.jit
 def _layer_norm_fwd_fused_multi_pass(
-        Out,
-        A,
-        Weight,
-        Bias,
-        Mean, Rstd,
-        stride, N, eps,
-        BLOCK_SIZE: tl.constexpr,
+    Out,
+    A,
+    Weight,
+    Bias,
+    Mean,
+    Rstd,
+    stride,
+    N,
+    eps,
+    BLOCK_SIZE: tl.constexpr,
 ):
     # position of elements processed by this program
     row = tl.program_id(0)
@@ -160,15 +153,15 @@ def _layer_norm_fwd_fused_multi_pass(
     _mean = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
     for off in range(0, N, BLOCK_SIZE):
         cols = off + tl.arange(0, BLOCK_SIZE)
-        a = tl.load(A + cols, mask=cols < N, other=0., eviction_policy="evict_last").to(tl.float32)
+        a = tl.load(A + cols, mask=cols < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
         _mean += a
     mean = tl.sum(_mean, axis=0) / N
     # compute variance
     _var = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
     for off in range(0, N, BLOCK_SIZE):
         cols = off + tl.arange(0, BLOCK_SIZE)
-        a = tl.load(A + cols, mask=cols < N, other=0., eviction_policy="evict_last").to(tl.float32)
-        a = tl.where(cols < N, a - mean, 0.)
+        a = tl.load(A + cols, mask=cols < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
+        a = tl.where(cols < N, a - mean, 0.0)
         _var += a * a
     var = tl.sum(_var, axis=0) / N
     rstd = 1 / tl.sqrt(var + eps)
@@ -181,7 +174,7 @@ def _layer_norm_fwd_fused_multi_pass(
         mask = cols < N
         weight = tl.load(Weight + cols, mask=mask)
         bias = tl.load(Bias + cols, mask=mask)
-        a = tl.load(A + cols, mask=mask, other=0., eviction_policy="evict_first").to(tl.float32)
+        a = tl.load(A + cols, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
         a_hat = (a - mean) * rstd
         out = a_hat * weight + bias
         # write-back
@@ -189,11 +182,19 @@ def _layer_norm_fwd_fused_multi_pass(
 
 
 class LayerNorm(torch.autograd.Function):
-
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx: FunctionCtx, x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction):
-        assert x.dtype == weight.dtype == bias.dtype, f"input, weight and bias must have the same dtype: {x.dtype}, {weight.dtype}, {bias.dtype}"
+    def forward(
+        ctx: FunctionCtx,
+        x: torch.Tensor,
+        weight: torch.Tensor,
+        bias: torch.Tensor,
+        eps: float,
+        implementation: JITFunction,
+    ):
+        assert (
+            x.dtype == weight.dtype == bias.dtype
+        ), f"input, weight and bias must have the same dtype: {x.dtype}, {weight.dtype}, {bias.dtype}"
         # catch eps being too small if the tensors are fp16
         if x.dtype == torch.float16:
             eps = max(eps, 1.6e-5)
@@ -209,9 +210,9 @@ class LayerNorm(torch.autograd.Function):
         MAX_FUSED_SIZE = 65536 // x.element_size()
         BLOCK_SIZE = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
         BLOCK_SIZE = max(BLOCK_SIZE, 128)
-        if layer_norm_xformers == implementation:
-            assert N <= 4096*2, "LayerNorm: N is too large for xformers implementation"
-        BLOCK_SIZE = min(BLOCK_SIZE, 4096*2)
+        if implementation == layer_norm_xformers:
+            assert N <= 4096, "LayerNorm: N is too large for xformers implementation"
+        BLOCK_SIZE = min(BLOCK_SIZE, 4096)
         # heuristics for number of warps
         num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
         implementation[(M,)](
@@ -219,9 +220,11 @@ class LayerNorm(torch.autograd.Function):
             a_arg,
             weight,
             bias,
-            mean, std,
+            mean,
+            std,
             a_arg.stride(0),
-            N, eps,
+            N,
+            eps,
             BLOCK_SIZE=BLOCK_SIZE,
             num_warps=num_warps,
         )
@@ -231,5 +234,11 @@ class LayerNorm(torch.autograd.Function):
         return out
 
 
-def layer_norm(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float, implementation: JITFunction = _layer_norm_fwd_fused_single_pass):
+def layer_norm(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor,
+    eps: float,
+    implementation: JITFunction = _layer_norm_fwd_fused_single_pass,
+):
     return LayerNorm.apply(x, weight, bias, eps, implementation)

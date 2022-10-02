@@ -1,14 +1,12 @@
 import os
 from pathlib import Path
+from test.models.ort_utils import create_model_for_provider
 from typing import List
 
 import torch
 from onnxruntime.transformers.optimizer import optimize_model
-from transformers import AutoModel
-from transformers import AutoTokenizer
-from transformers.onnx import export, FeaturesManager
-
-from test.models.ort_utils import create_model_for_provider
+from transformers import AutoModel, AutoTokenizer
+from transformers.onnx import FeaturesManager, export
 
 
 def build_onnx(model_name: str, model_path: str) -> [List[str], List[str]]:
@@ -23,12 +21,26 @@ def build_onnx(model_name: str, model_path: str) -> [List[str], List[str]]:
     onnx_path.parent.mkdir(parents=True, exist_ok=True)
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model)
     onnx_config = model_onnx_config(model.config)
-    _ = export(preprocessor=tokenizer, model=model, config=onnx_config, opset=onnx_config.default_onnx_opset, output=onnx_path, device="cuda")
+    _ = export(
+        preprocessor=tokenizer,
+        model=model,
+        config=onnx_config,
+        opset=onnx_config.default_onnx_opset,
+        output=onnx_path,
+        device="cuda",
+    )
     onnx_model = create_model_for_provider(onnx_path.as_posix())
     return onnx_model
 
 
-def optimize_onnx(model_name: str, model_path: str, float16: bool = False, model_type: str = "bert", hidden_size: int = 0, num_heads: int = 0):
+def optimize_onnx(
+    model_name: str,
+    model_path: str,
+    float16: bool = False,
+    model_type: str = "bert",
+    hidden_size: int = 0,
+    num_heads: int = 0,
+):
     optim_model_name = f"{model_name}_optim_fp16.onnx" if float16 else f"{model_name}_optim_fp32.onnx"
     if os.path.exists(os.path.join(model_path, optim_model_name)):
         optimized_model = create_model_for_provider(os.path.join(model_path, optim_model_name))
@@ -55,6 +67,7 @@ def optimize_onnx(model_name: str, model_path: str, float16: bool = False, model
 
 def get_model_onnx(model_name: str, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
+
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = build_onnx(model_name, model_path)
@@ -63,18 +76,17 @@ def get_model_onnx(model_name: str, model_path: str):
         inputs = {
             "input_ids": kwargs["input_ids"],
             "attention_mask": kwargs["attention_mask"],
-            "token_type_ids": kwargs["token_type_ids"]
+            "token_type_ids": kwargs["token_type_ids"],
         }
         outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=outputs["last_hidden_state"],
-            pooler_output=outputs["1607"]
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=outputs["last_hidden_state"], pooler_output=outputs["1607"])
+
     return run
 
 
 def get_model_optim_fp32_onnx(model_name: str, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
+
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = optimize_onnx(model_name, model_path)
@@ -83,18 +95,17 @@ def get_model_optim_fp32_onnx(model_name: str, model_path: str):
         inputs = {
             "input_ids": kwargs["input_ids"],
             "attention_mask": kwargs["attention_mask"],
-            "token_type_ids": kwargs["token_type_ids"]
+            "token_type_ids": kwargs["token_type_ids"],
         }
         outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=outputs["last_hidden_state"],
-            pooler_output=outputs["1607"]
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=outputs["last_hidden_state"], pooler_output=outputs["1607"])
+
     return run
 
 
 def get_model_optim_fp16_onnx(model_name: str, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
+
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = optimize_onnx(model_name, model_path, True)
@@ -103,11 +114,9 @@ def get_model_optim_fp16_onnx(model_name: str, model_path: str):
         inputs = {
             "input_ids": kwargs["input_ids"],
             "attention_mask": kwargs["attention_mask"],
-            "token_type_ids": kwargs["token_type_ids"]
+            "token_type_ids": kwargs["token_type_ids"],
         }
         outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=outputs["last_hidden_state"],
-            pooler_output=outputs["1607"]
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=outputs["last_hidden_state"], pooler_output=outputs["1607"])
+
     return run

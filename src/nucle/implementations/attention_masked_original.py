@@ -2,20 +2,42 @@ import torch
 import triton
 import triton.language as tl
 
-# Original implementation with masking removed for benchmarking and reference purpose
+
+# Unedited implementation for benchmarking and reference purpose
+
 
 @triton.jit
 def _fwd_kernel_original(
-        Q, K, V, sm_scale,
-        TMP, L, M,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
-        Out,
-        stride_qz, stride_qh, stride_qm, stride_qk,
-        stride_kz, stride_kh, stride_kn, stride_kk,
-        stride_vz, stride_vh, stride_vk, stride_vn,
-        stride_oz, stride_oh, stride_om, stride_on,
-        Z, H, N_CTX,
-        BLOCK_M: tl.constexpr, BLOCK_DMODEL: tl.constexpr,
-        BLOCK_N: tl.constexpr,
+    Q,
+    K,
+    V,
+    sm_scale,
+    TMP,
+    L,
+    M,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
+    Out,
+    stride_qz,
+    stride_qh,
+    stride_qm,
+    stride_qk,
+    stride_kz,
+    stride_kh,
+    stride_kn,
+    stride_kk,
+    stride_vz,
+    stride_vh,
+    stride_vk,
+    stride_vn,
+    stride_oz,
+    stride_oh,
+    stride_om,
+    stride_on,
+    Z,
+    H,
+    N_CTX,
+    BLOCK_M: tl.constexpr,
+    BLOCK_DMODEL: tl.constexpr,
+    BLOCK_N: tl.constexpr,
 ):
     start_m = tl.program_id(0)
     off_hz = tl.program_id(1)
@@ -38,13 +60,14 @@ def _fwd_kernel_original(
     # load q: it will stay in SRAM throughout
     q = tl.load(q_ptrs)
     # loop over k, v and update accumulator
-    for start_n in range(0, N_CTX, BLOCK_N):
+    for start_n in range(0, (start_m + 1) * BLOCK_M, BLOCK_N):
         start_n = tl.multiple_of(start_n, BLOCK_N)
         # -- compute qk ----
         k = tl.load(k_ptrs + start_n * stride_kn)
         qk = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
+        qk += tl.where(offs_m[:, None] >= (start_n + offs_n[None, :]), 0, float("-inf"))
         # -- compute m_ij, p, l_ij
         m_ij = tl.max(qk, 1)
         p = tl.exp(qk - m_ij[:, None])
@@ -85,7 +108,9 @@ def _fwd_kernel_original(
     tl.store(out_ptrs, acc)
 
 
-def attention_forward_original(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float):
+def masked_attention_forward_original(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, output: torch.Tensor, sm_scale: float
+):
     BLOCK = 128
     # shape constraints
     Lq, Lk = q.shape[-1], k.shape[-1]
@@ -95,16 +120,37 @@ def attention_forward_original(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
     L = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
     m = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
     _fwd_kernel_original[grid](
-        q, k, v, sm_scale,
-        tmp, L, m,
+        q,
+        k,
+        v,
+        sm_scale,
+        tmp,
+        L,
+        m,
         output,
-        q.stride(0), q.stride(1), q.stride(2), q.stride(3),
-        k.stride(0), k.stride(1), k.stride(2), k.stride(3),
-        v.stride(0), v.stride(1), v.stride(2), v.stride(3),
-        output.stride(0), output.stride(1), output.stride(2), output.stride(3),
-        q.shape[0], q.shape[1], q.shape[2],
-        BLOCK_M=BLOCK, BLOCK_N=BLOCK,
-        BLOCK_DMODEL=64, num_warps=4,
+        q.stride(0),
+        q.stride(1),
+        q.stride(2),
+        q.stride(3),
+        k.stride(0),
+        k.stride(1),
+        k.stride(2),
+        k.stride(3),
+        v.stride(0),
+        v.stride(1),
+        v.stride(2),
+        v.stride(3),
+        output.stride(0),
+        output.stride(1),
+        output.stride(2),
+        output.stride(3),
+        q.shape[0],
+        q.shape[1],
+        q.shape[2],
+        BLOCK_M=BLOCK,
+        BLOCK_N=BLOCK,
+        BLOCK_DMODEL=64,
+        num_warps=4,
         num_stages=1,
     )
     return output

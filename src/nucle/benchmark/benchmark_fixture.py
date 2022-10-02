@@ -1,25 +1,32 @@
 import gc
-from typing import Callable, Optional, Iterable
+from time import perf_counter_ns
+from typing import Callable, Iterable, Optional
 
 import torch
 from _pytest.python import Function
 
-from benchmark.benchmark_data import BenchmarkData
-from benchmark.benchmark_result import BenchmarkResult
-from time import perf_counter_ns
+from nucle.benchmark.benchmark_data import BenchmarkData
+from nucle.benchmark.benchmark_result import BenchmarkResult
 
 
 class BenchmarkFixture(object):
     _precisions = {}
 
-    def __init__(self, node: Function, add_result: Callable, warmup: int = 25, rep: int = 100, grad_to_none: Optional[Iterable[torch.Tensor]]=None):
+    def __init__(
+        self,
+        node: Function,
+        add_result: Callable,
+        warmup: int = 25,
+        rep: int = 100,
+        grad_to_none: Optional[Iterable[torch.Tensor]] = None,
+    ):
         self.name = node.name
         self.fullname = node._nodeid
         self.warmup = warmup
         self.rep = rep
         self.grad_to_none = grad_to_none
         self.add_result = add_result
-        if hasattr(node, 'callspec'):
+        if hasattr(node, "callspec"):
             self.param = node.callspec.id
             self.params = node.callspec.params
         else:
@@ -46,7 +53,7 @@ class BenchmarkFixture(object):
         # doesn't contain any input data before the run
         start_event = [torch.cuda.Event(enable_timing=True) for i in range(n_repeat)]
         end_event = [torch.cuda.Event(enable_timing=True) for i in range(n_repeat)]
-        cache = torch.empty(int(256e6), dtype=torch.int8, device='cuda')
+        cache = torch.empty(int(256e6), dtype=torch.int8, device="cuda")
 
         return_value = None
         # Warm-up

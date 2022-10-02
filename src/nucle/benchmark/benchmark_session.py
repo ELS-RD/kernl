@@ -1,13 +1,13 @@
+import operator
+from collections import defaultdict
 from typing import List
 
+import pytest
 import torch
 from tabulate import tabulate
 from termcolor import colored
-from collections import defaultdict
-import operator
-import pytest
 
-from benchmark.benchmark_result import BenchmarkResult
+from nucle.benchmark.benchmark_result import BenchmarkResult
 
 
 class BenchmarkSession(object):
@@ -19,16 +19,18 @@ class BenchmarkSession(object):
     def print_results(benchmarks: List[BenchmarkResult]):
         compare = []
         for benchmark in benchmarks:
-            compare.append([
-                benchmark.data_gpu.median,
-                benchmark.data_gpu.mean,
-                benchmark.data_gpu.min,
-                benchmark.data_gpu.max,
-                benchmark.data_full.median,
-                benchmark.data_full.mean,
-                benchmark.data_full.min,
-                benchmark.data_full.max,
-            ])
+            compare.append(
+                [
+                    benchmark.data_gpu.median,
+                    benchmark.data_gpu.mean,
+                    benchmark.data_gpu.min,
+                    benchmark.data_gpu.max,
+                    benchmark.data_full.median,
+                    benchmark.data_full.mean,
+                    benchmark.data_full.min,
+                    benchmark.data_full.max,
+                ]
+            )
         tensor = torch.Tensor(compare)
         min_values, min_indexes = torch.min(tensor, dim=0)
         max_values, max_indexes = torch.max(tensor, dim=0)
@@ -46,33 +48,47 @@ class BenchmarkSession(object):
                     text = colored(text, "red")
                 to_append.append(text)
             table.append(to_append)
-        print(tabulate(table,
-                       headers=["Name", "Median (CUDA)", "Mean (CUDA)", "Min (CUDA)", "Max (CUDA)", "Median", "Mean",
-                                "Min", "Max"]))
+        print(
+            tabulate(
+                table,
+                headers=[
+                    "Name",
+                    "Median (CUDA)",
+                    "Mean (CUDA)",
+                    "Min (CUDA)",
+                    "Max (CUDA)",
+                    "Median",
+                    "Mean",
+                    "Min",
+                    "Max",
+                ],
+            )
+        )
 
     def get_groups(self, benchmarks: List[BenchmarkResult], group_by_expression: str):
         groups = defaultdict(list)
         for bench in benchmarks:
             key = ()
-            for grouping in group_by_expression.split(','):
+            for grouping in group_by_expression.split(","):
                 if grouping == "group":
-                    key += bench.group,
+                    key += (bench.group,)
                 elif grouping == "name":
-                    key += bench.name,
+                    key += (bench.name,)
                 elif grouping == "fullname":
-                    key += bench.fullname,
+                    key += (bench.fullname,)
                 elif grouping == "func":
-                    key += bench.func,
+                    key += (bench.func,)
                 elif grouping == "fullfunc":
-                    key += bench.fullfunc,
+                    key += (bench.fullfunc,)
                 elif grouping == "param":
-                    key += bench.param,
+                    key += (bench.param,)
                 elif grouping.startswith("param:"):
-                    param_name = grouping[len("param:"):]
-                    key += '%s=%s' % (param_name, bench.params[param_name]),
+                    start_index = len("param:")
+                    param_name = grouping[start_index:]
+                    key += ("%s=%s" % (param_name, bench.params[param_name]),)
                 else:
                     raise NotImplementedError("Unsupported grouping %r." % grouping)
-            groups[' '.join(map(str, key))].append(bench)
+            groups[" ".join(map(str, key))].append(bench)
 
         for grouped_benchmarks in groups.values():
             grouped_benchmarks.sort(key=operator.attrgetter("fullname" if "full" in group_by_expression else "name"))

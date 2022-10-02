@@ -36,7 +36,7 @@ class BenchmarkData(object):
 
     @property
     def stddev(self) -> float:
-        return torch.std(self.data).item() if len(self.data) > 1 else 0.
+        return torch.std(self.data).item() if len(self.data) > 1 else 0.0
 
     @property
     def stddev_outliers(self) -> int:
@@ -61,19 +61,19 @@ class BenchmarkData(object):
 
     @property
     def ops(self) -> float:
-        return self.rounds / self.total if self.total > 0. else 0.
+        return self.rounds / self.total if self.total > 0.0 else 0.0
 
     def to_dict(self):
         return {
-            'median': self.median,
-            'ops': self.ops,
-            'q1': self.quartiles[0],
-            'q3': self.quartiles[2],
-            'rounds': self.rounds,
-            'stddev_outliers': self.stddev_outliers,
-            'stddev': self.stddev,
-            'mean': self.mean,
-            'max': self.max,
-            'min': self.min,
-            'total': self.total,
+            "median": self.median,
+            "ops": self.ops,
+            "q1": self.quartiles[0],
+            "q3": self.quartiles[2],
+            "rounds": self.rounds,
+            "stddev_outliers": self.stddev_outliers,
+            "stddev": self.stddev,
+            "mean": self.mean,
+            "max": self.max,
+            "min": self.min,
+            "total": self.total,
         }

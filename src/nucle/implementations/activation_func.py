@@ -3,9 +3,10 @@ import math
 import triton
 import triton.language as tl
 
+
 # CREDITS: Initially inspired by the xformers repository
 
-sqrt2pi = math.sqrt(2.0/math.pi)
+sqrt2pi = math.sqrt(2.0 / math.pi)
 sqrt2 = math.sqrt(2.0)
 
 
@@ -13,6 +14,7 @@ sqrt2 = math.sqrt(2.0)
 def tanh(x):
     """Tanh activation function"""
     return tl.libdevice.tanh(x)
+
 
 @triton.jit
 def relu(x):
