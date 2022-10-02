@@ -1,8 +1,6 @@
 triton==2.0.0.dev20220830
-torch
+torch>=1.12.0
 numpy
-jupyter
-ipykernel
 pytest
 tabulate
 termcolor
