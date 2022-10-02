@@ -4,6 +4,18 @@ import pkg_resources
 from setuptools import find_packages, setup
 
 
+try:
+    import torch
+
+    assert torch.__version__ >= "1.11.0"
+    assert torch.cuda.is_available(), "CUDA is required to install nucle"
+    major, _ = torch.cuda.get_device_capability()
+    if major < 8:
+        raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to install nucle")
+except ImportError:
+    raise ImportError("Please install torch before installing nucle")
+
+
 with pathlib.Path("requirements.txt").open() as f:
     install_requires = [str(requirement) for requirement in pkg_resources.parse_requirements(f)]
 
