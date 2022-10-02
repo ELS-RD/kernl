@@ -199,7 +199,7 @@ def _fwd_kernel(
 
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
-    q = tl.load(q_ptrs)
+    q = tl.load(q_ptrs, mask=offs_m[:, None] < seq_length, other=0.0)
 
     n_end = seq_length
     if IS_CAUSAL:
@@ -224,7 +224,8 @@ def _fwd_kernel(
         # We load the current block in K in SRAM
         # We do the first multiplication between the block in Q and the current block in K
         # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
-        k = tl.load(k_ptrs + n_row_offset * k_n_stride)
+        mask_k = (n_row_offset * BLOCK_N + offs_n)[:, None] < seq_length
+        k = tl.load(k_ptrs + n_row_offset * k_n_stride, mask=mask_k, other=0.0)
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
@@ -233,13 +234,14 @@ def _fwd_kernel(
 
         if HAS_MASK:
             offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * mask_k_stride
+            mask_mask = (n_row_offset * BLOCK_N + offs_n)[None, :] < seq_length
             # If it's a broadcast we only load vector size BLOCK_N else a matrix size (BLOCK_M, BLOCK_N)
             if MASK_M_SIZE == 1:
-                m = tl.load(mask + offs_mask)
+                m = tl.load(mask + offs_mask, mask=mask_mask, other=float("-inf"))
             else:
                 offs_mask += offs_m[:, None] * mask_m_stride
                 # The mask matrix is never reused
-                m = tl.load(mask + offs_mask, eviction_policy="evict_first")
+                m = tl.load(mask + offs_mask, eviction_policy="evict_first", mask=mask_mask, other=float("-inf"))
             # Avoids NaN
             m = tl.where(m == float("-inf"), min_clamp_value, m)
             qk += m
@@ -281,7 +283,8 @@ def _fwd_kernel(
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
-        v = tl.load(v_ptrs + n_row_offset * v_k_stride).to(Q.dtype.element_ty)
+        mask_v = (n_row_offset * BLOCK_N + offs_n)[:, None] < seq_length
+        v = tl.load(v_ptrs + n_row_offset * v_k_stride, mask=mask_v, other=0.0).to(Q.dtype.element_ty)
         qk_softmax = qk_softmax.to(Q.dtype.element_ty)
         acc += tl.dot(qk_softmax, v)
 
@@ -300,7 +303,7 @@ def _fwd_kernel(
     )
 
     out_ptrs = output + off_o
-    tl.store(out_ptrs, acc)
+    tl.store(out_ptrs, acc, mask=offs_m[:, None] < seq_length)
 
 
 class Attention(torch.autograd.Function):
@@ -339,9 +342,12 @@ class Attention(torch.autograd.Function):
         assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
         batch, heads, seq_length, dhead = q.size()
 
-        # Todo: Ensure 2^n only ?
-        BLOCK_M = BLOCK_N = min(128, seq_length)
-        assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
+        if seq_length & (seq_length - 1):  # Not power of 2
+            ref_seq_length = triton.next_power_of_2(seq_length)
+        else:
+            ref_seq_length = seq_length
+        BLOCK_M = BLOCK_N = min(128, ref_seq_length)
+        # assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
 
         grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
         tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)

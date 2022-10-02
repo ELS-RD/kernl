@@ -66,7 +66,7 @@ def generate_none_mask(batch, seq_length, dtype=torch.float32):
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 64, 128, 256, 384, 512]],
+    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 384, 512]],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
 # fp32 not yet possible because of a bug in triton
@@ -105,7 +105,7 @@ def test_benchmark_masked(
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
 
-    assert torch.allclose(value.float(), expected, atol=1e-1)
+    assert torch.allclose(value.float(), expected, atol=1e-1, rtol=1e-1)
 
 
 @set_seed()
