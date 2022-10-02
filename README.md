@@ -4,7 +4,11 @@ Optimized kernels for `transformer` models.
 
 ## Install dependencies
 
+**IMPORTANT**: This package requires `pytorch` being installed.  
+Please install it first.
+
 ```shell
+pip install torch -U --extra-index-url https://download.pytorch.org/whl/cu116
 git clone https://github.com/ELS-RD/nucle-ai
 pip install -e .
 # or to enable all benchmarks
