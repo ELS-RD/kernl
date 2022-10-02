@@ -1,4 +1,4 @@
-# triton-xp
+# nucle-ai
 
 Optimized kernels for `transformer` models.
 
