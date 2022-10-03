@@ -1,6 +1,3 @@
-"""
-All the tooling to ease ONNX Runtime usage.
-"""
 #  Copyright 2022 Lefebvre Sarrut
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +12,10 @@ All the tooling to ease ONNX Runtime usage.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
+
+"""
+All the tooling to ease ONNX Runtime usage.
+"""
 
 import ctypes as C
 from ctypes.util import find_library
