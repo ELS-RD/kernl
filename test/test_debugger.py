@@ -303,7 +303,7 @@ def test_dropout():
             BLOCK_SIZE=block_m,
         )
 
-    check_all_close(torch.sum(o == 0) / x.numel(), torch.tensor(p), atol=0.1)
+    check_all_close(torch.sum(o == 0) / x.numel(), torch.tensor(p, device="cuda"), atol=0.1)
     # check L1 norm are similar (+/- 10%)
     check_all_close(torch.linalg.norm(x, dim=1, ord=1), torch.linalg.norm(o, dim=1, ord=1), rtol=0.1)
     assert tl.total_gm_read == x.numel()
