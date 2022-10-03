@@ -96,12 +96,6 @@ except ImportError as e:
 
 
 @set_seed()
-@pytest.mark.parametrize(
-    "shape",
-    # there is a bug on (32, 32) shape, we need a special check for it
-    [(32, 32)] + [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 33, 128, 256, 384, 512] if bs * seq_l < 10000],
-    ids=lambda x: f"{x[0]}x{x[1]}",
-)
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int, int), implementation: str):
     model_tested = implementations[implementation]

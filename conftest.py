@@ -23,6 +23,21 @@ from nucle.benchmark.benchmark_fixture import BenchmarkFixture
 from nucle.benchmark.benchmark_session import BenchmarkSession
 
 
+def pytest_generate_tests(metafunc):
+    if "shape" in metafunc.fixturenames:
+        if metafunc.config.getoption("all"):
+            batches = [1, 8, 16]
+            seq_len = [16, 128, 384, 512]
+        else:
+            batches = [1, 3]
+            seq_len = [5, 512]
+        shapes = [(bs, sl) for bs in batches for sl in seq_len if bs * sl <= 10000]
+        shapes += [(32, 32)]  # a shape that may be buggy on attention kernel
+        shapes += [(1, 8)]  # super small shape
+        shapes += [(3, 33)]  # non power of 2 shape
+        metafunc.parametrize("shape", shapes, ids=lambda s: f"{s[0]}x{s[1]}")
+
+
 @contextmanager
 def set_seed(seed: int = 0):
     torch.manual_seed(seed=seed)
@@ -52,6 +67,7 @@ def pytest_addoption(parser: pytest.Parser):
         "‘group’, ‘name’, ‘fullname’, ‘func’, ‘fullfunc’, ‘param’ or ‘param:NAME’, "
         "where NAME is the name passed to @pytest.parametrize. Default: ‘fullname’",
     )
+    parser.addoption("--all", action="store_true", help="tests all shapes")
 
 
 @pytest.hookimpl(hookwrapper=True)

@@ -44,12 +44,11 @@ implementations = {
 
 
 @set_seed()
-@pytest.mark.parametrize("shape", [128, 512, 1024, 2048, 4096], ids=lambda x: f"shape={x}x{x}")
 @pytest.mark.parametrize("cuda_graphs", [True, False], ids=["cuda_graphs", "no_cuda_graphs"])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32], ids=["fp16", "fp32"])
 @pytest.mark.parametrize("implementation", implementations.keys())
-def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, implementation: str):
-    M = N = shape
+def test_benchmark_layer_norm(benchmark, shape: (int, int), dtype, cuda_graphs: bool, implementation: str):
+    M, N = shape
     eps = 1e-5
     factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
     layer_weight = torch.rand((N,), **factory_kwargs)

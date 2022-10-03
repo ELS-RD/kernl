@@ -66,11 +66,6 @@ def generate_none_mask(batch, seq_length, dtype=torch.float32):
 
 
 @set_seed()
-@pytest.mark.parametrize(
-    "shape",
-    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 384, 512]] + [(32, 32)],
-    ids=lambda x: f"{x[0]}x{x[1]}",
-)
 # fp32 not yet possible because of a bug in triton
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 @pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
