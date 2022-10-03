@@ -19,6 +19,7 @@ import pytest
 import torch
 
 from conftest import set_seed
+
 from nucle.implementations.attention import attention_forward, attention_reference
 from nucle.implementations.attention_masked_original import masked_attention_forward_original
 from nucle.implementations.attention_original import attention_forward_original
