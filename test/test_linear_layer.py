@@ -14,7 +14,7 @@
 #
 
 from test import check_all_close
-from typing import Callable, Tuple
+from typing import Callable
 
 import pytest
 import torch
@@ -62,15 +62,18 @@ def test_benchmark(
     benchmark,
     implementation: str,
     cuda_graphs: bool,
-    shape: Tuple[int, int, int, int],
+    shape: (int, int),
     dtype: torch.dtype,
     bias: bool,
     activation: str,
     contiguous: bool,
     cuda_graphs_pool: (int, int),
 ):
-    batch, M, N, K = shape
-
+    (
+        batch,
+        M,
+    ) = shape
+    N = K = 768
     # order of dimensions is wrong so we force contiguous call
     x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=False)
     x = x.mT
