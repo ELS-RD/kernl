@@ -13,6 +13,8 @@
 #  limitations under the License.
 #
 
+from test import check_all_close
+
 import pytest
 import torch
 
@@ -67,5 +69,4 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
         fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
-
-    assert torch.allclose(value.float(), expected, atol=1e-1)
+    check_all_close(value.float(), expected, atol=1e-1)

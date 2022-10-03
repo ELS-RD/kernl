@@ -13,6 +13,7 @@
 #  limitations under the License.
 #
 
+from test import check_all_close
 from typing import Callable, Tuple
 
 import pytest
@@ -102,6 +103,4 @@ def test_benchmark(
 
     value = benchmark(fn, x)
 
-    assert torch.allclose(
-        expected, value.float(), rtol=1e-1, atol=1e-1
-    ), f"max diff: {torch.abs(value.float() - expected).max()}"
+    check_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)

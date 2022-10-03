@@ -18,7 +18,7 @@ import torch
 
 def check_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None:
     """
-    Check that all elements of a and b are close.
+    Check that all elements of tensors a and b are close.
     """
     assert a.shape == b.shape, f"Shapes don't match: {a.shape} != {b.shape}"
     assert a.dtype == b.dtype, f"Dtypes don't match: {a.dtype} != {b.dtype}"
@@ -29,8 +29,8 @@ def check_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None
     nb_elements = torch.numel(a)
     msg = (
         f"Differences: "
-        f"{max_abs_diff} (max abs), "
-        f"{max_rel_diff} (max rel), "
+        f"{max_abs_diff:.3f} (max abs), "
+        f"{max_rel_diff:.3f} (max rel), "
         f"{mismatch_elements}/{nb_elements} (mismatch elements)"
     )
     assert torch.allclose(a, b, rtol=rtol, atol=atol), msg

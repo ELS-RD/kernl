@@ -13,6 +13,8 @@
 #  limitations under the License.
 #
 
+from test import check_all_close
+
 import pytest
 import torch
 
@@ -37,4 +39,4 @@ def test_benchmark(benchmark, m, n, k, batch, implementation):
         value = benchmark(batched_matmul, a, b)
     else:
         raise ValueError(f"Unknown implementation: {implementation}")
-    assert torch.allclose(value, expected, atol=1e-2)
+    check_all_close(value, expected, atol=1e-2)
