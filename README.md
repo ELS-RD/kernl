@@ -15,6 +15,8 @@ pip install -e .
 pip install -e ".[benchmark]"
 ```
 
+This project requires `Python` >= 3.9.
+
 ## Test and Benchmark
 
 ### Conventions

@@ -22,7 +22,7 @@ from setuptools import find_packages, setup
 try:
     import torch
 
-    assert torch.__version__ >= "1.11.0"
+    assert torch.__version__ >= "1.12.0"
     assert torch.cuda.is_available(), "CUDA is required to install nucle"
     major, _ = torch.cuda.get_device_capability()
     if major < 8:
