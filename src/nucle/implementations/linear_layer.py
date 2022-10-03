@@ -57,6 +57,11 @@ def get_configs_io_bound():
     return configs
 
 
+@triton.heuristics(
+    {
+        "EVEN_K": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
+    }
+)
 @triton.autotune(
     configs=[
         triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=3, num_warps=8),
@@ -82,11 +87,6 @@ def get_configs_io_bound():
     + get_configs_io_bound(),
     key=["M", "N", "K"],
     prune_configs_by={"early_config_prune": early_config_prune, "perf_model": estimate_matmul_time, "top_k": 10},
-)
-@triton.heuristics(
-    {
-        "EVEN_K": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
-    }
 )
 @triton.jit
 def kernel_fma(
