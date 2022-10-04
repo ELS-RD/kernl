@@ -31,5 +31,5 @@ COPY ./src/nucle/__init__.py ./src/nucle/__init__.py
 
 
 ENV SKIP_CUDA_ASSERT=1
-RUN pip install -e "."
+RUN pip install -e ".[benchmark]"
 COPY ./ ./
