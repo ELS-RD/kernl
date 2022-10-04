@@ -1,5 +1,31 @@
+#  Copyright 2022 Lefebvre Sarrut
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+
 import dataclasses
 import warnings
+from test.models.bert import (
+    get_model_baseline,
+    get_model_dynamo,
+    get_model_dynamo_cuda_graphs,
+    get_model_dynamo_dropout_removed,
+    get_model_dynamo_nvfuser_ofi,
+    get_model_optimized,
+    get_model_optimized_causal_cuda_graphs,
+    get_model_optimized_cuda_graphs, get_model_from_hf,
+)
+from test.models.data_utils import get_input_causal, get_input_non_causal
 from typing import Callable, Dict
 
 import pytest
@@ -7,11 +33,6 @@ import torch
 import torchdynamo
 
 from conftest import set_seed
-from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
-    get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
-    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_model_from_hf
-from test.models.data_utils import get_input_non_causal, get_input_causal
-
 
 @dataclasses.dataclass
 class Implementation:
@@ -22,15 +43,15 @@ class Implementation:
 
 implementations: [Implementation] = [
     Implementation("baseline", get_model_baseline, is_causal=False),
-    Implementation("dynamo", get_model_dynamo, is_causal=False),
-    Implementation("dynamo_nvfuser_ofi", get_model_dynamo_nvfuser_ofi, is_causal=False),
-    Implementation("dynamo_no_dropout", get_model_dynamo_dropout_removed, is_causal=False),
-    Implementation("dynamo_cuda_graphs", get_model_dynamo_cuda_graphs, is_causal=False),
-    Implementation("dynamo_optimized", get_model_optimized, is_causal=False),
+    # Implementation("dynamo", get_model_dynamo, is_causal=False),
+    # Implementation("dynamo_nvfuser_ofi", get_model_dynamo_nvfuser_ofi, is_causal=False),
+    # Implementation("dynamo_no_dropout", get_model_dynamo_dropout_removed, is_causal=False),
+    # Implementation("dynamo_cuda_graphs", get_model_dynamo_cuda_graphs, is_causal=False),
+    # Implementation("dynamo_optimized", get_model_optimized, is_causal=False),
     Implementation("dynamo_optimized_cuda_graphs", get_model_optimized_cuda_graphs, is_causal=False),
     # In this implementation both causal mask and the assume causal mask optimization will be applied, leads to slower
     # benchmark. It's not needed if we are sure the mask is causal, we can use the "assume causal mask optimization".
-    Implementation("dynamo_optimizer_cuda_graphs_causal", get_model_optimized_causal_cuda_graphs, is_causal=True),
+    # Implementation("dynamo_optimizer_cuda_graphs_causal", get_model_optimized_causal_cuda_graphs, is_causal=True),
 ]
 
 

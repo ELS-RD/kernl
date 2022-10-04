@@ -1,11 +1,28 @@
+#  Copyright 2022 Lefebvre Sarrut
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+
 from typing import Callable
 
-import torch
 import pytest
-from implementations.attention_masked_original import masked_attention_forward_original
-from implementations.attention_original import attention_forward_original
-from implementations.attention import attention_forward, attention_reference
+import torch
+
 from conftest import set_seed
+
+from nucle.implementations.attention import attention_forward, attention_reference
+from nucle.implementations.attention_masked_original import masked_attention_forward_original
+from nucle.implementations.attention_original import attention_forward_original
 
 
 def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
@@ -16,34 +33,55 @@ def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
 
 
 implementations = {
-    "original": lambda q, k, v, output, sm_scale, is_causal, attention_mask: original_triton_flash_attention(is_causal, q, k, v, output, sm_scale),
-    "triton": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_forward(q, k, v, output, sm_scale, is_causal, attention_mask),
-    "torch": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_reference(q, k, v, output, sm_scale, is_causal, attention_mask),
+    "original": lambda q, k, v, output, sm_scale, is_causal, attention_mask: original_triton_flash_attention(
+        is_causal, q, k, v, output, sm_scale
+    ),
+    "triton": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_forward(
+        q, k, v, output, sm_scale, is_causal, attention_mask
+    ),
+    "torch": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_reference(
+        q, k, v, output, sm_scale, is_causal, attention_mask
+    ),
 }
 
+
 def generate_broadcast_mask(batch, seq_length, dtype=torch.float32):
-    attention_mask = torch.randint(1, seq_length, (batch,), device="cuda")[:, None] > torch.arange(0, seq_length, device="cuda")[
-                                                                      None, :]
+    attention_mask = (
+        torch.randint(1, seq_length, (batch,), device="cuda")[:, None]
+        > torch.arange(0, seq_length, device="cuda")[None, :]
+    )
     attention_mask = attention_mask.to(dtype)
     attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
     attention_mask = (1.0 - attention_mask) * torch.finfo(dtype).min
     return attention_mask
 
+
 def generate_bias_mask(batch, seq_length, dtype=torch.float32):
     return torch.rand((batch, 48, seq_length, seq_length), dtype=dtype, device="cuda")
+
 
 def generate_none_mask(batch, seq_length, dtype=torch.float32):
     return None
 
+
 @set_seed()
-@pytest.mark.parametrize("shape", [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 64, 128, 256, 384, 512]],
-                         ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize(
+    "shape",
+    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 64, 128, 256, 384, 512]],
+    ids=lambda x: f"{x[0]}x{x[1]}",
+)
 # fp32 not yet possible because of a bug in triton
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 @pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
-@pytest.mark.parametrize("mask_fn", [generate_bias_mask, generate_broadcast_mask, generate_none_mask], ids=["bias-mask", "broadcast-mask", 'no-mask'])
+@pytest.mark.parametrize(
+    "mask_fn",
+    [generate_bias_mask, generate_broadcast_mask, generate_none_mask],
+    ids=["bias-mask", "broadcast-mask", "no-mask"],
+)
 @pytest.mark.parametrize("implementation", implementations.keys())
-def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable, mask_fn: Callable, dtype: torch.dtype, is_causal: bool):
+def test_benchmark_masked(
+    benchmark, shape: (int, int), implementation: Callable, mask_fn: Callable, dtype: torch.dtype, is_causal: bool
+):
     batch, seq_length = shape
     if implementation == "original" and (dtype == torch.bfloat16 or seq_length != 512):
         pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
@@ -59,7 +97,7 @@ def test_benchmark_masked(benchmark, shape: (int, int), implementation: Callable
         "output": torch.empty(mat_shape, device="cuda"),
         "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
         "is_causal": is_causal,
-        "attention_mask": mask_fn(batch, seq_length)
+        "attention_mask": mask_fn(batch, seq_length),
     }
 
     expected = attention_reference(**args)
@@ -85,7 +123,9 @@ def test_mixed_stride():
     assert not k.is_contiguous()
     assert not mask.is_contiguous()
 
-    expected = attention_reference(q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask)
+    expected = attention_reference(
+        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+    )
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     assert torch.allclose(output, expected, atol=1e-2)
