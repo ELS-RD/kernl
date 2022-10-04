@@ -9,95 +9,105 @@ import torchdynamo
 from conftest import set_seed
 from test.models.bert import get_model_baseline, get_model_dynamo, get_model_dynamo_nvfuser_ofi, \
     get_model_dynamo_dropout_removed, get_model_optimized_cuda_graphs, get_model_dynamo_cuda_graphs, \
-    get_model_optimized, get_model_optimized_causal_cuda_graphs
+    get_model_optimized, get_model_optimized_causal_cuda_graphs, get_model_from_hf
 from test.models.data_utils import get_input_non_causal, get_input_causal
-
-
-@pytest.fixture
-def model_reference_fp32():
-    return get_model_baseline()
 
 
 @dataclasses.dataclass
 class Implementation:
+    name: str
     model: Callable
     is_causal: bool
 
 
-implementations: Dict[str, Implementation] = {
-    "baseline": Implementation(get_model_baseline, is_causal=False),
-    "dynamo": Implementation(get_model_dynamo, is_causal=False),
-    "dynamo_nvfuser_ofi": Implementation(get_model_dynamo_nvfuser_ofi, is_causal=False),
-    "dynamo_no_dropout": Implementation(get_model_dynamo_dropout_removed, is_causal=False),
-    "dynamo_cuda_graphs": Implementation(get_model_dynamo_cuda_graphs, is_causal=False),
-    "dynamo_optimized": Implementation(get_model_optimized, is_causal=False),
-    "dynamo_optimized_cuda_graphs": Implementation(get_model_optimized_cuda_graphs, is_causal=False),
+implementations: [Implementation] = [
+    Implementation("baseline", get_model_baseline, is_causal=False),
+    Implementation("dynamo", get_model_dynamo, is_causal=False),
+    Implementation("dynamo_nvfuser_ofi", get_model_dynamo_nvfuser_ofi, is_causal=False),
+    Implementation("dynamo_no_dropout", get_model_dynamo_dropout_removed, is_causal=False),
+    Implementation("dynamo_cuda_graphs", get_model_dynamo_cuda_graphs, is_causal=False),
+    Implementation("dynamo_optimized", get_model_optimized, is_causal=False),
+    Implementation("dynamo_optimized_cuda_graphs", get_model_optimized_cuda_graphs, is_causal=False),
     # In this implementation both causal mask and the assume causal mask optimization will be applied, leads to slower
     # benchmark. It's not needed if we are sure the mask is causal, we can use the "assume causal mask optimization".
-    "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, is_causal=True),
-}
+    Implementation("dynamo_optimizer_cuda_graphs_causal", get_model_optimized_causal_cuda_graphs, is_causal=True),
+]
 
-try:
-    # check imports and initialize onnx model
-    from test.models.bert import get_bert_onnx
-    _ = get_bert_onnx()
-    implementations["onnx"] = Implementation(get_bert_onnx, is_causal=False)
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: onnx won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
 
-try:
-    # check imports and initialize optimized fp32 onnx model
-    from test.models.bert import get_bert_optim_fp32_onnx
-    _ = get_bert_optim_fp32_onnx()
-    implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=False)
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: onnx_optim_fp32 won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
+# try:
+#     # check imports and initialize onnx model
+#     from test.models.bert import get_bert_onnx
+#     _ = get_bert_onnx()
+#     implementations["onnx"] = Implementation(get_bert_onnx, is_causal=False)
+# except ImportError as e:
+#     error = f"It seems that you are missing some dependencies: onnx won't be included in benchmarks. \n {str(e)}"
+#     warnings.warn(UserWarning(error))
+#
+# try:
+#     # check imports and initialize optimized fp32 onnx model
+#     from test.models.bert import get_bert_optim_fp32_onnx
+#     _ = get_bert_optim_fp32_onnx()
+#     implementations["onnx_optim_fp32"] = Implementation(get_bert_optim_fp32_onnx, is_causal=False)
+# except ImportError as e:
+#     error = f"It seems that you are missing some dependencies: onnx_optim_fp32 won't be included in benchmarks. \n {str(e)}"
+#     warnings.warn(UserWarning(error))
+#
+# try:
+#     # check imports and initialize optimized fp16 onnx model
+#     from test.models.bert import get_bert_optim_fp16_onnx
+#     _ = get_bert_optim_fp16_onnx()
+#     implementations["onnx_optim_fp16"] = Implemen tation(get_bert_optim_fp16_onnx, is_causal=False)
+# except ImportError as e:
+#     error = f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
+#     warnings.warn(UserWarning(error))
 
-try:
-    # check imports and initialize optimized fp16 onnx model
-    from test.models.bert import get_bert_optim_fp16_onnx
-    _ = get_bert_optim_fp16_onnx()
-    implementations["onnx_optim_fp16"] = Implementation(get_bert_optim_fp16_onnx, is_causal=False)
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
+@pytest.fixture
+def reference_fp32(request):
+    return get_model_from_hf(request.param)
 
 
 @set_seed()
+@pytest.mark.parametrize("reference_fp32", [
+    "bert-base-uncased",
+    "t5-small",
+    "distilbert-base-uncased",
+    "xlm-roberta-base",
+    "camembert-base",
+    "sentence-transformers/all-MiniLM-L6-v2"
+], indirect=True)
 @pytest.mark.parametrize("shape", [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 128, 256, 384, 512]
                                    if bs * seq_l < 10000], ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("implementation", implementations.keys())
-def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int, int), implementation: str):
-    model_tested = implementations[implementation]
-
-    inputs = get_input_causal(shape) if model_tested.is_causal else get_input_non_causal(shape)
-
+@pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
+def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int), implementation: Implementation):
+    inputs = get_input_causal(reference_fp32, shape) if implementation.is_causal else get_input_non_causal(
+        reference_fp32, shape)
     with torch.inference_mode():
-        expected = model_reference_fp32(**inputs)
-        model = model_tested.model()
+        expected = reference_fp32(**inputs)
+        model = implementation.model(reference_fp32)
         with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
             value = benchmark(model, **inputs)
 
     torchdynamo.reset()
 
-    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1)
-    assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
+    assert torch.allclose(input=value["last_hidden_state"].float(), other=expected["last_hidden_state"].float(),
+                          rtol=1e-1, atol=1e-1)
 
+    if "pooler_output" in expected:
+        assert torch.allclose(input=value["pooler_output"].float(), other=expected["pooler_output"].float(), rtol=1e-1,
+                              atol=1e-1)
 
 @set_seed()
-@pytest.mark.parametrize("name", implementations.keys())
-def test_support_shape_change(name, model_reference_fp32):
+@pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
+def test_support_shape_change(implementation):
     """Test that the model can handle shape changes without being reloaded/rebuilt."""
-    implementation = implementations[name]
-    model_tested = implementation.model()
+    model_reference_fp32 = get_model_from_hf("bert-base-uncased")
+    model_tested = implementation.model(get_model_from_hf("bert-base-uncased"))
     for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
-        pytorch_input = get_input_causal(shape) if implementation.is_causal else get_input_non_causal(shape)
+        pytorch_input = get_input_causal(model_reference_fp32, shape) if implementation.is_causal else get_input_non_causal(model_reference_fp32, shape)
         with torch.inference_mode():
             expected = model_reference_fp32(**pytorch_input)
             with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
                 result = model_tested(**pytorch_input)
-        max_diff = torch.max(torch.abs(result["last_hidden_state"].float() - expected["last_hidden_state"]))
-        assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"],
-                              atol=1e-1, rtol=1e-1), f"[{name}] failed with shape {shape}, max diff: {max_diff}"
+        max_diff = torch.max(torch.abs(result["last_hidden_state"].float() - expected["last_hidden_state"].float()))
+        assert torch.allclose(result["last_hidden_state"].float(), expected["last_hidden_state"].float(),
+                              atol=1e-1, rtol=1e-1), f"failed with shape {shape}, max diff: {max_diff}"
