@@ -1,11 +1,27 @@
+#  Copyright 2022 Lefebvre Sarrut
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+
 from typing import Callable, Tuple
 
-import torch
 import pytest
+import torch
 
 from conftest import set_seed
-from implementations.cuda_graph import cuda_graphs_wrapper
-from implementations.linear_layer import linear_layer
+
+from nucle.implementations.cuda_graph import cuda_graphs_wrapper
+from nucle.implementations.linear_layer import linear_layer
 
 
 @pytest.fixture
@@ -27,7 +43,9 @@ def get_pytorch_activation(activation: str) -> Callable:
 
 
 implementations = {
-    "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(torch.nn.functional.linear(x, weight, bias)),
+    "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
+        torch.nn.functional.linear(x, weight, bias)
+    ),
     "triton": lambda weight, bias, activation: lambda x: linear_layer(x, weight, bias, activation),
 }
 
@@ -36,18 +54,29 @@ implementations = {
 @pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
 @pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
 @pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
-@pytest.mark.parametrize("shape", [(1, 8, 8, 8)] +
-                         [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
-                         ids=lambda s: 'x'.join(map(str, s)))
+@pytest.mark.parametrize(
+    "shape",
+    [(1, 8, 8, 8)] + [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
+    ids=lambda s: "x".join(map(str, s)),
+)
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
 @pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
 @pytest.mark.parametrize("implementation", ["triton", "pytorch"])
-def test_benchmark(benchmark, implementation: str, cuda_graphs: bool, shape: Tuple[int, int, int, int],
-                   dtype: torch.dtype, bias: bool, activation: str, contiguous: bool, cuda_graphs_pool: (int, int)):
+def test_benchmark(
+    benchmark,
+    implementation: str,
+    cuda_graphs: bool,
+    shape: Tuple[int, int, int, int],
+    dtype: torch.dtype,
+    bias: bool,
+    activation: str,
+    contiguous: bool,
+    cuda_graphs_pool: (int, int),
+):
     batch, M, N, K = shape
 
     # order of dimensions is wrong so we force contiguous call
-    x = torch.randn((batch, K, M), device='cuda', dtype=torch.float32, requires_grad=False)
+    x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=False)
     x = x.mT
     if contiguous:
         x = x.contiguous()
@@ -68,9 +97,11 @@ def test_benchmark(benchmark, implementation: str, cuda_graphs: bool, shape: Tup
     fn = implementations[implementation](layer_weight, layer_bias, activation)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x], pool=cuda_graphs_pool)
-        fn = lambda tensor: run(tensor)[0]  # cuda graphs wraps output in a tuple
+        # cuda graphs wraps output in a tuple
+        fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
 
-    assert torch.allclose(expected, value.float(), rtol=1e-1, atol=1e-1), \
-        f"max diff: {torch.abs(value.float() - expected).max()}"
+    assert torch.allclose(
+        expected, value.float(), rtol=1e-1, atol=1e-1
+    ), f"max diff: {torch.abs(value.float() - expected).max()}"
