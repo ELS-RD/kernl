@@ -14,10 +14,10 @@
 #
 
 import random
+from contextlib import contextmanager
 
 import pytest
 import torch
-from decorator import contextmanager
 
 from nucle.benchmark.benchmark_fixture import BenchmarkFixture
 from nucle.benchmark.benchmark_session import BenchmarkSession
