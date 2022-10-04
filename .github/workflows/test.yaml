@@ -1,0 +1,20 @@
+name: "Tests"
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  main:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip' # caching pip dependencies
+    - run: pip install torch -U --extra-index-url https://download.pytorch.org/whl/cu116
+    - run: pip install -r requirements.txt -r requirements-benchmark.txt
+    - run: make source_code_check_format
