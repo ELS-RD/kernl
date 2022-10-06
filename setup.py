@@ -23,12 +23,12 @@ try:
     import torch
 
     assert torch.__version__ >= "1.12.0"
-    assert torch.cuda.is_available(), "CUDA is required to install nucle"
+    assert torch.cuda.is_available(), "CUDA is required to install kernl"
     major, _ = torch.cuda.get_device_capability()
     if major < 8:
-        raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to install nucle")
+        raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to install kernl")
 except ImportError:
-    raise ImportError("Please install torch before installing nucle")
+    raise ImportError("Please install torch before installing kernl")
 
 
 with pathlib.Path("requirements.txt").open() as f:
@@ -39,7 +39,7 @@ with pathlib.Path("requirements-benchmark.txt").open() as f:
 
 
 setup(
-    name="nucle",
+    name="kernl",
     version="0.1.0",
     license="Apache License 2.0",
     license_files=("LICENSE",),
@@ -54,7 +54,7 @@ setup(
     long_description=open("README.md", "r", encoding="utf-8").read(),
     keywords=["Deep Learning"],
     long_description_content_type="text/markdown",
-    url="https://github.com/ELS-RD/nucle-ai",
+    url="https://github.com/ELS-RD/kernl",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     install_requires=install_requires,

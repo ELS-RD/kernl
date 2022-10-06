@@ -17,7 +17,7 @@ import torch
 
 from conftest import set_seed
 
-from nucle.utils.debugger import TritonDebugger
+from kernl.utils.debugger import TritonDebugger
 
 
 @set_seed()

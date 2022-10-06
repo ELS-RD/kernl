@@ -25,7 +25,7 @@ from torch.autograd.function import FunctionCtx
 from torch.cuda.amp import custom_fwd
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
-from nucle.implementations import activation_func
+from kernl.implementations import activation_func
 
 
 # CREDITS: Initially inspired by the Triton tutorial on matrix multiplications

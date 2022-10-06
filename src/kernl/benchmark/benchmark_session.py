@@ -22,7 +22,7 @@ import torch
 from tabulate import tabulate
 from termcolor import colored
 
-from nucle.benchmark.benchmark_result import BenchmarkResult
+from kernl.benchmark.benchmark_result import BenchmarkResult
 
 
 class BenchmarkSession(object):

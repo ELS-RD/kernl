@@ -15,8 +15,8 @@
 
 import torch
 
-from nucle.implementations.attention import attention_forward
-from nucle.utils.extended_matcher import replace_pattern
+from kernl.implementations.attention import attention_forward
+from kernl.utils.extended_matcher import replace_pattern
 
 
 def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
