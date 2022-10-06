@@ -15,7 +15,6 @@
 
 import dataclasses
 import warnings
-from test import check_all_close
 from test.models.bert import (
     get_model_baseline,
     get_model_dynamo,
@@ -33,7 +32,7 @@ import pytest
 import torch
 import torchdynamo
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
 
 @pytest.fixture

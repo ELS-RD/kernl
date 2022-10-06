@@ -13,13 +13,12 @@
 #  limitations under the License.
 #
 
-from test import check_all_close
 from typing import Callable
 
 import pytest
 import torch
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
 from nucle.implementations.attention import attention_forward, attention_reference
 from nucle.implementations.attention_masked_original import masked_attention_forward_original

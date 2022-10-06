@@ -13,11 +13,9 @@
 #  limitations under the License.
 #
 
-from test import check_all_close
-
 import torch
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
 from nucle.utils.debugger import TritonDebugger
 

@@ -13,12 +13,10 @@
 #  limitations under the License.
 #
 
-from test import check_all_close
-
 import pytest
 import torch
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
 from nucle.implementations.cuda_graph import cuda_graphs_wrapper
 from nucle.implementations.layer_norm import (
