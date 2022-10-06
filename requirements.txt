@@ -1,4 +1,4 @@
-triton==2.0.0.dev20221001
+triton==2.0.0.dev20221005
 torch>=1.12.0
 numpy
 pytest
