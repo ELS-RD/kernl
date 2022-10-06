@@ -68,7 +68,8 @@ def check_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None
     assert a.dtype == b.dtype, f"Dtypes don't match: {a.dtype} != {b.dtype}"
     assert a.device == b.device, f"Devices don't match: {a.device} != {b.device}"
     max_abs_diff = torch.max(torch.abs(a - b))
-    max_rel_diff = torch.max(torch.abs(a / b))
+    rel_diff = torch.abs(a / b)
+    max_rel_diff = torch.max(rel_diff[~torch.isnan(rel_diff)])
     mismatch_elements = torch.sum(torch.abs(a - b) > atol + rtol * torch.abs(b))
     nb_elements = torch.numel(a)
     msg = (
