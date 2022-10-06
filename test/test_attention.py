@@ -20,9 +20,9 @@ import torch
 
 from conftest import check_all_close, set_seed
 
-from nucle.implementations.attention import attention_forward, attention_reference
-from nucle.implementations.attention_masked_original import masked_attention_forward_original
-from nucle.implementations.attention_original import attention_forward_original
+from kernl.implementations.attention import attention_forward, attention_reference
+from kernl.implementations.attention_masked_original import masked_attention_forward_original
+from kernl.implementations.attention_original import attention_forward_original
 
 
 def original_triton_flash_attention(is_causal: bool, *args, **kwargs):

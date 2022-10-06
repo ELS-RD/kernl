@@ -19,8 +19,8 @@ from contextlib import contextmanager
 import pytest
 import torch
 
-from nucle.benchmark.benchmark_fixture import BenchmarkFixture
-from nucle.benchmark.benchmark_session import BenchmarkSession
+from kernl.benchmark.benchmark_fixture import BenchmarkFixture
+from kernl.benchmark.benchmark_session import BenchmarkSession
 
 
 @contextmanager

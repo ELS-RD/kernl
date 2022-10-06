@@ -21,9 +21,9 @@ import torchdynamo
 from torchdynamo.optimizations import BACKENDS
 from transformers import AutoModel
 
-from nucle.implementations.cuda_graph import cuda_graphs_wrapper
-from nucle.optimizer.dropout import remove_dropout
-from nucle.optimizer.dynamo_backend import dynamo_backend_ofi
+from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+from kernl.optimizer.dropout import remove_dropout
+from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
 model_name = "bert-base-uncased"

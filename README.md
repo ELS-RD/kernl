@@ -1,4 +1,4 @@
-# nucle-ai
+# Kernl
 
 Optimized kernels for `transformer` models.
 
@@ -9,7 +9,7 @@ Please install it first.
 
 ```shell
 pip install torch -U --extra-index-url https://download.pytorch.org/whl/cu116
-git clone https://github.com/ELS-RD/nucle-ai
+git clone https://github.com/ELS-RD/kernl
 pip install -e .
 # or to enable all benchmarks
 pip install -e ".[benchmark]"

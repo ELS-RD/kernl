@@ -18,8 +18,8 @@ import torch
 
 from conftest import check_all_close, set_seed
 
-from nucle.implementations.cuda_graph import cuda_graphs_wrapper
-from nucle.implementations.layer_norm import (
+from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+from kernl.implementations.layer_norm import (
     _layer_norm_fwd_fused_multi_pass,
     _layer_norm_fwd_fused_single_pass,
     layer_norm,
