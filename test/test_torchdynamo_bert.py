@@ -32,7 +32,7 @@ import pytest
 import torch
 import torchdynamo
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
 
 @pytest.fixture
@@ -97,7 +97,8 @@ except ImportError as e:
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 128, 256, 384, 512] if bs * seq_l < 10000],
+    # there is a bug on (32, 32) shape, we need a special check for it
+    [(32, 32)] + [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 33, 128, 256, 384, 512] if bs * seq_l < 10000],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
 @pytest.mark.parametrize("implementation", implementations.keys())
@@ -114,12 +115,8 @@ def test_benchmark_implementations(benchmark, model_reference_fp32, shape: (int,
 
     torchdynamo.reset()
 
-    assert torch.allclose(
-        input=value["last_hidden_state"].float(), other=expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1
-    )
-    assert torch.allclose(
-        input=value["pooler_output"].float(), other=expected["pooler_output"].float(), rtol=1e-1, atol=1e-1
-    )
+    check_all_close(value["last_hidden_state"].float(), expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1)
+    check_all_close(value["pooler_output"].float(), expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
 
 
 @set_seed()
@@ -134,7 +131,4 @@ def test_support_shape_change(name, model_reference_fp32):
             expected = model_reference_fp32(**pytorch_input)
             with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
                 result = model_tested(**pytorch_input)
-        max_diff = torch.max(torch.abs(result["last_hidden_state"].float() - expected["last_hidden_state"]))
-        assert torch.allclose(
-            result["last_hidden_state"].float(), expected["last_hidden_state"], atol=1e-1, rtol=1e-1
-        ), f"[{name}] failed with shape {shape}, max diff: {max_diff}"
+        check_all_close(result["last_hidden_state"].float(), expected["last_hidden_state"], atol=1e-1, rtol=1e-1)
