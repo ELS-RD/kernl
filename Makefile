@@ -12,4 +12,4 @@ source_code_check_format:
 
 .PHONY: docker_build
 docker_build:
-	docker build -t kernl .
+	DOCKER_BUILDKIT=1 docker build -t kernl .
