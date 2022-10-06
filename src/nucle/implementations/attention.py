@@ -40,7 +40,9 @@ def attention_reference(
     @param q: Query matrix size (batch, heads, seq_length, BLOCK_DHEAD)
     @param k: Key matrix size (batch, heads, seq_length, BLOCK_DHEAD)
     @param v: Value matrix size (batch, heads, seq_length, BLOCK_DHEAD)
+    @param output: Output matrix size (batch, heads, seq_length, BLOCK_DHEAD)
     @param sm_scale: Scaling factor applied after operation QxK
+    @param is_causal: Whether to apply causal attention
     @param attention_mask: Attention mask broadcastable to (batch, heads, seq_length, seq_length). Warning the mask
     isn't a binary mask
     like the one you use normally. This mask is directly added to QxK.
@@ -67,7 +69,7 @@ def _fwd_kernel(
     K,
     V,
     sm_scale,
-    mask,
+    attention_mask,
     TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
     output,
     q_batch_stride,
@@ -77,7 +79,7 @@ def _fwd_kernel(
     k_batch_stride,
     k_head_stride,
     k_n_stride,
-    k_k_stride,  # We name n,k instead of k,n because of the transpose
+    k_k_stride,  # axis named n,k instead of k,n because of the transpose of K matrix
     v_batch_stride,
     v_head_stride,
     v_k_stride,
@@ -86,10 +88,10 @@ def _fwd_kernel(
     o_head_stride,
     o_m_stride,
     o_n_stride,
-    mask_batch_stride,
-    mask_head_stride,
-    mask_m_stride,
-    mask_k_stride,
+    attention_mask_batch_stride,
+    attention_mask_head_stride,
+    attention_mask_m_stride,
+    attention_mask_k_stride,
     min_clamp_value,
     MASK_BATCH_SIZE: tl.constexpr,
     MASK_HEAD_SIZE: tl.constexpr,
@@ -129,11 +131,11 @@ def _fwd_kernel(
     @param o_head_stride: output matrix stride for head dimension
     @param o_m_stride: output matrix stride for rows
     @param o_n_stride: output matrix stride for columns
-    @param mask: Attention mask matrix broadcastable to (batch, heads, seq_length, seq_length)
-    @param mask_batch_stride: Matrix mask stride for batch dimension
-    @param mask_head_stride: Matrix mask stride for head dimension
-    @param mask_m_stride: Matrix mask stride for rows
-    @param mask_k_stride: Matrix mask stride for columns
+    @param attention_mask: Attention mask matrix broadcastable to (batch, heads, seq_length, seq_length)
+    @param attention_mask_batch_stride: Matrix mask stride for batch dimension
+    @param attention_mask_head_stride: Matrix mask stride for head dimension
+    @param attention_mask_m_stride: Matrix mask stride for rows
+    @param attention_mask_k_stride: Matrix mask stride for columns
     @param MASK_BATCH_SIZE: Matrix mask size for batch dimension
     @param MASK_HEAD_SIZE: Matrix mask size for head dimension
     @param MASK_M_SIZE: Matrix mask size for rows
@@ -199,7 +201,7 @@ def _fwd_kernel(
 
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
-    q = tl.load(q_ptrs)
+    q = tl.load(q_ptrs, mask=offs_m[:, None] < seq_length, other=0.0)
 
     n_end = seq_length
     if IS_CAUSAL:
@@ -214,7 +216,7 @@ def _fwd_kernel(
         if MASK_HEAD_SIZE == 1:
             mask_head_idx = 0
 
-        offs_base_mask = mask_batch_idx * mask_batch_stride + mask_head_idx * mask_head_stride
+        offs_base_mask = mask_batch_idx * attention_mask_batch_stride + mask_head_idx * attention_mask_head_stride
 
     # loop over k, v and update accumulator
     # n_row_offset is the row offset on dimension N of the current block
@@ -224,7 +226,8 @@ def _fwd_kernel(
         # We load the current block in K in SRAM
         # We do the first multiplication between the block in Q and the current block in K
         # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
-        k = tl.load(k_ptrs + n_row_offset * k_n_stride)
+        load_mask = (n_row_offset + offs_n)[:, None] < seq_length
+        k = tl.load(k_ptrs + n_row_offset * k_n_stride, mask=load_mask, other=0.0)
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
@@ -232,14 +235,20 @@ def _fwd_kernel(
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
         if HAS_MASK:
-            offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * mask_k_stride
+            offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * attention_mask_k_stride
+            attention_load_mask = (n_row_offset + offs_n)[None, :] < seq_length
             # If it's a broadcast we only load vector size BLOCK_N else a matrix size (BLOCK_M, BLOCK_N)
             if MASK_M_SIZE == 1:
-                m = tl.load(mask + offs_mask)
+                m = tl.load(attention_mask + offs_mask, mask=attention_load_mask, other=float("-inf"))
             else:
-                offs_mask += offs_m[:, None] * mask_m_stride
+                offs_mask += offs_m[:, None] * attention_mask_m_stride
                 # The mask matrix is never reused
-                m = tl.load(mask + offs_mask, eviction_policy="evict_first")
+                m = tl.load(
+                    attention_mask + offs_mask,
+                    eviction_policy="evict_first",
+                    mask=attention_load_mask,
+                    other=float("-inf"),
+                )
             # Avoids NaN
             m = tl.where(m == float("-inf"), min_clamp_value, m)
             qk += m
@@ -281,7 +290,8 @@ def _fwd_kernel(
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
-        v = tl.load(v_ptrs + n_row_offset * v_k_stride).to(Q.dtype.element_ty)
+        load_mask = (n_row_offset + offs_n)[:, None] < seq_length  # repeated otherwise triton segfault
+        v = tl.load(v_ptrs + n_row_offset * v_k_stride, mask=load_mask, other=0.0).to(Q.dtype.element_ty)
         qk_softmax = qk_softmax.to(Q.dtype.element_ty)
         acc += tl.dot(qk_softmax, v)
 
@@ -300,7 +310,8 @@ def _fwd_kernel(
     )
 
     out_ptrs = output + off_o
-    tl.store(out_ptrs, acc)
+    out_store_mask = offs_m[:, None] < seq_length
+    tl.store(out_ptrs, acc, mask=out_store_mask)
 
 
 class Attention(torch.autograd.Function):
@@ -320,6 +331,8 @@ class Attention(torch.autograd.Function):
         Computes attention.
         FP32 input and output are not supported.
         https://github.com/openai/triton/issues/674
+        Not an issue as the function is annotated with @custom_fwd(cast_inputs=torch.float16) so the input is casted to
+        float16 before the function is called.
 
         @param ctx: context for autograd
         @param q: Query matrix size (batch, heads, seq_length, dhead)
@@ -328,6 +341,7 @@ class Attention(torch.autograd.Function):
         @param output: Output matrix size (batch, heads, seq_length, dhead)
         @param sm_scale: Scaling factor applied after operation QxK
         @param is_causal: Autoregressive decoder attention
+        @param attention_mask: Attention mask matrix broadcastable to (batch, heads, seq_length, seq_length)
         @return:
         """
         # Constraints
@@ -339,11 +353,13 @@ class Attention(torch.autograd.Function):
         assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
         batch, heads, seq_length, dhead = q.size()
 
-        # Todo: Ensure 2^n only ?
-        BLOCK_M = BLOCK_N = min(128, seq_length)
-        assert seq_length % BLOCK_M == seq_length % BLOCK_N == 0
+        # if not power of 2
+        seq_length_pow_2 = triton.next_power_of_2(seq_length) if seq_length & (seq_length - 1) else seq_length
+        if seq_length_pow_2 == seq_length == 32:
+            seq_length_pow_2 = 64  # there is a strange triton segfault with 32
+        BLOCK = max(min(128, seq_length_pow_2), 16)  # minimal size
 
-        grid = (triton.cdiv(seq_length, BLOCK_M), batch * heads)
+        grid = (triton.cdiv(seq_length, BLOCK), batch * heads)
         tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
@@ -368,7 +384,7 @@ class Attention(torch.autograd.Function):
             K=k,
             V=v,
             sm_scale=sm_scale,
-            mask=attention_mask,
+            attention_mask=attention_mask,
             TMP=tmp,
             output=output,
             q_batch_stride=q.stride(0),
@@ -387,10 +403,10 @@ class Attention(torch.autograd.Function):
             o_head_stride=output.stride(1),
             o_m_stride=output.stride(2),
             o_n_stride=output.stride(3),
-            mask_batch_stride=attention_mask.stride(0) if HAS_MASK else 0,
-            mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
-            mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
-            mask_k_stride=attention_mask.stride(3) if HAS_MASK else 0,
+            attention_mask_batch_stride=attention_mask.stride(0) if HAS_MASK else 0,
+            attention_mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
+            attention_mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
+            attention_mask_k_stride=attention_mask.stride(3) if HAS_MASK else 0,
             min_clamp_value=torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,
             MASK_BATCH_SIZE=attention_mask.size(0) if HAS_MASK else 0,
             MASK_HEAD_SIZE=attention_mask.size(1) if HAS_MASK else 0,
@@ -398,8 +414,8 @@ class Attention(torch.autograd.Function):
             MASK_K_SIZE=attention_mask.size(3) if HAS_MASK else 0,
             HAS_MASK=HAS_MASK,
             IS_CAUSAL=is_causal,
-            BLOCK_M=BLOCK_M,
-            BLOCK_N=BLOCK_N,
+            BLOCK_M=BLOCK,
+            BLOCK_N=BLOCK,
             BLOCK_DHEAD=dhead,
             num_warps=4,
             num_stages=1,

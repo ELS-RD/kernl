@@ -18,7 +18,7 @@ from typing import Callable
 import pytest
 import torch
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
 from nucle.implementations.attention import attention_forward, attention_reference
 from nucle.implementations.attention_masked_original import masked_attention_forward_original
@@ -67,7 +67,7 @@ def generate_none_mask(batch, seq_length, dtype=torch.float32):
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 64, 128, 256, 384, 512]],
+    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 384, 512]] + [(32, 32)],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
 # fp32 not yet possible because of a bug in triton
@@ -106,7 +106,7 @@ def test_benchmark_masked(
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
 
-    assert torch.allclose(value.float(), expected, atol=1e-1)
+    check_all_close(a=value.float(), b=expected, atol=1e-1)
 
 
 @set_seed()
@@ -128,4 +128,4 @@ def test_mixed_stride():
     )
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
-    assert torch.allclose(output, expected, atol=1e-2)
+    check_all_close(a=output, b=expected, atol=1e-2)

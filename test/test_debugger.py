@@ -15,7 +15,7 @@
 
 import torch
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
 from nucle.utils.debugger import TritonDebugger
 
@@ -66,7 +66,7 @@ def test_add():
             n_elements=x.numel(),
             BLOCK_SIZE=block_size,
         )
-    assert torch.allclose(o, x + y)
+    check_all_close(o, x + y)
     assert tl.total_gm_read == x.nelement() + y.nelement()
     assert tl.total_gm_write == o.numel()
 
@@ -112,7 +112,7 @@ def test_softmax():
             n_cols=ncols,
             BLOCK_SIZE=block_ncols,
         )
-    assert torch.allclose(o, torch.softmax(x, dim=1)), f"{o} != {torch.softmax(x, dim=1)}"
+    check_all_close(o, torch.softmax(x, dim=1))
     assert tl.total_gm_read == x.nelement()
     assert tl.total_gm_write == o.nelement()
 
@@ -252,7 +252,7 @@ def test_matmul():
         x = x + 1
         return torch.where(x >= 0, x, 0.01 * x)
 
-    assert torch.allclose(C, leaky_relu_pytorch(A @ B), atol=1e-1)
+    check_all_close(C, leaky_relu_pytorch(A @ B), atol=1e-1)
     assert tl.total_gm_write == m * n
     # we load tile a and tile b for each position on M and N, and repeat along K axis
     assert tl.total_gm_read == ((block_m * block_k) + (block_k * block_n)) * (k / block_k) * (n / block_n) * (
@@ -301,9 +301,9 @@ def test_dropout():
             BLOCK_SIZE=block_m,
         )
 
-    assert torch.allclose(torch.sum(o == 0) / x.numel(), torch.tensor(p), atol=0.1)
+    check_all_close(torch.sum(o == 0) / x.numel(), torch.tensor(p, device="cuda"), atol=0.1)
     # check L1 norm are similar (+/- 10%)
-    assert torch.allclose(torch.linalg.norm(x, dim=1, ord=1), torch.linalg.norm(o, dim=1, ord=1), rtol=0.1)
+    check_all_close(torch.linalg.norm(x, dim=1, ord=1), torch.linalg.norm(o, dim=1, ord=1), rtol=0.1)
     assert tl.total_gm_read == x.numel()
     assert tl.total_gm_write == o.numel() == x.numel()
 
@@ -390,9 +390,9 @@ def test_layernorm():
             BLOCK_SIZE=BLOCK_SIZE,
         )
 
-    assert torch.allclose(mean, torch.mean(x, dim=1), atol=0.1)
-    assert torch.allclose(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
-    assert torch.allclose(
+    check_all_close(mean, torch.mean(x, dim=1), atol=0.1)
+    check_all_close(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
+    check_all_close(
         out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1
     )
     # read M times a block size of the 5 inputs
@@ -493,9 +493,9 @@ def test_layernorm_welford_variance():
             BLOCK_SIZE=BLOCK_SIZE,
         )
 
-    assert torch.allclose(mean, torch.mean(x, dim=1), atol=0.1)
-    assert torch.allclose(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
-    assert torch.allclose(
+    check_all_close(mean, torch.mean(x, dim=1), atol=0.1)
+    check_all_close(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
+    check_all_close(
         out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1
     )
     # read M times a block size of the 5 inputs
@@ -670,4 +670,4 @@ def test_flash_attention():
             BLOCK_DMODEL=Lk,
         )
 
-    assert torch.allclose(dout, ref_out.float(), atol=1e-2)
+    check_all_close(dout, ref_out.float(), atol=1e-2)
