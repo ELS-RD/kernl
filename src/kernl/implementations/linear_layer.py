@@ -80,7 +80,7 @@ def get_configs_io_bound():
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=5, num_warps=2),
     ]
     + get_configs_io_bound(),
-    key=["CACHE_KEY"],
+    key=["CACHE_KEY_M", "CACHE_KEY_N", "CACHE_KEY_K"],
     prune_configs_by={"early_config_prune": early_config_prune, "perf_model": estimate_matmul_time, "top_k": 10},
 )
 @triton.heuristics(
