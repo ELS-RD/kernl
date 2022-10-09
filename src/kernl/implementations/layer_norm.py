@@ -12,6 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
+from typing import Optional
 
 import torch
 import triton
@@ -27,6 +28,7 @@ from triton import JITFunction
 def pytorch_naive_layernorm(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float):
     """
     Naive implementation of layer norm in PyTorch
+    -> only used in benchmarks
     """
     mean = a.mean(dim=-1, keepdim=True)
     var = a.var(dim=-1, keepdim=True)
@@ -36,13 +38,14 @@ def pytorch_naive_layernorm(a: torch.Tensor, weight: torch.Tensor, bias: torch.T
     return out
 
 
-def pytorch_naive_rmsprop(a: torch.Tensor, weight: torch.Tensor, eps: float):
+def pytorch_naive_rmsnorm(a: torch.Tensor, weight: torch.Tensor, eps: float):
     """
-    Naive implementation of rmsprop in PyTorch.
+    Naive implementation of rmsnorm in PyTorch.
     Basically it's a layernorm without bias and subtraction of mean.
     Implementation follows HF one:
     https://github.com/huggingface/transformers/blob/d92e22d1f28324f513f3080e5c47c071a3916721/src/transformers/models/t5/modeling_t5.py#L239
     Paper: https://arxiv.org/pdf/1910.07467.pdf
+    -> only used in benchmarks
     """
     variance = a.to(torch.float32).pow(2).mean(-1, keepdim=True)
     a *= torch.rsqrt(variance + eps)
@@ -55,38 +58,53 @@ def pytorch_naive_rmsprop(a: torch.Tensor, weight: torch.Tensor, eps: float):
 
 
 @triton.jit
-def layer_norm_xformers(Y, X, W, B, M, V, x_stride, N, eps, BLOCK_SIZE: tl.constexpr):
+def layer_norm_xformers(
+    Out,
+    A,
+    Weight,
+    Bias,
+    Mean,
+    Rstd,
+    stride_row_a,
+    N,
+    eps,
+    HAS_BIAS: tl.constexpr,  # not used, just to make the signature similar to single pass
+    IS_RMSNORM: tl.constexpr,  # not used, just to make the signature similar to single pass
+    BLOCK_SIZE: tl.constexpr,
+):
     """
     LayerNorm forward pass for a single feature.
-    Won't work for very large tensors.
+    Requires that a whole row of X is loaded into shared memory -> won't work for large tensors.
     based on:
     https://github.com/facebookresearch/xformers/blob/main/xformers/triton/k_layer_norm.py
+    (arg names modified to match other implementation)
+    -> only used in benchmarks
     """
 
     row = tl.program_id(0)
     cols = tl.arange(0, BLOCK_SIZE)
     mask = cols < N
 
-    x_ptrs = X + row * x_stride + cols
+    x_ptrs = A + row * stride_row_a + cols
 
     x = tl.load(x_ptrs, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
-    w = tl.load(W + cols, mask=mask, other=1.0)
-    b = tl.load(B + cols, mask=mask, other=0.0)
+    w = tl.load(Weight + cols, mask=mask, other=1.0)
+    b = tl.load(Bias + cols, mask=mask, other=0.0)
 
     # Compute mean and variance
     mean = tl.sum(x, axis=0) / N
     x_zm = tl.where(mask, x - mean, 0.0)
-    tl.store(M + row, mean)
+    tl.store(Mean + row, mean)
 
     x_var = tl.sum(x_zm * x_zm, axis=0) / N
     rstd = 1.0 / tl.sqrt(x_var + eps)
 
     # Normalize
     y = x_zm * rstd
-    tl.store(V + row, rstd)
+    tl.store(Rstd + row, rstd)
 
     y = y * w + b
-    y_ptrs = Y + row * x_stride + cols
+    y_ptrs = Out + row * stride_row_a + cols
     tl.store(y_ptrs, y, mask=mask)
 
 
@@ -95,12 +113,14 @@ def _layer_norm_fwd_fused_single_pass(
     Out,
     A,
     Weight,
-    Bias,  # TODO add has bias
+    Bias,
     Mean,
-    std,
+    Rstd,
     stride_row_a,
     N,
     eps,
+    HAS_BIAS: tl.constexpr,
+    IS_RMSNORM: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
     """
@@ -113,7 +133,7 @@ def _layer_norm_fwd_fused_single_pass(
     :param Weight: weights applied to the normalized input
     :param Bias: bias added to the normalized input
     :param Mean: save mean tensor for backward
-    :param std: save standard deviation tensor for backward
+    :param Rstd: save standard deviation tensor for backward
     :param stride_row_a: stride of the input tensor
     :param N: number of elements per row in the input tensor
     :param eps: epsilon value to avoid division by zero
@@ -133,38 +153,41 @@ def _layer_norm_fwd_fused_single_pass(
         column_offset = start_n_offset + tl.arange(0, BLOCK_SIZE)
         mask = column_offset < N
         # eviction policy below have little impact now because of new implementation. Kept as is.
-        # float32 is used to avoid overflow in the square
+        # float32 is used to avoid overflow because of the square operation
         a = tl.load(a_ptr + column_offset, mask=mask, other=0.0, eviction_policy="evict_last").to(tl.float32)
-        # TODO if rmsprop, we can skip the mean computation
-        #  var = sum(a^2), mean is done out of the loop, and delta_mean_sqr = 0
-        block_mean = tl.sum(a, axis=0) / nb_block_cols
-        # mean is 0 or has a mask applied to it, no need to mask delta_mean!
-        delta_mean = block_mean - mean
-        delta_mean_sqr = delta_mean * delta_mean
+        if IS_RMSNORM:
+            var += tl.sum(a * a, axis=0)
+        else:
+            block_mean = tl.sum(a, axis=0) / nb_block_cols
+            # mean is 0 or has a mask applied to it, no need to mask delta_mean!
+            delta_mean = block_mean - mean
+            delta_mean_sqr = delta_mean * delta_mean
 
-        block_delta = tl.sum((a - block_mean) * a, axis=0)
-        # mean has a mask!
-        mean += tl.sum((a - mean) * mask, axis=0) / end_n_offset
-        var += block_delta + delta_mean_sqr * (start_n_offset * nb_block_cols) / end_n_offset
+            block_delta = tl.sum((a - block_mean) * a, axis=0)
+            # mean has a mask
+            mean += tl.sum((a - mean) * mask, axis=0) / end_n_offset
+            var += block_delta + delta_mean_sqr * (start_n_offset * nb_block_cols) / end_n_offset
 
-    var = var / N
+    var /= N
     rstd = 1 / tl.sqrt(var + eps)
 
     # write-back mean/rstd for backward pass
     tl.store(Mean + _idx, mean)
-    tl.store(std + _idx, rstd)
+    tl.store(Rstd + _idx, rstd)
 
     # multiply by weight and add bias
     for off in range(0, N, BLOCK_SIZE):
         column_offset = off + tl.arange(0, BLOCK_SIZE)
         mask = column_offset < N
         weight = tl.load(Weight + column_offset, mask=mask)
-        # TODO if has bias
-        bias = tl.load(Bias + column_offset, mask=mask)
+
         # eviction policy helps to keep weights in cache (reused by other threads)
         a = tl.load(a_ptr + column_offset, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
         a_hat = (a - mean) * rstd
-        out = a_hat * weight + bias
+        out = a_hat * weight
+        if HAS_BIAS:
+            bias = tl.load(Bias + column_offset, mask=mask)
+            out = out + bias
         # write-back
         tl.store(out_ptr + column_offset, out, mask=mask)
 
@@ -177,15 +200,23 @@ def _layer_norm_fwd_fused_multi_pass(
     Bias,
     Mean,
     Rstd,
-    stride,
+    stride_row_a,
     N,
     eps,
+    IS_RMSNORM: tl.constexpr,  # not used, just to have the same signature than the single pass
+    HAS_BIAS: tl.constexpr,  # not used, just to have the same signature than the single pass
     BLOCK_SIZE: tl.constexpr,
 ):
+    """
+    Implementation from triton tutorial:
+    https://github.com/openai/triton/blob/master/python/tutorials/05-layer-norm.py
+    It requires multiple passes on the data to compute mean and variance, it is slower than the single pass version.
+    -> only used in benchmarks
+    """
     # position of elements processed by this program
     row = tl.program_id(0)
-    Out += row * stride
-    A += row * stride
+    Out += row * stride_row_a
+    A += row * stride_row_a
     # compute mean
     mean = 0
     _mean = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
@@ -226,13 +257,14 @@ class LayerNorm(torch.autograd.Function):
         ctx: FunctionCtx,
         x: torch.Tensor,
         weight: torch.Tensor,
-        bias: torch.Tensor,
+        bias: Optional[torch.Tensor],
         eps: float,
         implementation: JITFunction,
+        use_rms_norm: bool,
     ):
-        assert (
-            x.dtype == weight.dtype == bias.dtype
-        ), f"input, weight and bias must have the same dtype: {x.dtype}, {weight.dtype}, {bias.dtype}"
+        assert x.dtype == weight.dtype, f"input and weight bias must have the same dtype: {x.dtype}, {weight.dtype}"
+        if bias is not None:
+            assert x.dtype == bias.dtype, f"input and bias must have the same dtype: {x.dtype}, {bias.dtype}"
         # catch eps being too small if the tensors are fp16
         if x.dtype == torch.float16:
             eps = max(eps, 1.6e-5)
@@ -254,15 +286,17 @@ class LayerNorm(torch.autograd.Function):
         # heuristics for number of warps
         num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
         implementation[(M,)](
-            out,
-            a_arg,
-            weight,
-            bias,
-            mean,
-            std,
-            a_arg.stride(0),
-            N,
-            eps,
+            Out=out,
+            A=a_arg,
+            Weight=weight,
+            Bias=bias if bias is not None else a_arg,
+            Mean=mean,
+            Rstd=std,
+            stride_row_a=a_arg.stride(0),
+            N=N,
+            eps=eps,
+            HAS_BIAS=bias is not None,
+            IS_RMSNORM=use_rms_norm,
             BLOCK_SIZE=BLOCK_SIZE,
             num_warps=num_warps,
         )
@@ -275,8 +309,9 @@ class LayerNorm(torch.autograd.Function):
 def layer_norm(
     x: torch.Tensor,
     weight: torch.Tensor,
-    bias: torch.Tensor,
+    bias: Optional[torch.Tensor],
     eps: float,
     implementation: JITFunction = _layer_norm_fwd_fused_single_pass,
+    use_rms_norm: bool = False,
 ):
-    return LayerNorm.apply(x, weight, bias, eps, implementation)
+    return LayerNorm.apply(x, weight, bias, eps, implementation, use_rms_norm)
