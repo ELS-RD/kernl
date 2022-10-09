@@ -3,7 +3,8 @@
 This folder contains tutorials to on-board team members and others on this project.
 They are written in `Pytorch` in the style of `triton`, to ease the switch.
 
-* tiled matmul: matrix multiplication implementation in `CUDA` style;
-* matmul offsets: detailed explanations related to a trick used in `triton` matmul tutorial;
-* online softmax: parallelized softmax computation, a key ingredient of flash attention;
-* flash attention: attention computation without saving attention matrix to global memory.
+* [tiled matmul](./1%20-%20tiled%20matmul.ipynb): matrix multiplication implementation in `CUDA` style
+* [matmul offsets](./2%20-%20matmul%20offsets.ipynb): detailed explanations related to a trick used in `triton` matmul tutorial
+* [online softmax](./3%20-%20online%20softmax.ipynb): parallelized softmax computation, a key ingredient of flash attention
+* [flash attention](./4%20-%20flash%20attention.ipynb): attention computation without saving attention matrix to global memory
+* [test end to end](./bert%20e2e.ipynb): classification with / without optimizations (`Roberta` + `XNLI` classification task)
