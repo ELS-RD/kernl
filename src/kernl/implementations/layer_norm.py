@@ -25,12 +25,33 @@ from triton import JITFunction
 
 
 def pytorch_naive_layernorm(a: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float):
+    """
+    Naive implementation of layer norm in PyTorch
+    """
     mean = a.mean(dim=-1, keepdim=True)
     var = a.var(dim=-1, keepdim=True)
     rstd = 1 / torch.sqrt(var + eps)
     a_hat = (a - mean) * rstd
     out = a_hat * weight + bias
     return out
+
+
+def pytorch_naive_rmsprop(a: torch.Tensor, weight: torch.Tensor, eps: float):
+    """
+    Naive implementation of rmsprop in PyTorch.
+    Basically it's a layernorm without bias and subtraction of mean.
+    Implementation follows HF one:
+    https://github.com/huggingface/transformers/blob/d92e22d1f28324f513f3080e5c47c071a3916721/src/transformers/models/t5/modeling_t5.py#L239
+    Paper: https://arxiv.org/pdf/1910.07467.pdf
+    """
+    variance = a.to(torch.float32).pow(2).mean(-1, keepdim=True)
+    a *= torch.rsqrt(variance + eps)
+
+    # convert into half-precision if necessary
+    if weight.dtype in [torch.float16, torch.bfloat16]:
+        a = a.to(weight.dtype)
+
+    return weight * a
 
 
 @triton.jit
@@ -74,7 +95,7 @@ def _layer_norm_fwd_fused_single_pass(
     Out,
     A,
     Weight,
-    Bias,
+    Bias,  # TODO add has bias
     Mean,
     std,
     stride_row_a,
@@ -114,7 +135,8 @@ def _layer_norm_fwd_fused_single_pass(
         # eviction policy below have little impact now because of new implementation. Kept as is.
         # float32 is used to avoid overflow in the square
         a = tl.load(a_ptr + column_offset, mask=mask, other=0.0, eviction_policy="evict_last").to(tl.float32)
-
+        # TODO if rmsprop, we can skip the mean computation
+        #  var = sum(a^2), mean is done out of the loop, and delta_mean_sqr = 0
         block_mean = tl.sum(a, axis=0) / nb_block_cols
         # mean is 0 or has a mask applied to it, no need to mask delta_mean!
         delta_mean = block_mean - mean
@@ -137,6 +159,7 @@ def _layer_norm_fwd_fused_single_pass(
         column_offset = off + tl.arange(0, BLOCK_SIZE)
         mask = column_offset < N
         weight = tl.load(Weight + column_offset, mask=mask)
+        # TODO if has bias
         bias = tl.load(Bias + column_offset, mask=mask)
         # eviction policy helps to keep weights in cache (reused by other threads)
         a = tl.load(a_ptr + column_offset, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
