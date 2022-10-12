@@ -355,9 +355,9 @@ class Attention(torch.autograd.Function):
 
         # if not power of 2
         seq_length_pow_2 = triton.next_power_of_2(seq_length) if seq_length & (seq_length - 1) else seq_length
-        if seq_length_pow_2 == seq_length == 32:
-            seq_length_pow_2 = 64  # there is a strange triton segfault with 32
         BLOCK = max(min(128, seq_length_pow_2), 16)  # minimal size
+        if BLOCK == 32:
+            BLOCK = 64  # there is a strange triton segfault with 32
 
         grid = (triton.cdiv(seq_length, BLOCK), batch * heads)
         tmp = torch.empty((batch * heads, seq_length), device=q.device, dtype=torch.float32)

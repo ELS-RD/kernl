@@ -18,7 +18,7 @@ import torch
 
 from conftest import check_all_close, set_seed
 
-from nucle.implementations.batched_matmul import batched_matmul
+from kernl.implementations.batched_matmul import batched_matmul
 
 
 @set_seed()

@@ -22,7 +22,7 @@ import torch
 from torch import Graph
 from torch.fx import GraphModule, Node, symbolic_trace
 
-from nucle.utils.fx import static_args_are_equal
+from kernl.utils.fx import static_args_are_equal
 
 
 # Originaly taken from

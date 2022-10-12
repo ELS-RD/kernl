@@ -15,8 +15,8 @@
 
 import torch
 
-from nucle.implementations.layer_norm import layer_norm
-from nucle.utils.extended_matcher import replace_pattern
+from kernl.implementations.layer_norm import layer_norm
+from kernl.utils.extended_matcher import replace_pattern
 
 
 def layer_norm_wrapper(v: torch.Tensor, layernorm: torch.nn.LayerNorm):

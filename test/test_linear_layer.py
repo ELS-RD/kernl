@@ -20,8 +20,8 @@ import torch
 
 from conftest import check_all_close, set_seed
 
-from nucle.implementations.cuda_graph import cuda_graphs_wrapper
-from nucle.implementations.linear_layer import linear_layer
+from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+from kernl.implementations.linear_layer import linear_layer
 
 
 @pytest.fixture
