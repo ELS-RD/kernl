@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 
-from typing import Callable, Tuple
+from typing import Callable
 
 import pytest
 import torch
@@ -54,27 +54,22 @@ implementations = {
 @pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
 @pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
 @pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
-@pytest.mark.parametrize(
-    "shape",
-    [(1, 8, 8, 8)] + [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
-    ids=lambda s: "x".join(map(str, s)),
-)
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
 @pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
-@pytest.mark.parametrize("implementation", ["triton", "pytorch"])
+@pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark(
     benchmark,
     implementation: str,
     cuda_graphs: bool,
-    shape: Tuple[int, int, int, int],
+    shape: (int, int),
     dtype: torch.dtype,
     bias: bool,
     activation: str,
     contiguous: bool,
     cuda_graphs_pool: (int, int),
 ):
-    batch, M, N, K = shape
-
+    batch, M = shape
+    N = K = 768
     # order of dimensions is wrong so we force contiguous call
     x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=False)
     x = x.mT
