@@ -35,22 +35,23 @@ def get_model_from_hf(model_name):
 def get_model_baseline(base):
     return base
 
-# model_name = "bert-base-uncased"
-# models_dir = tempfile.TemporaryDirectory().name
-# def get_bert_onnx():
-#     from test.models.onnx_utils import get_model_onnx
-#     return get_model_onnx(model_name, models_dir)
-#
-#
-# def get_bert_optim_fp32_onnx():
-#     from test.models.onnx_utils import get_model_optim_fp32_onnx
-#     return get_model_optim_fp32_onnx(model_name, models_dir)
-#
-#
-# def get_bert_optim_fp16_onnx():
-#     from test.models.onnx_utils import get_model_optim_fp16_onnx
-#     return get_model_optim_fp16_onnx(model_name, models_dir)
-#
+def get_bert_onnx(base):
+    from test.models.onnx_utils import get_model_onnx
+    models_dir = tempfile.TemporaryDirectory().name
+    return get_model_onnx(base, models_dir)
+
+# ça va créer plusuers fois els modèles
+def get_bert_optim_fp32_onnx(base):
+    from test.models.onnx_utils import get_model_optim_fp32_onnx
+    models_dir = tempfile.TemporaryDirectory().name
+    return get_model_optim_fp32_onnx(base, models_dir)
+
+
+def get_bert_optim_fp16_onnx(base):
+    from test.models.onnx_utils import get_model_optim_fp16_onnx
+    models_dir = tempfile.TemporaryDirectory().name
+    return get_model_optim_fp16_onnx(base, models_dir)
+
 
 def get_model_dynamo_dropout_removed(base):
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
