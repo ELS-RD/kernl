@@ -103,22 +103,24 @@ def reference_fp32(request):
     [
         "bert-base-uncased",
         "t5-small",
-        "distilbert-base-uncased",
-        "xlm-roberta-base",
-        "camembert-base",
         "sentence-transformers/all-MiniLM-L6-v2",
+        # "distilbert-base-uncased",
+        # "xlm-roberta-base",
+        # "camembert-base",
     ],
     indirect=True,
 )
 @pytest.mark.parametrize(
     "shape",
-    [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 128, 256, 384, 512] if bs * seq_l < 10000],
+    [(32, 32)] + [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 33, 128, 256, 384, 512] if bs * seq_l < 10000],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int), implementation: Implementation):
-    if "onnx" in implementation.name and reference_fp32.config.name_or_path != "bert-base-uncased":
-        pytest.skip("Onnx only supported for BERT")
+    if (
+        "onnx" in implementation.name or "nvfuser" in implementation.name
+    ) and reference_fp32.config.name_or_path != "bert-base-uncased":
+        pytest.skip("Only supported for BERT")
 
     inputs = (
         get_input_causal(reference_fp32, shape)
