@@ -68,10 +68,7 @@ def test_benchmark(
     contiguous: bool,
     cuda_graphs_pool: (int, int),
 ):
-    (
-        batch,
-        M,
-    ) = shape
+    batch, M = shape
     N = K = 768
     # order of dimensions is wrong so we force contiguous call
     x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=False)
