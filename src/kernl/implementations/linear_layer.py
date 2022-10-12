@@ -80,7 +80,7 @@ def get_configs_io_bound():
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=5, num_warps=2),
     ]
     + get_configs_io_bound(),
-    key=["M", "N", "K"],
+    key=["CACHE_KEY_M", "CACHE_KEY_N", "CACHE_KEY_K"],
     prune_configs_by={"early_config_prune": early_config_prune, "perf_model": estimate_matmul_time, "top_k": 10},
 )
 @triton.heuristics(
@@ -90,8 +90,7 @@ def get_configs_io_bound():
 )
 @triton.jit
 def kernel_fma(
-    # Pointers to matrices
-    C,
+    C,  # Pointers to matrices
     ACT_INPUTS,
     A,
     B,
@@ -100,6 +99,9 @@ def kernel_fma(
     M,
     N,
     K,
+    CACHE_KEY_M,
+    CACHE_KEY_N,
+    CACHE_KEY_K,
     # The stride variables represent how much to increase the ptr by when moving by 1
     # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
     # by to get the element one row down (A has M rows)
@@ -249,19 +251,22 @@ class LinearLayer(torch.autograd.Function):
             x_,
             weight,  # data ptrs
             bias if bias is not None else x,  # auto skip bias if not present
-            M,
+            M,  # shapes
             N,
-            K,  # shapes
-            outputs.stride(0),  # strides
-            outputs.stride(1),
-            x_.stride(0),
-            x_.stride(1),
-            weight.stride(0),
-            weight.stride(1),
-            ACTIVATION=activation if not None else x,  # optional fused activation
+            K,
+            M // 32,  # key for triton cache (limit number of compilations)
+            N // 32,
+            K // 32,
+            stride_om=outputs.stride(0),  # strides
+            stride_on=outputs.stride(1),
+            stride_im=x_.stride(0),
+            stride_ik=x_.stride(1),
+            stride_wn=weight.stride(0),
+            stride_wk=weight.stride(1),
             BIAS=bias is not None,  # optional fused bias
-            GROUP_M=8,  # speed optimization: group the programs
             SAVE_ACT_INPUTS=act_inputs is not None,  # optional save activation inputs
+            ACTIVATION=activation if not None else x,  # optional fused activation
+            GROUP_M=8,  # speed optimization: group the programs
         )
 
         outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
