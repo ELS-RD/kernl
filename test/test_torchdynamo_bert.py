@@ -27,7 +27,7 @@ from test.models.bert import (
     get_model_optimized_cuda_graphs,
 )
 from test.models.data_utils import get_input_causal, get_input_non_causal
-from typing import Callable, Dict
+from typing import Callable
 
 import pytest
 import torch

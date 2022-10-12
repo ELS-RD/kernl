@@ -18,9 +18,8 @@ from pathlib import Path
 from test.models.ort_utils import create_model_for_provider
 from typing import List
 
-import torch
 from onnxruntime.transformers.optimizer import optimize_model
-from transformers import AutoModel, AutoTokenizer, PreTrainedModel
+from transformers import AutoTokenizer, PreTrainedModel
 from transformers.onnx import FeaturesManager, export
 
 
