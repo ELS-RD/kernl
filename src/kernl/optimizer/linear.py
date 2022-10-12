@@ -17,8 +17,8 @@ from typing import Callable
 
 import torch
 
-from nucle.implementations.linear_layer import linear_layer
-from nucle.utils.extended_matcher import replace_pattern
+from kernl.implementations.linear_layer import linear_layer
+from kernl.utils.extended_matcher import replace_pattern
 
 
 def linear_wrapper(v: torch.Tensor, linear: torch.nn.Linear, activation=""):

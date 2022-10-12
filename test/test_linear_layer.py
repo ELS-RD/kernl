@@ -18,10 +18,10 @@ from typing import Callable, Tuple
 import pytest
 import torch
 
-from conftest import set_seed
+from conftest import check_all_close, set_seed
 
-from nucle.implementations.cuda_graph import cuda_graphs_wrapper
-from nucle.implementations.linear_layer import linear_layer
+from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+from kernl.implementations.linear_layer import linear_layer
 
 
 @pytest.fixture
@@ -102,6 +102,4 @@ def test_benchmark(
 
     value = benchmark(fn, x)
 
-    assert torch.allclose(
-        expected, value.float(), rtol=1e-1, atol=1e-1
-    ), f"max diff: {torch.abs(value.float() - expected).max()}"
+    check_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)

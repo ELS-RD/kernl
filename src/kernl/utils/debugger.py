@@ -20,7 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor
 
-from nucle.utils.range_dict import RangeKeyDict
+from kernl.utils.range_dict import RangeKeyDict
 
 
 class TritonDebugger:

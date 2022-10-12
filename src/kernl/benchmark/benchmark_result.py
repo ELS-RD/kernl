@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from nucle.benchmark.benchmark_data import BenchmarkData
-    from nucle.benchmark.benchmark_fixture import BenchmarkFixture
+    from kernl.benchmark.benchmark_data import BenchmarkData
+    from kernl.benchmark.benchmark_fixture import BenchmarkFixture
 
 
 class BenchmarkResult(object):

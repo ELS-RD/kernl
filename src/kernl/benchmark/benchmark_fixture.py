@@ -20,8 +20,8 @@ from typing import Callable, Iterable, Optional
 import torch
 from _pytest.python import Function
 
-from nucle.benchmark.benchmark_data import BenchmarkData
-from nucle.benchmark.benchmark_result import BenchmarkResult
+from kernl.benchmark.benchmark_data import BenchmarkData
+from kernl.benchmark.benchmark_result import BenchmarkResult
 
 
 class BenchmarkFixture(object):
