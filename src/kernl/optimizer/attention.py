@@ -43,6 +43,7 @@ def fuse_attention(gm: torch.fx.GraphModule, is_causal: bool):
 
     replace_pattern(gm, pattern, replace)
 
+
 def fuse_attention_2(gm: torch.fx.GraphModule, is_causal: bool):
     def pattern(q, k, encoder_decoder_position_bias, v):
         transpose_3 = k.transpose(3, 2)
@@ -55,8 +56,8 @@ def fuse_attention_2(gm: torch.fx.GraphModule, is_causal: bool):
         return matmul_1
 
     def replace(q, k, encoder_decoder_position_bias, v):
-            output = torch.empty_like(q)
-            output = attention_wrapper(q, k, v, output, 1.0, is_causal, encoder_decoder_position_bias)
-            return output
+        output = torch.empty_like(q)
+        output = attention_wrapper(q, k, v, output, 1.0, is_causal, encoder_decoder_position_bias)
+        return output
 
     replace_pattern(gm, pattern, replace)

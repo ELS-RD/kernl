@@ -13,22 +13,24 @@
 #  limitations under the License.
 #
 
-from typing import Dict
+from typing import Callable, Dict
 
-from typing import Dict, Callable
-from transformers import BertPreTrainedModel, T5PreTrainedModel
 import torch
+from transformers import BertPreTrainedModel, T5PreTrainedModel
 
 
 def get_attention_mask(shape: (int, int)) -> torch.Tensor:
-    return torch.randint(1, shape[1], (shape[0],), device="cuda")[:, None] > torch.arange(0, shape[1], device="cuda")[
-                                                                             None, :]
+    return (
+        torch.randint(1, shape[1], (shape[0],), device="cuda")[:, None]
+        > torch.arange(0, shape[1], device="cuda")[None, :]
+    )
+
 
 def get_input_causal(model: Callable, shape: (int, int)) -> Dict[str, torch.Tensor]:
     batch, seq_length = shape
     mask = torch.tril(torch.ones((batch, seq_length, seq_length), dtype=torch.int64, device="cuda"))
     result = get_input_non_causal(model, shape)
-    result['attention_mask'] = mask
+    result["attention_mask"] = mask
     return result
 
 

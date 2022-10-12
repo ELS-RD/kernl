@@ -54,7 +54,9 @@ def optimize_onnx(
     hidden_size: int = 0,
     num_heads: int = 0,
 ):
-    optim_model_name = f"{model.base_model_prefix}_optim_fp16.onnx" if float16 else f"{model.base_model_prefix}_optim_fp32.onnx"
+    optim_model_name = (
+        f"{model.base_model_prefix}_optim_fp16.onnx" if float16 else f"{model.base_model_prefix}_optim_fp32.onnx"
+    )
     if os.path.exists(os.path.join(model_path, optim_model_name)):
         optimized_model = create_model_for_provider(os.path.join(model_path, optim_model_name))
         return optimized_model
@@ -77,11 +79,16 @@ def optimize_onnx(
     optimized_model.save_model_to_file(os.path.join(model_path, optim_model_name))
     return create_model_for_provider(os.path.join(model_path, optim_model_name))
 
+
 def filter_input(kwargs):
-    return {k: v for k, v in kwargs.items() if k in ["input_ids", "attention_mask", "token_type_ids", "decoder_input_ids"]}
+    return {
+        k: v for k, v in kwargs.items() if k in ["input_ids", "attention_mask", "token_type_ids", "decoder_input_ids"]
+    }
+
 
 def get_model_onnx(model_name: str, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
+
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = build_onnx(model_name, model_path)
@@ -96,6 +103,7 @@ def get_model_onnx(model_name: str, model_path: str):
 
 def get_model_optim_fp32_onnx(model: PreTrainedModel, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
+
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = optimize_onnx(model, model_path)
@@ -110,6 +118,7 @@ def get_model_optim_fp32_onnx(model: PreTrainedModel, model_path: str):
 
 def get_model_optim_fp16_onnx(model: PreTrainedModel, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
+
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
     model_onnx = optimize_onnx(model, model_path, True)
