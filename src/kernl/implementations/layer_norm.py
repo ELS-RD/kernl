@@ -137,6 +137,8 @@ def _layer_norm_fwd_fused_single_pass(
     :param stride_row_a: stride of the input tensor
     :param N: number of elements per row in the input tensor
     :param eps: epsilon value to avoid division by zero
+    :param HAS_BIAS: whether the bias is provided
+    :param IS_RMSNORM: whether the normalization is rmsnorm (False == layernorm)
     :param BLOCK_SIZE: number of threads per block
     :return: None
     """
