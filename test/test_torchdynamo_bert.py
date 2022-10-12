@@ -117,6 +117,9 @@ def reference_fp32(request):
 )
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int), implementation: Implementation):
+    if "onnx" in implementation.name and reference_fp32.config.name_or_path != "bert-base-uncased":
+        pytest.skip("Onnx only supported for BERT")
+
     inputs = (
         get_input_causal(reference_fp32, shape)
         if implementation.is_causal

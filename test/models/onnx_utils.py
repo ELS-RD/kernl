@@ -25,7 +25,7 @@ from transformers.onnx import FeaturesManager, export
 
 
 def build_onnx(model: PreTrainedModel, model_path: str) -> [List[str], List[str]]:
-    onnx_path_model = os.path.join(model_path, f"{model.base_model_prefix}.onnx")
+    onnx_path_model = os.path.join(model_path, f"{model.config.name_or_path}.onnx")
     if os.path.exists(onnx_path_model):
         onnx_model = create_model_for_provider(onnx_path_model)
         return onnx_model
@@ -55,16 +55,16 @@ def optimize_onnx(
     num_heads: int = 0,
 ):
     optim_model_name = (
-        f"{model.base_model_prefix}_optim_fp16.onnx" if float16 else f"{model.base_model_prefix}_optim_fp32.onnx"
+        f"{model.config.name_or_path}_optim_fp16.onnx" if float16 else f"{model.config.name_or_path}_optim_fp32.onnx"
     )
     if os.path.exists(os.path.join(model_path, optim_model_name)):
         optimized_model = create_model_for_provider(os.path.join(model_path, optim_model_name))
         return optimized_model
-    if not os.path.exists(os.path.join(model_path, model.base_model_prefix)):
+    if not os.path.exists(os.path.join(model_path, model.config.name_or_path)):
         _ = build_onnx(model, model_path)
     opt_level = 1 if model_type == "bert" else 0
     optimized_model = optimize_model(
-        os.path.join(model_path, f"{model.base_model_prefix}.onnx"),
+        os.path.join(model_path, f"{model.config.name_or_path}.onnx"),
         model_type,
         num_heads=num_heads,
         hidden_size=hidden_size,
@@ -86,12 +86,12 @@ def filter_input(kwargs):
     }
 
 
-def get_model_onnx(model_name: str, model_path: str):
+def get_model_onnx(model: PreTrainedModel, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
 
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
-    model_onnx = build_onnx(model_name, model_path)
+    model_onnx = build_onnx(model, model_path)
 
     def run(*args, **kwargs):
         inputs = filter_input(kwargs)

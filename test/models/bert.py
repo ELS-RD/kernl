@@ -35,25 +35,24 @@ def get_model_baseline(base):
     return base
 
 
+models_dir = tempfile.TemporaryDirectory().name
+
+
 def get_bert_onnx(base):
     from test.models.onnx_utils import get_model_onnx
 
-    models_dir = tempfile.TemporaryDirectory().name
     return get_model_onnx(base, models_dir)
 
 
-# ça va créer plusuers fois els modèles
 def get_bert_optim_fp32_onnx(base):
     from test.models.onnx_utils import get_model_optim_fp32_onnx
 
-    models_dir = tempfile.TemporaryDirectory().name
     return get_model_optim_fp32_onnx(base, models_dir)
 
 
 def get_bert_optim_fp16_onnx(base):
     from test.models.onnx_utils import get_model_optim_fp16_onnx
 
-    models_dir = tempfile.TemporaryDirectory().name
     return get_model_optim_fp16_onnx(base, models_dir)
 
 
