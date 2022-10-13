@@ -55,6 +55,7 @@ def get_bert_optim_fp16_onnx():
 
 def get_bert_tensorrt_shapes():
     from test.models.trt_utils import TensorRTShape
+
     input_id_shape = TensorRTShape(
         min_shape=[1, 16], optimal_shape=[16, 512], max_shape=[16, 512], input_name="input_ids"
     )
@@ -77,6 +78,7 @@ def get_bert_tensorrt_shapes():
 
 def get_bert_tensorrt():
     from test.models.trt_utils import get_model_tensorrt
+
     input_shapes, output_shapes = get_bert_tensorrt_shapes()
     return get_model_tensorrt(model_name, models_dir, input_shapes, output_shapes, fp16_layer_selection=True)
 

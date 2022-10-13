@@ -9,7 +9,8 @@ import torch
 from tensorrt import ICudaEngine, IExecutionContext, ILayer, INetworkDefinition, Logger, Runtime
 from tensorrt.tensorrt import Builder, IBuilderConfig, IElementWiseLayer, IOptimizationProfile, IReduceLayer, OnnxParser
 
-trt_version = [int(n) for n in trt.__version__.split('.')]
+
+trt_version = [int(n) for n in trt.__version__.split(".")]
 
 
 @dataclass
@@ -237,11 +238,12 @@ def build_model_tensorrt(
     model_dir: str,
     trt_input_shapes: List[TensorRTShape],
     trt_output_shapes: List[TensorRTShape],
-    fp16_layer_selection: bool = False
+    fp16_layer_selection: bool = False,
 ):
-    import tensorrt as trt
-    from tensorrt.tensorrt import Logger, Runtime, ICudaEngine
     from test.models.onnx_utils import get_model_onnx
+
+    import tensorrt as trt
+    from tensorrt.tensorrt import ICudaEngine, Logger, Runtime
 
     trt_model_name = f"{model_name}.plan"
     trt_model_path = os.path.join(model_dir, trt_model_name)
@@ -257,7 +259,7 @@ def build_model_tensorrt(
         runtime=runtime,
         onnx_file_path=os.path.join(model_dir, f"{model_name}.onnx"),
         logger=trt_logger,
-        workspace_size=20000 * 1024 ** 2,
+        workspace_size=20000 * 1024**2,
         fp16_layer_selection=fp16_layer_selection,
         input_shapes=trt_input_shapes,
         shape_tensors=trt_output_shapes,
@@ -274,7 +276,7 @@ def get_model_tensorrt(
     model_dir: str,
     trt_input_shapes: List[TensorRTShape],
     trt_output_shapes: List[TensorRTShape],
-    fp16_layer_selection: bool = False
+    fp16_layer_selection: bool = False,
 ):
     from transformers.modeling_outputs import BaseModelOutputWithPooling
 
@@ -284,11 +286,9 @@ def get_model_tensorrt(
         inputs = {
             "input_ids": kwargs["input_ids"],
             "attention_mask": kwargs["attention_mask"],
-            "token_type_ids": kwargs["token_type_ids"]
+            "token_type_ids": kwargs["token_type_ids"],
         }
         outputs = model_trt(inputs=inputs)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=outputs["last_hidden_state"],
-            pooler_output=outputs["1607"]
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=outputs["last_hidden_state"], pooler_output=outputs["1607"])
+
     return run

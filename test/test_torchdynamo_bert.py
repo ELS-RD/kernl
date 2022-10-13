@@ -16,6 +16,7 @@
 import dataclasses
 import warnings
 from test.models.bert import (
+    get_bert_tensorrt,
     get_model_baseline,
     get_model_dynamo,
     get_model_dynamo_cuda_graphs,
@@ -57,7 +58,7 @@ implementations: Dict[str, Implementation] = {
     # In this implementation both causal mask and the assume causal mask optimization will be applied, leads to slower
     # benchmark. It's not needed if we are sure the mask is causal, we can use the "assume causal mask optimization".
     "dynamo_optimizer_cuda_graphs_causal": Implementation(get_model_optimized_causal_cuda_graphs, is_causal=True),
-    "tensorrt": Implementation(test.models.bert.get_bert_tensorrt, is_causal=False),
+    "tensorrt": Implementation(get_bert_tensorrt, is_causal=False),
 }
 
 try:
