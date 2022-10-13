@@ -1,89 +1,105 @@
-import dataclasses
+#  Copyright 2022 Lefebvre Sarrut
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
 
-import torch
+from typing import Callable, Tuple
+
 import pytest
+import torch
 
-from implementations.cuda_graph import cuda_graphs_wrapper
-from implementations.linear_layer import linear_layer
+from conftest import check_all_close, set_seed
 
-
-@dataclasses.dataclass
-class Shape:
-    bs: int
-    M: int
-    N: int
-    K: int
-
-    @property
-    def __dict__(self):
-        return dataclasses.asdict(self)
+from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+from kernl.implementations.linear_layer import linear_layer
 
 
-@pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
-@pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
-@pytest.mark.parametrize("activation", ["", "tanh", "gelu"], ids=["no_activation", "tanh", "gelu"])
-@pytest.mark.parametrize("shape", [Shape(bs=1, M=8, N=8, K=8),
-                                   Shape(bs=1, M=8, N=768, K=768),
-                                   Shape(bs=1, M=16, N=768, K=768),
-                                   Shape(bs=1, M=128, N=768, K=768),
-                                   Shape(bs=1, M=256, N=768, K=768),
-                                   Shape(bs=1, M=512, N=768, K=768),
-                                   Shape(bs=16, M=8, N=768, K=768),
-                                   Shape(bs=16, M=16, N=768, K=768),
-                                   Shape(bs=16, M=128, N=768, K=768),
-                                   Shape(bs=16, M=256, N=768, K=768),
-                                   Shape(bs=16, M=512, N=768, K=768),
-                                   ], ids=lambda x: f"{x.bs}x{x.M}x{x.N}x{x.K}")
-@pytest.mark.parametrize("implementation", ["triton", "triton_cuda_graph", "pytorch", "pytorch_cuda_graph"])
-def test_benchmark(benchmark, shape: Shape, bias: bool, activation: str, contiguous: bool, implementation: str):
-    torch.manual_seed(0)
-    batch, M, N, K = dataclasses.astuple(shape)
+@pytest.fixture
+def cuda_graphs_pool() -> (int, int):
+    return torch.cuda.graph_pool_handle()
 
-    # order of dimensions is wrong so we force contiguous call
 
-    a = torch.randn((batch, K, M), device='cuda', dtype=torch.float16, requires_grad=False)
-    a = a.mT
-    if contiguous:
-        a = a.contiguous()
-    else:
-        assert not a.is_contiguous()
-
-    layer_weight = torch.randn((N, K), device='cuda', dtype=torch.float16, requires_grad=False)
-
+def get_pytorch_activation(activation: str) -> Callable:
     if activation == "gelu":
-        activation_fn = torch.nn.functional.gelu
+        return torch.nn.functional.gelu
     elif activation == "tanh":
-        activation_fn = torch.tanh
+        return torch.tanh
+    elif activation == "relu":
+        return torch.relu
     elif activation == "":
-        activation_fn = lambda x: x
+        return lambda x: x
     else:
         raise ValueError(f"Unknown activation: {activation}")
 
-    torch_linear_layer = torch.nn.Linear(K, N, bias=bias, device="cuda", dtype=torch.float16)
-    torch_linear_layer.weight.data = layer_weight
 
-    def torch_linear_activation(x):
-        return activation_fn(torch_linear_layer(x))
+implementations = {
+    "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
+        torch.nn.functional.linear(x, weight, bias)
+    ),
+    "triton": lambda weight, bias, activation: lambda x: linear_layer(x, weight, bias, activation),
+}
 
-    expected = torch_linear_activation(a)
 
-    cuda_graph_pool = torch.cuda.graph_pool_handle()
+@set_seed()
+@pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
+@pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
+@pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
+@pytest.mark.parametrize(
+    "shape",
+    [(1, 8, 8, 8)] + [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
+    ids=lambda s: "x".join(map(str, s)),
+)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
+@pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
+@pytest.mark.parametrize("implementation", ["triton", "pytorch"])
+def test_benchmark(
+    benchmark,
+    implementation: str,
+    cuda_graphs: bool,
+    shape: Tuple[int, int, int, int],
+    dtype: torch.dtype,
+    bias: bool,
+    activation: str,
+    contiguous: bool,
+    cuda_graphs_pool: (int, int),
+):
+    batch, M, N, K = shape
 
-    if implementation == "pytorch":
-        value = benchmark(torch_linear_activation, a)
-    elif implementation == "pytorch_cuda_graph":
-        run = cuda_graphs_wrapper(model=torch_linear_activation, inputs=[a], pool=cuda_graph_pool)
-        (value,) = benchmark(run, a)
-    elif implementation == "triton":
-        value, _ = benchmark(linear_layer, x=a, weight=layer_weight, bias=torch_linear_layer.bias,
-                             activation=activation)
-    elif implementation == "triton_cuda_graph":
-        def wrapper(x):
-            return linear_layer(x=x, weight=layer_weight, bias=torch_linear_layer.bias, activation=activation)
-
-        run = cuda_graphs_wrapper(model=wrapper, inputs=[a], pool=cuda_graph_pool, copy_outputs=False)
-        value, _ = benchmark(run, a)
+    # order of dimensions is wrong so we force contiguous call
+    x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=False)
+    x = x.mT
+    if contiguous:
+        x = x.contiguous()
     else:
-        raise ValueError(f"Unknown implementation {implementation}")
+        assert not x.is_contiguous()
+    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
+    layer_weight = torch.randn((N, K), **factory_kwargs)
+    layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
+    pytorch_layer_activation = get_pytorch_activation(activation)
+    expected = pytorch_layer_activation(torch.nn.functional.linear(x, layer_weight, layer_bias))
 
-    assert torch.allclose(value, expected, rtol=1e-1, atol=1e-1), f"max diff: {torch.abs(value - expected).max()}"
+    # tensors casting
+    layer_weight = layer_weight.to(dtype=dtype)
+    if layer_bias is not None:
+        layer_bias = layer_bias.to(dtype=dtype)
+    x = x.to(dtype=dtype)
+
+    fn = implementations[implementation](layer_weight, layer_bias, activation)
+    if cuda_graphs:
+        run = cuda_graphs_wrapper(model=fn, inputs=[x], pool=cuda_graphs_pool)
+        # cuda graphs wraps output in a tuple
+        fn = lambda tensor: run(tensor)[0]  # noqa: E731
+
+    value = benchmark(fn, x)
+
+    check_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)

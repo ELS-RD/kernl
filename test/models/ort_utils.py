@@ -1,19 +1,36 @@
+#  Copyright 2022 Lefebvre Sarrut
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+
 """
 All the tooling to ease ONNX Runtime usage.
 """
+
 import ctypes as C
 from ctypes.util import find_library
 from typing import Dict, Optional, Tuple
 
+import cupy as cp
 import numpy as np
 import torch
+
 # noinspection PyUnresolvedReferences
-from onnxruntime import ExecutionMode, GraphOptimizationLevel, InferenceSession, IOBinding, OrtValue, SessionOptions
+from onnxruntime import GraphOptimizationLevel, InferenceSession, IOBinding, OrtValue, SessionOptions
+
 
 libc = C.CDLL(find_library("c"))
 libc.malloc.restype = C.c_void_p
-
-import cupy as cp
 
 
 def create_model_for_provider(path: str) -> InferenceSession:
