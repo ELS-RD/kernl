@@ -85,36 +85,6 @@ def filter_input(kwargs):
     }
 
 
-def get_model_onnx(model: PreTrainedModel, model_path: str):
-    from test.models.ort_utils import inference_onnx_binding
-
-    from transformers.modeling_outputs import BaseModelOutputWithPooling
-
-    model_onnx = build_onnx(model, model_path)
-
-    def run(*args, **kwargs):
-        inputs = filter_input(kwargs)
-        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
-        return BaseModelOutputWithPooling(last_hidden_state=outputs["last_hidden_state"], pooler_output=outputs["1607"])
-
-    return run
-
-
-def get_model_optim_fp32_onnx(model: PreTrainedModel, model_path: str):
-    from test.models.ort_utils import inference_onnx_binding
-
-    from transformers.modeling_outputs import BaseModelOutputWithPooling
-
-    model_onnx = optimize_onnx(model, model_path)
-
-    def run(*args, **kwargs):
-        inputs = filter_input(kwargs)
-        outputs = inference_onnx_binding(model_onnx=model_onnx, inputs=inputs)
-        return BaseModelOutputWithPooling(last_hidden_state=outputs["last_hidden_state"], pooler_output=outputs["1607"])
-
-    return run
-
-
 def get_model_optim_fp16_onnx(model: PreTrainedModel, model_path: str):
     from test.models.ort_utils import inference_onnx_binding
 

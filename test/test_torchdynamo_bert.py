@@ -17,9 +17,7 @@ import dataclasses
 import warnings
 from test.models.bert import (
     get_model_baseline,
-    get_model_dynamo,
     get_model_dynamo_cuda_graphs,
-    get_model_dynamo_dropout_removed,
     get_model_dynamo_nvfuser_ofi,
     get_model_from_hf,
     get_model_optimized,
@@ -45,9 +43,7 @@ class Implementation:
 
 implementations: [Implementation] = [
     Implementation("baseline", get_model_baseline, is_causal=False),
-    Implementation("dynamo", get_model_dynamo, is_causal=False),
     Implementation("dynamo_nvfuser_ofi", get_model_dynamo_nvfuser_ofi, is_causal=False),
-    Implementation("dynamo_no_dropout", get_model_dynamo_dropout_removed, is_causal=False),
     Implementation("dynamo_cuda_graphs", get_model_dynamo_cuda_graphs, is_causal=False),
     Implementation("dynamo_optimized", get_model_optimized, is_causal=False),
     Implementation("dynamo_optimized_cuda_graphs", get_model_optimized_cuda_graphs, is_causal=False),
@@ -56,28 +52,6 @@ implementations: [Implementation] = [
     Implementation("dynamo_optimizer_cuda_graphs_causal", get_model_optimized_causal_cuda_graphs, is_causal=True),
 ]
 
-
-try:
-    # check imports and initialize onnx model
-    from test.models.bert import get_bert_onnx
-
-    _ = get_bert_onnx(get_model_from_hf("bert-base-uncased"))
-    implementations.append(Implementation("onnx", get_bert_onnx, is_causal=False))
-except ImportError as e:
-    error = f"It seems that you are missing some dependencies: onnx won't be included in benchmarks. \n {str(e)}"
-    warnings.warn(UserWarning(error))
-
-try:
-    # check imports and initialize optimized fp32 onnx model
-    from test.models.bert import get_bert_optim_fp32_onnx
-
-    _ = get_bert_optim_fp32_onnx(get_model_from_hf("bert-base-uncased"))
-    implementations.append(Implementation("onnx_optim_fp32", get_bert_optim_fp32_onnx, is_causal=False))
-except ImportError as e:
-    error = (
-        f"It seems that you are missing some dependencies: onnx_optim_fp32 won't be included in benchmarks. \n {str(e)}"
-    )
-    warnings.warn(UserWarning(error))
 
 try:
     # check imports and initialize optimized fp16 onnx model
@@ -100,14 +74,7 @@ def reference_fp32(request):
 @set_seed()
 @pytest.mark.parametrize(
     "reference_fp32",
-    [
-        "bert-base-uncased",
-        "t5-small",
-        "sentence-transformers/all-MiniLM-L6-v2",
-        # "distilbert-base-uncased",
-        # "xlm-roberta-base",
-        # "camembert-base",
-    ],
+    ["bert-base-uncased", "t5-small"],
     indirect=True,
 )
 @pytest.mark.parametrize(

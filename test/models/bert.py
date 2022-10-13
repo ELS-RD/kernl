@@ -22,7 +22,6 @@ from torchdynamo.optimizations import BACKENDS
 from transformers import AutoModel
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
-from kernl.optimizer.dropout import remove_dropout
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
@@ -38,45 +37,10 @@ def get_model_baseline(base):
 models_dir = tempfile.TemporaryDirectory().name
 
 
-def get_bert_onnx(base):
-    from test.models.onnx_utils import get_model_onnx
-
-    return get_model_onnx(base, models_dir)
-
-
-def get_bert_optim_fp32_onnx(base):
-    from test.models.onnx_utils import get_model_optim_fp32_onnx
-
-    return get_model_optim_fp32_onnx(base, models_dir)
-
-
 def get_bert_optim_fp16_onnx(base):
     from test.models.onnx_utils import get_model_optim_fp16_onnx
 
     return get_model_optim_fp16_onnx(base, models_dir)
-
-
-def get_model_dynamo_dropout_removed(base):
-    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        remove_dropout(gm)
-        return gm  # return a python callable
-
-    def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
-
-    return run
-
-
-def get_model_dynamo(base):
-    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        return gm.forward  # return a python callable
-
-    def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
-
-    return run
 
 
 def get_model_dynamo_nvfuser_ofi(base):
