@@ -26,7 +26,7 @@ def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
 torch.fx.wrap("attention_wrapper")
 
 
-def fuse_attention_1(gm: torch.fx.GraphModule, is_causal: bool):
+def fuse_attention_pattern_1(gm: torch.fx.GraphModule, is_causal: bool):
     def pattern(q, k, attention_mask, v):
         transpose_10 = k.transpose(-1, -2)
         matmul_20 = torch.matmul(q, transpose_10)
@@ -44,7 +44,7 @@ def fuse_attention_1(gm: torch.fx.GraphModule, is_causal: bool):
     replace_pattern(gm, pattern, replace)
 
 
-def fuse_attention_2(gm: torch.fx.GraphModule, is_causal: bool):
+def fuse_attention_pattern_2(gm: torch.fx.GraphModule, is_causal: bool):
     def pattern(q, k, encoder_decoder_position_bias, v):
         transpose_3 = k.transpose(3, 2)
         matmul = torch.matmul(q, transpose_3)
