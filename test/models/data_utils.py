@@ -26,19 +26,17 @@ def get_attention_mask(shape: (int, int)) -> torch.Tensor:
     )
 
 
-def get_input_causal(model: Callable, shape: (int, int)) -> Dict[str, torch.Tensor]:
-    batch, seq_length = shape
-    mask = torch.tril(torch.ones((batch, seq_length, seq_length), dtype=torch.int64, device="cuda"))
-    result = get_input_non_causal(model, shape)
-    result["attention_mask"] = mask
-    return result
-
-
-def get_input_non_causal(model: Callable, shape: (int, int)) -> Dict[str, torch.Tensor]:
+def get_input(model: Callable, shape: (int, int), is_causal: bool = False) -> Dict[str, torch.Tensor]:
     result = {
         "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int64, device="cuda"),
         "attention_mask": get_attention_mask(shape).to(torch.int64),
     }
+
+    if is_causal:
+        batch, seq_length = shape
+        result["attention_mask"] = torch.tril(
+            torch.ones((batch, seq_length, seq_length), dtype=torch.int64, device="cuda")
+        )
 
     if isinstance(model, BertPreTrainedModel):
         result["token_type_ids"] = torch.ones(size=shape, dtype=torch.int64, device="cuda")

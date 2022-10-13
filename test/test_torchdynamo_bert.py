@@ -26,7 +26,7 @@ from test.models.bert import (
     get_model_optimized_causal_cuda_graphs,
     get_model_optimized_cuda_graphs,
 )
-from test.models.data_utils import get_input_causal, get_input_non_causal
+from test.models.data_utils import get_input
 from typing import Callable
 
 import pytest
@@ -61,7 +61,7 @@ try:
     # check imports and initialize onnx model
     from test.models.bert import get_bert_onnx
 
-    # _ = get_bert_onnx()
+    _ = get_bert_onnx(get_model_from_hf("bert-base-uncased"))
     implementations.append(Implementation("onnx", get_bert_onnx, is_causal=False))
 except ImportError as e:
     error = f"It seems that you are missing some dependencies: onnx won't be included in benchmarks. \n {str(e)}"
@@ -71,7 +71,7 @@ try:
     # check imports and initialize optimized fp32 onnx model
     from test.models.bert import get_bert_optim_fp32_onnx
 
-    # _ = get_bert_optim_fp32_onnx()
+    _ = get_bert_optim_fp32_onnx(get_model_from_hf("bert-base-uncased"))
     implementations.append(Implementation("onnx_optim_fp32", get_bert_optim_fp32_onnx, is_causal=False))
 except ImportError as e:
     error = (
@@ -83,7 +83,7 @@ try:
     # check imports and initialize optimized fp16 onnx model
     from test.models.bert import get_bert_optim_fp16_onnx
 
-    # _ = get_bert_optim_fp16_onnx()
+    _ = get_bert_optim_fp16_onnx(get_model_from_hf("bert-base-uncased"))
     implementations.append(Implementation("onnx_optim_fp16", get_bert_optim_fp16_onnx, is_causal=False))
 except ImportError as e:
     error = (
@@ -122,11 +122,7 @@ def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int),
     ) and reference_fp32.config.name_or_path != "bert-base-uncased":
         pytest.skip("Only supported for BERT")
 
-    inputs = (
-        get_input_causal(reference_fp32, shape)
-        if implementation.is_causal
-        else get_input_non_causal(reference_fp32, shape)
-    )
+    inputs = get_input(reference_fp32, shape, is_causal=implementation.is_causal)
     with torch.inference_mode():
         expected = reference_fp32(**inputs)
         model = implementation.model(reference_fp32)
@@ -148,16 +144,11 @@ def test_support_shape_change(implementation):
     model_reference_fp32 = get_model_from_hf("bert-base-uncased")
     model_tested = implementation.model(get_model_from_hf("bert-base-uncased"))
     for shape in [(1, 64), (8, 256), (16, 256), (16, 64)]:
-        pytorch_input = (
-            get_input_causal(model_reference_fp32, shape)
-            if implementation.is_causal
-            else get_input_non_causal(model_reference_fp32, shape)
-        )
+        pytorch_input = get_input(model_reference_fp32, shape, is_causal=implementation.is_causal)
         with torch.inference_mode():
             expected = model_reference_fp32(**pytorch_input)
             with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
                 result = model_tested(**pytorch_input)
-        max_diff = torch.max(torch.abs(result["last_hidden_state"].float() - expected["last_hidden_state"].float()))
         check_all_close(
             result["last_hidden_state"].float(), expected["last_hidden_state"].float(), atol=1e-1, rtol=1e-1
-        ), f"failed with shape {shape}, max diff: {max_diff}"
+        )

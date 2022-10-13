@@ -24,7 +24,6 @@ from kernl.utils.extended_matcher import replace_pattern
 def linear_wrapper(v: torch.Tensor, linear: torch.nn.Linear, activation=""):
     # small hack to avoid casting weights/bias at each call
     if linear.weight.dtype == torch.float32:
-        # on override de forward
         linear.weight.data = linear.weight.data.half()
     if linear.bias is not None and linear.bias.dtype == torch.float32:
         linear.bias.data = linear.bias.data.half()
