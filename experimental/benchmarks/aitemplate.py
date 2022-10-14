@@ -44,11 +44,14 @@ def run_model(activation: str, graph_mode: bool, use_fp16_acc: bool, verify: boo
             mod.run_with_tensors(inputs_pt, outputs, graph_mode=graph_mode)
 
         torch.cuda.synchronize()
-        start = time.time()
-        mod.run_with_tensors(inputs_pt, outputs, graph_mode=graph_mode)
-        torch.cuda.synchronize()
-        end = time.time()
-        f.write(f"{shape}: {end - start:.4f}\n")
+        timings = list()
+        for _ in range(10):
+            start = time.time()
+            mod.run_with_tensors(inputs_pt, outputs, graph_mode=graph_mode)
+            torch.cuda.synchronize()
+            timings.append(time.time() - start)
+
+        f.write(f"{shape}: {torch.median(torch.tensor(timings)):.4f}\n")
         f.flush()
         print(f"Logits: {outputs[0]}")
         if verify:
