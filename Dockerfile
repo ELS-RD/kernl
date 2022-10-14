@@ -41,7 +41,7 @@ COPY ./requirements.txt ./requirements.txt
 COPY ./README.md ./README.md
 COPY ./requirements-benchmark.txt ./requirements-benchmark.txt
 COPY ./src/__init__.py ./src/__init__.py
-COPY ./src/nucle/__init__.py ./src/nucle/__init__.py
+COPY ./src/kernl/__init__.py ./src/kernl/__init__.py
 
 
 ENV SKIP_CUDA_ASSERT=1
