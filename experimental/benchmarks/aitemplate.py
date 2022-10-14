@@ -12,17 +12,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-import click
 import time
-import torch
 
+import click
+import torch
 from benchmark_ait import compile_module
 from modeling.torch_model import BertBaseUncased as BertPt
 
 
-def run_model(
-        activation: str, graph_mode: bool, use_fp16_acc: bool, verify: bool
-):
+def run_model(activation: str, graph_mode: bool, use_fp16_acc: bool, verify: bool):
     f = open("measures.txt", mode="w")
     for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 256, 512] if bs * seq_l < 10000]:
         inputs_pt = {
@@ -37,9 +35,7 @@ def run_model(
         pt_model.eval()
         hidden_size = pt_model.config.hidden_size
 
-        mod = compile_module(
-            batch_size, seq_len, hidden_size, activation, use_fp16_acc, False, pt_model
-        )
+        mod = compile_module(batch_size, seq_len, hidden_size, activation, use_fp16_acc, False, pt_model)
 
         outputs = [torch.empty(mod.get_output_maximum_shape(0)).half().cuda()]
 
@@ -88,10 +84,10 @@ def run_model(
     help="Verify AIT outputs against PT",
 )
 def run_demo(
-        activation: str,
-        graph_mode: bool,
-        use_fp16_acc: bool,
-        verify: bool,
+    activation: str,
+    graph_mode: bool,
+    use_fp16_acc: bool,
+    verify: bool,
 ):
     run_model(activation, graph_mode, use_fp16_acc, verify)
 
