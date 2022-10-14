@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/tensorrt:22.09-py3
+FROM nvidia/cuda:11.6.1-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 ENV CUDA_INSTALL_PATH=/usr/local/cuda/
@@ -18,16 +18,16 @@ RUN apt-get install -y git \
     python3.9 \
     python3.9-distutils \
     python3.9-venv \
-    python3.9-dev && \
-    python3.9 -m ensurepip && \
-  update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 && \
+    python3.9-dev
+
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.9 2 && \
   update-alternatives --set python /usr/bin/python3.9 && \
   update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1 && \
   update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 2 && \
-  update-alternatives --set python3 /usr/bin/python3.9 && \
-  pip install --upgrade pip
+  update-alternatives --set python3 /usr/bin/python3.9
 
+RUN python3.9 -m ensurepip --default-pip --upgrade
 
 RUN pip install torch --extra-index-url https://download.pytorch.org/whl/cu116
 
