@@ -13,31 +13,38 @@
 #  limitations under the License.
 #
 
-from typing import Dict
+from typing import Callable, Dict
 
 import torch
+from transformers import BertPreTrainedModel, T5PreTrainedModel
 
 
 def get_attention_mask(shape: (int, int)) -> torch.Tensor:
+    bs, seq_len = shape
     return (
-        torch.randint(1, shape[1], (shape[0],), device="cuda")[:, None]
-        > torch.arange(0, shape[1], device="cuda")[None, :]
-    )
+        torch.randint(1, seq_len, (bs,), device="cuda")[:, None] > torch.arange(0, seq_len, device="cuda")[None, :]
+    ).to(torch.int64)
 
 
-def get_input_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
+def get_causal_mask(shape: (int, int)) -> torch.Tensor:
     batch, seq_length = shape
-    mask = torch.tril(torch.ones((batch, seq_length, seq_length), dtype=torch.int64, device="cuda"))
-    return {
-        "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int64, device="cuda"),
-        "attention_mask": mask,
-        "token_type_ids": torch.ones(size=shape, dtype=torch.int64, device="cuda"),
-    }
+    return torch.tril(torch.ones((batch, seq_length, seq_length), dtype=torch.int64, device="cuda"))
 
 
-def get_input_non_causal(shape: (int, int)) -> Dict[str, torch.Tensor]:
-    return {
+def get_input(model: Callable, shape: (int, int), is_causal: bool = False) -> Dict[str, torch.Tensor]:
+    result = {
         "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int64, device="cuda"),
-        "attention_mask": get_attention_mask(shape).to(torch.int64),
-        "token_type_ids": torch.ones(size=shape, dtype=torch.int64, device="cuda"),
     }
+
+    if is_causal:
+        result["attention_mask"] = get_causal_mask(shape)
+    else:
+        result["attention_mask"] = get_attention_mask(shape)
+
+    if isinstance(model, BertPreTrainedModel):
+        result["token_type_ids"] = torch.ones(size=shape, dtype=torch.int64, device="cuda")
+
+    if isinstance(model, T5PreTrainedModel):
+        result["decoder_input_ids"] = torch.randint(2, 1000, size=shape, dtype=torch.int64, device="cuda")
+
+    return result
