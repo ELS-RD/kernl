@@ -373,7 +373,7 @@ class Attention(torch.autograd.Function):
             assert (
                 attention_mask.size(2) == seq_length or attention_mask.size(2) == 1
             ), "Incompatible broadcast seq_length dimension"
-            assert attention_mask.size(3) == seq_length, "Last size of mask must be seq_length to broadcast on QK^t"
+            assert attention_mask.size(3) == seq_length, f"Last size of mask must be seq_length to broadcast on QK^t: {attention_mask.size(3)} != {seq_length}"
 
             HAS_MASK = True
 
