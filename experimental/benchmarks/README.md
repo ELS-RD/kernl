@@ -169,4 +169,6 @@ We tried several disabled by default optimizations but none of them worked:
 * `config.inplace_buffers = True`: crash, see https://github.com/pytorch/torchdynamo/issues/823
 * `config.triton.mm = "triton"` (same for `"autotune"`): crash, even when trying with `config.triton.autotune = False`
 
+By default, `CUDA graphs` is enabled.
+
 The last one is important and should bring some speedup when working.
