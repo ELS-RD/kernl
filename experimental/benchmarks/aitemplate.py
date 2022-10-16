@@ -46,10 +46,11 @@ def run_model(activation: str, graph_mode: bool, use_fp16_acc: bool, verify: boo
         torch.cuda.synchronize()
         timings = list()
         for _ in range(10):
-            start = time.time()
+            start = time.perf_counter()
             mod.run_with_tensors(inputs_pt, outputs, graph_mode=graph_mode)
             torch.cuda.synchronize()
-            timings.append(time.time() - start)
+            end = time.perf_counter()
+            timings.append(end - start)
 
         f.write(f"{shape}: {torch.median(torch.tensor(timings)):.4f}\n")
         f.flush()

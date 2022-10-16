@@ -119,3 +119,54 @@ clock time which better match our end to end case.
 Differences are mostly on short input shapes where CPU overhead dominates. 
 
 CPP implementation of benchmark function is [here](https://github.com/facebookincubator/AITemplate/blob/44026ba7e7f5376a80cf0f2b333a0f25c0eeda6c/static/csrc/model_container.cpp).
+
+
+## [Torchdynamo + inductor](https://github.com/pytorch/torchdynamo)
+
+### Version
+
+* Triton: https://github.com/openai/triton@af76c989eb4799b015f8b288ccd8421558772e56#subdirectory=python
+* Pytorch (includes Torchdynamo): 1.14.0.dev20221015+cu117
+
+### Results
+
+| batch | sequence length | Time (ms) |
+|-------|-----------------|-----------|
+| 1     | 16              | 0.0017    |
+| 1     | 32              | 0.0018    |
+| 1     | 64              | 0.0019    |
+| 1     | 128             | 0.0024    |
+| 1     | 256             | 0.0029    |
+| 1     | 512             | 0.0047    |
+| 8     | 16              | 0.0024    |
+| 8     | 32              | 0.0028    |
+| 8     | 64              | 0.0042    |
+| 8     | 128             | 0.0069    |
+| 8     | 256             | 0.0115    |
+| 8     | 512             | 0.0207    |
+| 32    | 16              | 0.0041    |
+| 32    | 32              | 0.0066    |
+| 32    | 64              | 0.0114    |
+| 32    | 128             | 0.0173    |
+| 32    | 256             | 0.0345    |
+
+### Running the benchmark
+
+```shell
+python experimental/benchmarks/inductor.py
+```
+
+### Notes
+
+`Torchinductor` is still in prototype stage, results may be different with final version.  
+We are using the version included in `Pytorch` nightly for this benchmark.  
+The dependency of this project is an older version not requiring nightly version as we only need `Torchdynamo`.
+Project info on https://github.com/pytorch/torchdynamo even if code is not anymore updated in this repo.
+
+We tried several disabled by default optimizations but none of them worked:
+
+* `config.aggressive_fusion = True`: significantly slower when enabled on our GPU.
+* `config.inplace_buffers = True`: crash, see https://github.com/pytorch/torchdynamo/issues/823
+* `config.triton.mm = "triton"` (same for `"autotune"`): crash, even when trying with `config.triton.autotune = False`
+
+The last one is important and should bring some speedup when working.
