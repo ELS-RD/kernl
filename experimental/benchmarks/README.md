@@ -103,6 +103,10 @@ cat measures.txt
 
 The script is based on the official [demo script](https://github.com/facebookincubator/AITemplate/tree/main/examples/03_bert).
 
+The model seems to not support `attention_mask`, so we don't use it in benchmarks.
+It gives `AITemplate` an unfair advantage as it avoids several operations, plus it makes it hard to use with batch > 1.
+For follow-up, an issue has been opened [here](https://github.com/facebookincubator/AITemplate/issues/46) on the repo.
+
 We choose to use the following options:
 
 * accumulation in `FP32` (instead of default `FP16`): 
@@ -112,9 +116,9 @@ We choose to use the following options:
   FWIW, `Kernl` also have support of fast GELU but it is disabled by default.
 * `CUDA graphs` enabled: this technology remove kernel launching overhead, and is a good practice to use it when possible.
 
-We don't use the [benchmark](https://github.com/facebookincubator/AITemplate/blob/main/examples/03_bert/benchmark_ait.py)
-script provided in the `AITemplate` repo because it reports GPU times through CUDA events and we want to measure the wall 
-clock time which better match our end to end case.
+We do not use the [benchmark](https://github.com/facebookincubator/AITemplate/blob/main/examples/03_bert/benchmark_ait.py)
+script provided in the `AITemplate` repo because it reports GPU times through CUDA events and compare inference engines 
+on wall-clock times which better matches our end-to-end use cases.
 
 Differences are mostly on short input shapes where CPU overhead dominates. 
 
