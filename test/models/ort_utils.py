@@ -60,7 +60,7 @@ def inference_onnx_binding(
         elif out.name == "1607":  # pooler_output
             output_tensor = torch.empty((bs, 768), dtype=torch.float16, device="cuda")
         else:
-            raise ValueError(f"Unknown output name {out.name}")
+            raise ValueError(f"Unknown output name {out.name}. We only support Bert model.")
         outputs[out.name] = output_tensor
         binding.bind_output(
             name=out.name,
