@@ -21,6 +21,8 @@ from kernl.optimizer.layer_norm import replace_layer_norm
 from kernl.optimizer.linear import replace_all_linear
 from kernl.optimizer.normalizer import normalize_operators
 
+from src.kernl.optimizer.layer_norm import replace_layer_norm_rms
+
 
 def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     normalize_operators(gm)
@@ -29,4 +31,5 @@ def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     fuse_attention_pattern_2(gm, assume_causal)
     replace_all_linear(gm)
     replace_layer_norm(gm)
+    replace_layer_norm_rms(gm)
     return gm
