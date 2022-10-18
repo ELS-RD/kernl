@@ -1,6 +1,5 @@
 onnx
 onnxruntime-gpu
-cupy-cuda117
 isort
 black[jupyter]
 flake8
