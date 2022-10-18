@@ -1,3 +1,7 @@
+![Kernl logo](./resources/images/logo-readme.svg)
+
+--------------------------------------------------------------------------------
+
 # Kernl
 
 Optimized kernels for `transformer` models.
