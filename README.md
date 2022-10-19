@@ -113,21 +113,21 @@ The simple rule is memory bandwidth is often the bottleneck in deep learning, to
 
 We leverage mostly 3 technologies:
 
-- [OpenAI Triton](https://triton-lang.org/): it’s a language to write GPU kernels like CUDA, but much more productive
+* [OpenAI Triton](https://triton-lang.org/): it’s a language to write GPU kernels like CUDA, but much more productive
   (for us at least). Improvement is due to the fusion of several ops, making us able to chain computations without
   saving intermediate results in GPU memory. We are using it to rewrite:
 
-  - Attention (replaced by Flash attention),
-  - Linear layer and their activation,
-  - and finally Layernorm/Rmsnorm.
+  * Attention (replaced by Flash attention),
+  * Linear layer and their activation,
+  * and finally Layernorm/Rmsnorm.
 
-- [Cuda graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) : you may that Python is slow,
+* [Cuda graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) : you may that Python is slow,
   blablabla  and to limit overhead C++/Rust should be the solution.
   It is true but better than low overhead is no overhead at all. That’s cuda-graphs!
   During a warmup step, it will save every kernel launched and their parameters, and then, with a single instruction,
   we can replay the whole inference without calling any Python code (or any other CPU overhead) at all.
 
-- [Torchdynamo](https://github.com/pytorch/torchdynamo/): this prototype from Meta helps us to cope with dynamic
+* [Torchdynamo](https://github.com/pytorch/torchdynamo/): this prototype from Meta helps us to cope with dynamic
   behavior. It’s described [here](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747),
   and in a few words during a warmup step it traces the model and provides a Fx graph (a static computation graph).
   We replace some operations of this graph with our kernels and recompile it in Python.
