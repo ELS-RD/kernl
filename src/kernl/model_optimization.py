@@ -22,7 +22,7 @@ from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
-def optimize_model(original_model: PreTrainedModel) -> tuple[PreTrainedModel, Callable]:
+def optimize_model(original_model: PreTrainedModel) -> Callable:
     """
     Optimizes a given model. Optimization is done in two steps:
     *  first step is to convert the given model to fx graph.
@@ -46,4 +46,4 @@ def optimize_model(original_model: PreTrainedModel) -> tuple[PreTrainedModel, Ca
 
     original_model.forward = forward_with_exception
 
-    return original_model, run
+    return run
