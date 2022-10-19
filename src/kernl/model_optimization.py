@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 import torch
 import torchdynamo
@@ -22,15 +22,16 @@ from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
-def optimize_model(original_model: PreTrainedModel) -> Callable:
+def optimize_model(original_model: PreTrainedModel) -> tuple[PreTrainedModel, Callable]:
     """
     Optimizes a given model. Optimization is done in two steps:
     *  first step is to convert the given model to fx graph.
     *  second step is to replace patterns found in the graph in order to optimize the model.
 
-    @return: returns a callable with the optimized model.
+    @return: returns the original model which cannot be used after optimization and the optimized model.
     """
     pool: (int, int) = torch.cuda.graph_pool_handle()
+    original_model.forward2 = original_model.forward
 
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         dynamo_backend_ofi(gm, assume_causal=True)
@@ -38,6 +39,11 @@ def optimize_model(original_model: PreTrainedModel) -> Callable:
 
     def run(*args, **kwargs):
         with torchdynamo.optimize(compiler):
-            return original_model(*args, **kwargs)
+            return original_model.forward2(*args, **kwargs)
 
-    return run
+    def forward_with_exception(*args, **kwargs):
+        raise Exception("Original model can not be used after optimization")
+
+    original_model.forward = forward_with_exception
+
+    return original_model, run
