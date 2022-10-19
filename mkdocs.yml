@@ -1,1 +1,189 @@
-site_name: My Docs
+# Project information
+site_name: Kernl.ai
+site_url: https://els-rd.github.io/kernl
+site_author: Lefebvre Dalloz
+site_description: >-
+  Kernl is an open source project that optimizes and accelerates your Pythorch Model
+
+# Repository
+repo_name: els-rd/kernl
+repo_url: https://github.com/ELS-RD/kernl
+edit_uri: ""
+
+# Copyright
+copyright: Copyright &copy; 2022 Lefebvre Dalloz
+
+# Configuration
+theme:
+  name: material
+  custom_dir: docs/overrides
+  logo: assets/images/logo.svg
+  favicon: assets/favicon.png
+  icon:
+    repo: fontawesome/brands/github-alt
+  font:
+    text: Poppins
+    code: Roboto Mono
+
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/toggle-switch-off-outline
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: slate
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to light mode
+
+  # Default values, taken from mkdocs_theme.yml
+  features:
+    # - header.autohide
+    # - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    # - navigation.tabs.sticky
+    - navigation.sections
+    # - navigation.expand
+    - navigation.indexes
+    # - toc.integrate
+    - navigation.top
+    - search.suggest
+    - search.highlight          # experimental features
+    - search.share              # experimental features
+    # - announce.dismiss
+
+# Stylesheets
+extra_css:
+  - stylesheets/extra.css
+
+# Javascripts
+extra_javascript:
+  - javascripts/gsap.3.11.0.min.js
+  - javascripts/scrollTrigger.3.11.0.min.js
+  - javascripts/extra.js
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Plugins
+#plugins:
+#  - search
+
+# Customization
+extra:
+  social:
+    - icon: fontawesome/brands/twitter
+      link: https://google.com/
+      name: Kernel Fusion on Twitter
+    - icon: fontawesome/brands/github
+      link: https://google.com/
+      name: Kernel Fusion on Github
+    - icon: fontawesome/brands/medium
+      link: https://google.com/
+      name: Kernel Fusion on Medium
+    - icon: fontawesome/brands/linkedin
+      link: https://google.com/
+      name: Kernel Fusion on LinkedIn
+    - icon: fontawesome/brands/slack
+      link: https://google.com/
+      name: Kernel Fusion on Slack
+  generator: false
+#  alternate:
+#    - name: English
+#      link: /en/
+#      lang: en
+#    - name: Français
+#      link: /fr/
+#      lang: fr
+#  consent:
+#    title: Cookie consent
+#    description:
+#      We use cookies to recognize your repeated visits and preferences, as well
+#      as to measure the effectiveness of our documentation and whether users
+#      find what they're searching for. With your consent, you're helping us to
+#      make our documentation better.
+#  version:
+#    provider: mike
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - meta
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.smartsymbols
+#  - pymdownx.magiclink:
+#      repo_url_shorthand: true
+#      user: squidfunk
+#      repo: mkdocs-material
+
+# Page tree
+nav:
+  - Home: index.md
+  - First Steps:
+      - Install: steps/install.md
+      - Next step 1: steps/page-1.md
+      - Next step 2: steps/page-2.md
+      - Next step 3: steps/page-3.md
+      - Next step 4: steps/page-4.md
+  - How it works:
+      - Step 1: how-it-works/page-1.md
+      - Step 2: how-it-works/page-2.md
+      - Step 3: how-it-works/page-3.md
+      - Step 4: how-it-works/page-4.md
+  - User guide:
+      - Page 1: user-guide/page-1.md
+      - Page 2: user-guide/page-2.md
+      - Page 3: user-guide/page-3.md
+      - Page 4: user-guide/page-4.md
+  - Code Reference:
+      - Page 1: reference/page-1.md
+      - Page 2: reference/page-2.md
+      - Page 3: reference/page-3.md
+      - Page 4: reference/page-4.md
+  - Changelog & FAQ:
+      - Page 1: changelog/page-1.md
+      - Page 2: changelog/page-2.md
+      - Page 3: changelog/page-3.md
+      - Page 4: changelog/page-4.md
