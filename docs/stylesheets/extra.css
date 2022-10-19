@@ -1,0 +1,4 @@
+/* hides the title of the site to have only the logo */
+.md-header__title > .md-header__ellipsis > .md-header__topic {
+    display: none;
+}
