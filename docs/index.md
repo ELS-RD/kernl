@@ -1,3 +1,4 @@
-# Welcome to kernl.ai
-
-The documentation is currently being drafted.
+---
+title: Title
+template: home.html
+---
