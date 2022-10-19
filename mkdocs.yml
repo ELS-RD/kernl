@@ -161,29 +161,13 @@ markdown_extensions:
 # Page tree
 nav:
   - Home: index.md
-  - First Steps:
-      - Install: steps/install.md
-      - Next step 1: steps/page-1.md
-      - Next step 2: steps/page-2.md
-      - Next step 3: steps/page-3.md
-      - Next step 4: steps/page-4.md
+  - Get Started:
+      - Start: get-started/start.md
   - How it works:
-      - Step 1: how-it-works/page-1.md
-      - Step 2: how-it-works/page-2.md
-      - Step 3: how-it-works/page-3.md
-      - Step 4: how-it-works/page-4.md
-  - User guide:
-      - Page 1: user-guide/page-1.md
-      - Page 2: user-guide/page-2.md
-      - Page 3: user-guide/page-3.md
-      - Page 4: user-guide/page-4.md
+      - Page 1: how-it-works/page.md
   - Code Reference:
-      - Page 1: reference/page-1.md
-      - Page 2: reference/page-2.md
-      - Page 3: reference/page-3.md
-      - Page 4: reference/page-4.md
+      - Page 1: reference/page.md
+  - Contribution guide:
+      - Page 1: contribution-guide/page.md
   - Changelog & FAQ:
-      - Page 1: changelog/page-1.md
-      - Page 2: changelog/page-2.md
-      - Page 3: changelog/page-3.md
-      - Page 4: changelog/page-4.md
+      - Page 1: changelog/page.md
