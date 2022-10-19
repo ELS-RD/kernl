@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+{{ super() }}
+{% endblock %}
+
+{% block announce %}
+<a href="#">
+    For updates follow <strong>@followUs</strong> on
+    <span class="twemoji twitter">
+      {% include ".icons/fontawesome/brands/twitter.svg" %}
+    </span>
+    <strong>Twitter</strong>
+</a>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% endblock %}
