@@ -16,7 +16,6 @@ from typing import Callable, List
 
 import torch
 import torchdynamo
-from torch.fx import symbolic_trace
 from transformers import PreTrainedModel
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
