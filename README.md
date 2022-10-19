@@ -123,11 +123,11 @@ We leverage mostly 3 technologies:
   * Linear layer and their activation,
   * and finally Layernorm/Rmsnorm.
 
-* [Cuda graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) : you may that Python is slow,
+* [Cuda graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) : you may have heard that Python is slow,
   blablabla  and to limit overhead C++/Rust should be the solution.
   It is true but better than low overhead is no overhead at all. That’s cuda-graphs!
-  During a warmup step, it will save every kernel launched and their parameters, and then, with a single instruction,
-  we can replay the whole inference without calling any Python code (or any other CPU overhead) at all.
+  During a warmup step, it will save every kernel launched and their parameters, and then, with a single GPU instruction,
+  we can replay the whole inference without calling any Python code (or any other CPU overhead instruction) at all.
 
 * [Torchdynamo](https://github.com/pytorch/torchdynamo/): this prototype from Meta helps us to cope with dynamic
   behavior. It’s described [here](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747),
