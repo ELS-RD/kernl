@@ -103,9 +103,25 @@ cat measures.txt
 
 The script is based on the official [demo script](https://github.com/facebookincubator/AITemplate/tree/main/examples/03_bert).
 
-The model seems to not support `attention_mask`, so we don't use it in benchmarks.
-It gives `AITemplate` an unfair advantage as it avoids several operations, plus it makes it hard to use with batch > 1.
-For follow-up, an issue has been opened [here](https://github.com/facebookincubator/AITemplate/issues/46) on the repo.
+The model do not support `attention_mask`, so we don't use it in benchmarks.
+It is important to keep in mind that `attention mask` adds operations on top of an already computation bounded kernel.
+Said otherwise, it would it slower.
+On the other side, without `attentino mask`, batch inference is useless right now.
+So numbers for AITemplate have to be taken with a grain of salt.
+
+According 
+
+For follow-up, an issue has been opened [here](https://github.com/facebookincubator/AITemplate/issues/46) on the repo:
+
+```cite
+@antinucleon
+The current BERT example is only used for benchmarking purposes on fixed
+length without mask.
+
+We are currently working with CUTLASS team on a grouped Attention
+optimization, which will remove paddings & mask for dynamic sequences. It
+will appear in next CUTLASS & AIT release.
+```
 
 We choose to use the following options:
 
@@ -117,10 +133,10 @@ We choose to use the following options:
 * `CUDA graphs` enabled: this technology remove kernel launching overhead, and is a good practice to use it when possible.
 
 We do not use the [benchmark](https://github.com/facebookincubator/AITemplate/blob/main/examples/03_bert/benchmark_ait.py)
-script provided in the `AITemplate` repo because it reports GPU times through CUDA events and compare inference engines 
-on wall-clock times which better matches our end-to-end use cases.
-
-Differences are mostly on short input shapes where CPU overhead dominates. 
+script provided in the `AITemplate` repo because:
+* it reports GPU times through CUDA events and compare inference engines on wall-clock times which better matches our end-to-end use cases.
+* we are not sure of the meaning of the reported times in case of multiple threads/cuda streams used
+  (see [here](https://github.com/facebookincubator/AITemplate/issues/44)), it doesn't match latency or throughput definition
 
 CPP implementation of benchmark function is [here](https://github.com/facebookincubator/AITemplate/blob/44026ba7e7f5376a80cf0f2b333a0f25c0eeda6c/static/csrc/model_container.cpp).
 
