@@ -69,6 +69,11 @@ Then you can use [replace_pattern](https://pytorch.org/docs/stable/fx.html#torch
 pattern in the graph. We have our own version of `replace_pattern` with some enhancements to work with modules for
 example. You can find examples of that in `optimizer` folder.
 
+## Optimize model in one line
+
+You can use the model_optimization api which will take as input the original model to be optimized and return the
+optimized version of the model. Note that the original model can not be used after optimization.
+
 ## Code formatting
 
 We use `black` / `isort` / `flake8` to format the code. You can run them with:

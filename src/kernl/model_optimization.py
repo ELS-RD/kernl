@@ -28,7 +28,7 @@ def optimize_model(original_model: PreTrainedModel) -> Callable:
     *  first step is to convert the given model to fx graph.
     *  second step is to replace patterns found in the graph in order to optimize the model.
 
-    @return: returns the original model which cannot be used after optimization and the optimized model.
+    @return: returns the optimized model (and the original model is modified, so it can not be used after optimization).
     """
     pool: (int, int) = torch.cuda.graph_pool_handle()
     original_model.forward2 = original_model.forward
