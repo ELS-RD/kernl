@@ -132,7 +132,7 @@ def test_mixed_stride():
 
 
 @set_seed()
-def test_complex():
+def test_cross_attention():
     q = torch.rand((1, 8, 1, 64), dtype=torch.float16, device="cuda")
     k = torch.rand((1, 8, 24, 64), dtype=torch.float16, device="cuda")
     v = torch.rand_like(k)

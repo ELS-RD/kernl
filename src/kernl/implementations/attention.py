@@ -129,15 +129,15 @@ def _fwd_kernel(
                │   │            │
                    └────────────┘
 
-    @param heads: Number of heads per batch
-    @param size_m: Size of M axis
-    @param size_n: Size of N axis
-    @param Q: Query matrix size (batch, heads, size_m, BLOCK_DHEAD)
-    @param K: Key matrix size (batch, heads, size_n, BLOCK_DHEAD)
-    @param V: Value matrix size (batch, heads, size_n, BLOCK_DHEAD)
-    @param sm_scale: Scaling factor applied after operation QxK
-    @param TMP: Temporary variable to fix a compiler bug
-    @param output: Output matrix size (batch, heads, size_m, BLOCK_DHEAD)
+    @param heads: number of heads per batch
+    @param size_m: size of M axis
+    @param size_n: size of N axis
+    @param Q: query matrix size (batch, heads, size_m, BLOCK_DHEAD)
+    @param K: key matrix size (batch, heads, size_n, BLOCK_DHEAD)
+    @param V: value matrix size (batch, heads, size_n, BLOCK_DHEAD)
+    @param sm_scale: scaling factor applied after operation QxK
+    @param TMP: temporary variable to fix a compiler bug
+    @param output: output matrix size (batch, heads, size_m, BLOCK_DHEAD)
     @param q_batch_stride: matrix q stride for batch dimension
     @param q_head_stride: matrix q stride for head dimension
     @param q_m_stride: matrix q stride for rows, called "M dimension"
@@ -154,17 +154,17 @@ def _fwd_kernel(
     @param o_head_stride: output matrix stride for head dimension
     @param o_m_stride: output matrix stride for rows
     @param o_n_stride: output matrix stride for columns
-    @param attention_mask: Attention mask matrix broadcastable to (batch, heads, size_m, size_n)
-    @param attention_mask_batch_stride: Matrix mask stride for batch dimension
-    @param attention_mask_head_stride: Matrix mask stride for head dimension
-    @param attention_mask_m_stride: Matrix mask stride for rows
-    @param attention_mask_k_stride: Matrix mask stride for columns
-    @param MASK_BATCH_SIZE: Matrix mask size for batch dimension
-    @param MASK_HEAD_SIZE: Matrix mask size for head dimension
-    @param MASK_M_SIZE: Matrix mask size for rows
-    @param MASK_K_SIZE: Matrix mask size for columns
-    @param HAS_MASK: Whether the mask is applied
-    @param IS_CAUSAL: Whether the mask is applied
+    @param attention_mask: attention mask matrix broadcastable to (batch, heads, size_m, size_n)
+    @param attention_mask_batch_stride: matrix mask stride for batch dimension
+    @param attention_mask_head_stride: matrix mask stride for head dimension
+    @param attention_mask_m_stride: matrix mask stride for rows
+    @param attention_mask_k_stride: matrix mask stride for columns
+    @param MASK_BATCH_SIZE: matrix mask size for batch dimension
+    @param MASK_HEAD_SIZE: matrix mask size for head dimension
+    @param MASK_M_SIZE: matrix mask size for rows
+    @param MASK_K_SIZE: matrix mask size for columns
+    @param HAS_MASK: whether the mask is applied
+    @param IS_CAUSAL: whether the mask is applied
     @param BLOCK_M: number of rows computed in a single instance for matrix Q
     @param BLOCK_DHEAD: number of columns per head
     @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
