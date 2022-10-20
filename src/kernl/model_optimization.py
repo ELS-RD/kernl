@@ -39,6 +39,7 @@ def optimize_model(original_model: PreTrainedModel, handle_graph_pool: bool = Tr
 
             optimized_model = optimize_model(model)
     """
+    pool_is_defined = False
     if handle_graph_pool:
         pool: (int, int) = torch.cuda.graph_pool_handle()
         pool_is_defined = True
