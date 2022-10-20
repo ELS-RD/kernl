@@ -1,4 +1,41 @@
+/*
+warning: to use the variabilized classes taking into account the dark and light modes (example: color: var(--md-default-fg-color)).
+You need to add a data-md-color-scheme="slate" | "default" metadata to the enclosing elements
+*/
+/* ----- ----- ----- ----- ----- */
+/* additional fonts */
+/* ----- ----- ----- ----- ----- */
+@font-face {
+    font-family: "Fredoka One";
+    src: url("../assets/fonts/FredokaOne-Regular.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Fredoka";
+    src: url("../assets/fonts/Fredoka-VariableFont_wdth,wght.ttf") format("truetype");
+}
+
+/* ----- ----- ----- ----- ----- */
+/* variables */
+/* ----- ----- ----- ----- ----- */
+:root {
+    --section-padding-x: 16px;
+}
+
+/* ----- ----- ----- ----- ----- */
+/* hacks */
+/* ----- ----- ----- ----- ----- */
 /* hides the title of the site to have only the logo */
 .md-header__title > .md-header__ellipsis > .md-header__topic {
     display: none;
+}
+
+/* ----- ----- ----- ----- ----- */
+.knl-hero__container {
+    background: linear-gradient(to bottom, #fff, hsla(160deg, 47%, 55%, 1) 99%);
+}
+
+/* ----- ----- ----- ----- ----- */
+/* hero */
+.knl-hero {
 }
