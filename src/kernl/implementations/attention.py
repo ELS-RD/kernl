@@ -119,7 +119,7 @@ def _fwd_kernel(
                                   │   │   │       │
                                   │   │   │       │
                                   │   │   │       │
-                    BLOCK_DMODEL  └───┴───┴───────┘
+                    BLOCK_DHEAD   └───┴───┴───────┘
                    ┌────────────┐
                │   │            │
     M Dimension│   ├────────────┤     ┌───┐
@@ -202,8 +202,8 @@ def _fwd_kernel(
     off_v = (
         current_batch_idx * v_batch_stride
         + current_head_idx * v_head_stride
-        + offs_n[:, None] * q_m_stride
-        + offs_d[None, :] * q_k_stride
+        + offs_n[:, None] * v_k_stride
+        + offs_d[None, :] * v_n_stride
     )
 
     # pointers to blocks in Q, K, V
