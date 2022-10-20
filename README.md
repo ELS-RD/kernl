@@ -75,6 +75,17 @@ example. You can find examples of that in `optimizer` folder.
 
 You can use the model_optimization api which will take as input the original model to be optimized and return the
 optimized version of the model. Note that the original model can not be used after optimization.
+The model_optimization api can be used as follows:
+```
+from kernl.model_optimization import optimize_model
+
+model_name = "BaptisteDoyen/camembert-base-xnli"
+model = AutoModelForSequenceClassification.from_pretrained(model_name)
+model = model.eval().cuda()
+
+optimized_model = optimize_model(model)
+```
+The optimized model in this example is the optimized version of the original model.
 
 ## Code formatting
 
