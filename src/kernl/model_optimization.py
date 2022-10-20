@@ -34,7 +34,7 @@ def optimize_model(original_model: PreTrainedModel) -> Callable:
     original_model.forward2 = original_model.forward
 
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        dynamo_backend_ofi(gm, assume_causal=True)
+        dynamo_backend_ofi(gm)
         return cuda_graphs_wrapper(gm, example_inputs, pool=pool)
 
     def run(*args, **kwargs):
