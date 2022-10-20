@@ -1,10 +1,8 @@
-from typing import List
+from test.models.bert import get_model_optimized
 
 import torch
 import torchdynamo
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
-from src.kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
 def test_t5():
@@ -25,28 +23,8 @@ def test_t5():
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
-    model.forward2 = model.forward
-    model.encoder.forward2 = model.encoder.forward
-    model.decoder.forward2 = model.decoder.forward
-
-    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        return dynamo_backend_ofi(gm)
-
-    def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return model.forward2(*args, **kwargs)
-
-    def run_encoder(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return model.encoder.forward2(*args, **kwargs)
-
-    def run_decoder(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return model.decoder.forward2(*args, **kwargs)
-
-    model.forward = run
-    model.encoder.forward = run_encoder
-    model.decoder.forward = run_decoder
+    model.encoder.forward = get_model_optimized(model.encoder.forward)
+    model.decoder.forward = get_model_optimized(model.decoder.forward)
 
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
         output_sequences = model.generate(
