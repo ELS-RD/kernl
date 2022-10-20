@@ -1,6 +1,8 @@
-# Kernl
+![Kernl logo](./resources/images/logo-readme.svg)
 
-Optimized kernels for `transformer` models.
+---
+
+Kernl is a collection of optimized kernels for `transformer` models to speed-up inference and soon training.
 
 ## Install dependencies
 
