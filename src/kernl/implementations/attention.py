@@ -94,7 +94,8 @@ def _fwd_kernel(
     attention_mask_m_stride,
     attention_mask_k_stride,
     min_clamp_value,
-    NEED_LOAD_MASK: tl.constexpr,
+    NEED_LOAD_MASK_SIZE_N: tl.constexpr,
+    NEED_LOAD_MASK_SIZE_M: tl.constexpr,
     MASK_BATCH_SIZE: tl.constexpr,
     MASK_HEAD_SIZE: tl.constexpr,
     MASK_M_SIZE: tl.constexpr,
@@ -160,7 +161,8 @@ def _fwd_kernel(
     @param attention_mask_head_stride: matrix mask stride for head dimension
     @param attention_mask_m_stride: matrix mask stride for rows
     @param attention_mask_k_stride: matrix mask stride for columns
-    @param NEED_LOAD_MASK: use boundary check when loading K/V tensors
+    @param NEED_LOAD_MASK_SIZE_N: use boundary check when loading K/V/Attention mask tensors
+    @param NEED_LOAD_MASK_SIZE_M: use boundary check when loading/saving from/to Q/Output tensors
     @param MASK_BATCH_SIZE: matrix mask size for batch dimension
     @param MASK_HEAD_SIZE: matrix mask size for head dimension
     @param MASK_M_SIZE: matrix mask size for rows
@@ -226,7 +228,10 @@ def _fwd_kernel(
 
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
-    q = tl.load(q_ptrs, mask=offs_m[:, None] < size_m, other=0.0)
+    if NEED_LOAD_MASK_SIZE_M:
+        q = tl.load(q_ptrs, mask=offs_m[:, None] < size_m, other=0.0)
+    else:
+        q = tl.load(q_ptrs)
 
     n_end = size_n
     if IS_CAUSAL:
@@ -251,7 +256,7 @@ def _fwd_kernel(
         # We load the current block in K in SRAM
         # We do the first multiplication between the block in Q and the current block in K
         # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
-        if NEED_LOAD_MASK:
+        if NEED_LOAD_MASK_SIZE_N:
             load_mask = (n_row_offset + offs_n)[:, None] < size_n
             k = tl.load(k_ptrs + n_row_offset * k_n_stride, mask=load_mask, other=0.0)
         else:
@@ -264,17 +269,17 @@ def _fwd_kernel(
 
         if HAS_MASK:
             offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * attention_mask_k_stride
-            if NEED_LOAD_MASK:
-                attention_load_mask = (n_row_offset + offs_n)[None, :] < size_n
+            # if NEED_LOAD_MASK:
+            attention_load_mask = (n_row_offset + offs_n)[None, :] < size_n
             # If it's a broadcast we only load vector size BLOCK_N else a matrix size (BLOCK_M, BLOCK_N)
             if MASK_M_SIZE == 1:
-                if NEED_LOAD_MASK:
+                if NEED_LOAD_MASK_SIZE_N:
                     m = tl.load(attention_mask + offs_mask, mask=attention_load_mask, other=float("-inf"))
                 else:
                     m = tl.load(attention_mask + offs_mask)
             else:
-                if NEED_LOAD_MASK:
-                    offs_mask += offs_m[:, None] * attention_mask_m_stride
+                offs_mask += offs_m[:, None] * attention_mask_m_stride
+                if NEED_LOAD_MASK_SIZE_N:
                     # The mask matrix is never reused
                     m = tl.load(
                         attention_mask + offs_mask,
@@ -328,7 +333,7 @@ def _fwd_kernel(
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
-        if NEED_LOAD_MASK:
+        if NEED_LOAD_MASK_SIZE_N:
             load_mask = (n_row_offset + offs_n)[:, None] < size_n  # repeated otherwise triton segfault
             v = tl.load(v_ptrs + n_row_offset * v_k_stride, mask=load_mask, other=0.0).to(Q.dtype.element_ty)
         else:
@@ -351,8 +356,11 @@ def _fwd_kernel(
     )
 
     out_ptrs = output + off_o
-    out_store_mask = offs_m[:, None] < size_m
-    tl.store(out_ptrs, acc, mask=out_store_mask)
+    if NEED_LOAD_MASK_SIZE_M:
+        out_store_mask = offs_m[:, None] < size_m
+        tl.store(out_ptrs, acc, mask=out_store_mask)
+    else:
+        tl.store(out_ptrs, acc)
 
 
 class Attention(torch.autograd.Function):
@@ -395,14 +403,15 @@ class Attention(torch.autograd.Function):
         batch, heads, size_m, dhead = q.size()
         size_n = k.size(2)
 
-        # load mask is needed if seq len do not align with block size [16, 64, 128]
-        NEED_LOAD_MASK = size_n not in [16, 64] and size_m % 128 != 0
         # if not power of 2
         size_m_pow_2 = triton.next_power_of_2(size_m) if size_m & (size_m - 1) else size_m
         BLOCK_M = max(min(128, size_m_pow_2), 16)  # minimal size
         if BLOCK_M == 32:
             BLOCK_M = 64  # there is a strange triton segfault with 32
-            NEED_LOAD_MASK = True
+
+        # load mask is needed if seq len do not align with block size
+        NEED_LOAD_MASK_SIZE_N = size_n % BLOCK_M != 0
+        NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
 
         grid = (triton.cdiv(size_m, BLOCK_M), batch * heads)
         tmp = torch.empty((batch * heads, size_m), device=q.device, dtype=torch.float32)
@@ -455,7 +464,8 @@ class Attention(torch.autograd.Function):
             attention_mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
             attention_mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
             attention_mask_k_stride=attention_mask.stride(3) if HAS_MASK else 0,
-            NEED_LOAD_MASK=NEED_LOAD_MASK,
+            NEED_LOAD_MASK_SIZE_N=NEED_LOAD_MASK_SIZE_N,
+            NEED_LOAD_MASK_SIZE_M=NEED_LOAD_MASK_SIZE_M,
             min_clamp_value=torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,
             MASK_BATCH_SIZE=attention_mask.size(0) if HAS_MASK else 0,
             MASK_HEAD_SIZE=attention_mask.size(1) if HAS_MASK else 0,
