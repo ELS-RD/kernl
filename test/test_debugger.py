@@ -27,7 +27,7 @@ def test_add():
     x = torch.rand(vec_len, device="cuda")
     y = torch.rand_like(x, device="cuda")
     o = torch.zeros_like(x, device="cuda")
-    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, y, o], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], shuffle=True)
 
     def add_kernel(
         x_ptr,  # *Pointer* to first input vector
@@ -78,7 +78,7 @@ def test_softmax():
     block_ncols = 256  # do not match vec_len to use masks
     x = torch.rand((nrows, ncols), device="cuda")
     o = torch.zeros_like(x, device="cuda")
-    tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], inputs=[x, o], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], shuffle=True)
 
     def softmax_kernel(output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols, BLOCK_SIZE: tl.constexpr):
         # The rows of the softmax are independent, so we parallelize across those
@@ -125,9 +125,7 @@ def test_matmul():
     A = torch.rand((m, k), device="cuda", dtype=torch.float16)
     B = torch.rand((k, n), device="cuda", dtype=torch.float16)
     C = torch.zeros((m, n), device="cuda", dtype=torch.float16)
-    tl = TritonDebugger(
-        [TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C], shuffle=True
-    )
+    tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], shuffle=True)
 
     def leaky_relu(x):
         x = x + 1
@@ -266,7 +264,7 @@ def test_dropout():
     x = torch.randn(size=(10, 1000), device="cuda")
     o = torch.zeros_like(x)
     block_m = 32
-    tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], inputs=[x, o], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], shuffle=True)
 
     def _seeded_dropout(
         x_ptr,
@@ -324,7 +322,7 @@ def test_layernorm():
     rstd = torch.zeros((M,), device="cuda")
     eps = 1e-5
 
-    tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=True)
+    tl = TritonDebugger([M], shuffle=True)
 
     def _layer_norm_fwd_fused(
         Out,
@@ -419,7 +417,7 @@ def test_layernorm_welford_variance():
     rstd = torch.zeros((M,), device="cuda")
     eps = 1e-5
 
-    tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=False)
+    tl = TritonDebugger([M], shuffle=False)
 
     def _layer_norm_fwd_fused(
         Out,
@@ -531,7 +529,6 @@ def test_flash_attention():
     BLOCK = 128
     tl = TritonDebugger(
         [TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]],
-        inputs=[q, k, v, dout, L, m, tmp],
         shuffle=True,
     )
 
