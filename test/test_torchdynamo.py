@@ -14,7 +14,6 @@
 #
 
 import dataclasses
-import warnings
 from test.models.bert import (
     get_model_baseline,
     get_model_dynamo_cuda_graphs,
@@ -62,7 +61,8 @@ implementations: [Implementation] = [
 #     implementations.append(Implementation("onnx_optim_fp16", get_bert_optim_fp16_onnx, is_causal=False))
 # except ImportError as e:
 #     error = (
-#         f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
+#         f"It seems that you are missing some dependencies: "
+#         f"onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
 #     )
 #     warnings.warn(UserWarning(error))
 
