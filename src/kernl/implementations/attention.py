@@ -160,6 +160,7 @@ def _fwd_kernel(
     @param attention_mask_head_stride: matrix mask stride for head dimension
     @param attention_mask_m_stride: matrix mask stride for rows
     @param attention_mask_k_stride: matrix mask stride for columns
+    @param NEED_LOAD_MASK: use boundary check when loading K/V tensors
     @param MASK_BATCH_SIZE: matrix mask size for batch dimension
     @param MASK_HEAD_SIZE: matrix mask size for head dimension
     @param MASK_M_SIZE: matrix mask size for rows
@@ -395,7 +396,7 @@ class Attention(torch.autograd.Function):
         size_n = k.size(2)
 
         # load mask is needed if seq len do not align with block size [16, 64, 128]
-        NEED_LOAD_MASK = size_m not in [16, 64] and size_m % 128 != 0
+        NEED_LOAD_MASK = size_n not in [16, 64] and size_m % 128 != 0
         # if not power of 2
         size_m_pow_2 = triton.next_power_of_2(size_m) if size_m & (size_m - 1) else size_m
         BLOCK_M = max(min(128, size_m_pow_2), 16)  # minimal size
@@ -419,7 +420,7 @@ class Attention(torch.autograd.Function):
             ), "Incompatible broadcast size_m dimension"
             assert attention_mask.size(3) == size_n, (
                 f"Last size of mask ({attention_mask.size()}) must be seq_length to broadcast on QK^t: "
-                f"{attention_mask.size(3)} != {seq_length}"
+                f"{attention_mask.size(3)} != {size_n}"
             )
             HAS_MASK = True
 
