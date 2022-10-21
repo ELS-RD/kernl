@@ -54,17 +54,17 @@ implementations: [Implementation] = [
 ]
 
 
-try:
-    # check imports and initialize optimized fp16 onnx model
-    from test.models.bert import get_bert_optim_fp16_onnx
-
-    _ = get_bert_optim_fp16_onnx(get_model_from_hf("bert-base-uncased"))
-    implementations.append(Implementation("onnx_optim_fp16", get_bert_optim_fp16_onnx, is_causal=False))
-except ImportError as e:
-    error = (
-        f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
-    )
-    warnings.warn(UserWarning(error))
+# try:
+#     # check imports and initialize optimized fp16 onnx model
+#     from test.models.bert import get_bert_optim_fp16_onnx
+#
+#     _ = get_bert_optim_fp16_onnx(get_model_from_hf("bert-base-uncased"))
+#     implementations.append(Implementation("onnx_optim_fp16", get_bert_optim_fp16_onnx, is_causal=False))
+# except ImportError as e:
+#     error = (
+#         f"It seems that you are missing some dependencies: onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
+#     )
+#     warnings.warn(UserWarning(error))
 
 
 @pytest.fixture
