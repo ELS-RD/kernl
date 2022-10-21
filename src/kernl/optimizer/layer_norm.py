@@ -15,10 +15,10 @@
 
 import torch
 
+from src.kernl.implementations.layer_norm import _layer_norm_fwd_fused_single_pass
+
 from kernl.implementations.layer_norm import layer_norm
 from kernl.utils.extended_matcher import replace_pattern
-
-from src.kernl.implementations.layer_norm import _layer_norm_fwd_fused_single_pass
 
 
 def layer_norm_wrapper(v: torch.Tensor, layernorm: torch.nn.LayerNorm):
