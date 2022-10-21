@@ -32,16 +32,7 @@ def layer_norm_wrapper(v: torch.Tensor, layernorm: torch.nn.LayerNorm):
 
 
 def layer_norm_rms_wrapper(v: torch.Tensor, weight: torch.Tensor, eps: float):
-    to_38 = v.to(torch.float32)
-    pow_32 = to_38.pow(2)
-    mean_31 = pow_32.mean(-1, keepdim=True)
-    add_68 = mean_31 + eps
-    rsqrt_31 = torch.rsqrt(add_68)
-    mul_69 = v * rsqrt_31
-    mul_70 = weight * mul_69
-    return mul_70
-    # ça fonctionne ça
-    # return layer_norm(v, weight, None, eps, _layer_norm_fwd_fused_single_pass, use_rms_norm=True)
+    return layer_norm(v, weight, None, eps, _layer_norm_fwd_fused_single_pass, use_rms_norm=True)
 
 
 torch.fx.wrap("layer_norm_wrapper")
