@@ -269,8 +269,8 @@ def _fwd_kernel(
 
         if HAS_MASK:
             offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * attention_mask_k_stride
-            # if NEED_LOAD_MASK:
-            attention_load_mask = (n_row_offset + offs_n)[None, :] < size_n
+            if NEED_LOAD_MASK_SIZE_N:
+                attention_load_mask = (n_row_offset + offs_n)[None, :] < size_n
             # If it's a broadcast we only load vector size BLOCK_N else a matrix size (BLOCK_M, BLOCK_N)
             if MASK_M_SIZE == 1:
                 if NEED_LOAD_MASK_SIZE_N:
@@ -409,7 +409,7 @@ class Attention(torch.autograd.Function):
         if BLOCK_M == 32:
             BLOCK_M = 64  # there is a strange triton segfault with 32
 
-        # load mask is needed if seq len do not align with block size
+        # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
         NEED_LOAD_MASK_SIZE_N = size_n % BLOCK_M != 0
         NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
 
