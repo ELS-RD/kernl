@@ -315,7 +315,6 @@ def test_layernorm():
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
-    dy = 0.1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
     mean = torch.zeros((M,), device="cuda")
@@ -410,7 +409,6 @@ def test_layernorm_welford_variance():
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
-    dy = 0.1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
     mean = torch.zeros((M,), device="cuda")
