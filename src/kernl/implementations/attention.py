@@ -280,10 +280,9 @@ def _fwd_kernel(
             else:
                 offs_mask += offs_m[:, None] * attention_mask_m_stride
                 if NEED_LOAD_MASK_SIZE_N:
-                    # The mask matrix is never reused
                     m = tl.load(
                         attention_mask + offs_mask,
-                        eviction_policy="evict_first",
+                        eviction_policy="evict_first",  # The mask matrix is never reused
                         mask=attention_load_mask,
                         other=float("-inf"),
                     )
@@ -427,10 +426,8 @@ class Attention(torch.autograd.Function):
             assert (
                 attention_mask.size(2) == size_m or attention_mask.size(2) == 1
             ), "Incompatible broadcast size_m dimension"
-            assert attention_mask.size(3) == size_n, (
-                f"Last size of mask ({attention_mask.size()}) must be seq_length to broadcast on QK^t: "
-                f"{attention_mask.size(3)} != {size_n}"
-            )
+            assert attention_mask.size(3) == size_n, "Last size of mask must broadcast on QK^t"
+
             HAS_MASK = True
 
         _fwd_kernel[grid](
