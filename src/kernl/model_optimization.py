@@ -22,7 +22,7 @@ from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
-def optimize_model(original_model: PreTrainedModel, handle_graph_pool: bool = True) -> Callable:
+def optimize_model(original_model: PreTrainedModel, pool: (int, int) = torch.cuda.graph_pool_handle()) -> Callable:
     """
     Optimizes a given model. Optimization is done in two steps:
     *  first step is to convert the given model to fx graph.
@@ -39,19 +39,11 @@ def optimize_model(original_model: PreTrainedModel, handle_graph_pool: bool = Tr
 
             optimized_model = optimize_model(model)
     """
-    pool_is_defined = False
-    if handle_graph_pool:
-        pool: (int, int) = torch.cuda.graph_pool_handle()
-        pool_is_defined = True
     original_model.forward2 = original_model.forward
 
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         dynamo_backend_ofi(gm)
-        return (
-            cuda_graphs_wrapper(gm, example_inputs, pool=pool)
-            if pool_is_defined
-            else cuda_graphs_wrapper(gm, example_inputs)
-        )
+        return cuda_graphs_wrapper(gm, example_inputs, pool=pool)
 
     def run(*args, **kwargs):
         with torchdynamo.optimize(compiler):
