@@ -19,6 +19,18 @@ pip install -e ".[benchmark]"
 
 This project requires `Python` >= 3.9.
 
+## Use
+
+```python
+from kernl.model_optimization import optimize_model
+
+model = AutoModelForSequenceClassification.from_pretrained(model_name).eval().cuda()
+
+optimized_model = optimize_model(model)
+```
+
+Note that the original model will raise an error if you try to use it after optimization.
+
 ## Test and Benchmark
 
 ### Conventions
@@ -70,22 +82,6 @@ print it with `utils.graph_report` or by printing the code `print(you_graph_modu
 Then you can use [replace_pattern](https://pytorch.org/docs/stable/fx.html#torch.fx.replace_pattern) to replace the
 pattern in the graph. We have our own version of `replace_pattern` with some enhancements to work with modules for
 example. You can find examples of that in `optimizer` folder.
-
-## Optimize model in one line
-
-You can use the model_optimization api which will take as input the original model to be optimized and return the
-optimized version of the model. Note that the original model can not be used after optimization.
-The model_optimization api can be used as follows:
-```
-from kernl.model_optimization import optimize_model
-
-model_name = "BaptisteDoyen/camembert-base-xnli"
-model = AutoModelForSequenceClassification.from_pretrained(model_name)
-model = model.eval().cuda()
-
-optimized_model = optimize_model(model)
-```
-The optimized model in this example is the optimized version of the original model.
 
 ## Code formatting
 
