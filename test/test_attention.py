@@ -129,3 +129,19 @@ def test_mixed_stride():
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     check_all_close(a=output, b=expected, atol=1e-2)
+
+
+@set_seed()
+def test_cross_attention():
+    q = torch.rand((1, 8, 1, 64), dtype=torch.float16, device="cuda")
+    k = torch.rand((1, 8, 24, 64), dtype=torch.float16, device="cuda")
+    v = torch.rand_like(k)
+    mask = torch.rand((1, 8, 1, 24), dtype=torch.float16, device="cuda")
+    sm_scale = 1.0
+
+    expected = attention_reference(
+        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+    )
+    output = torch.empty_like(q)
+    attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
+    check_all_close(a=output, b=expected, atol=1e-2)
