@@ -12,41 +12,34 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from typing import Tuple
+
 
 import pytest
 import torch
 from transformers import AutoModelForSequenceClassification
 
+from conftest import set_seed
+
 from kernl.model_optimization import optimize_model
 
 
-model_name = "BaptisteDoyen/camembert-base-xnli"
-model = AutoModelForSequenceClassification.from_pretrained(model_name)
-model = model.eval().cuda()
+@set_seed()
+def test_optimized_model():
+    shape = (1, 128)
+    model_name = "bert-base-uncased"
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    model = model.eval().cuda()
 
-
-@pytest.mark.parametrize("shape", [(1, w) for w in range(8, 128 + 8, 8)], ids=lambda s: "x".join(map(str, s)))
-def test_original_model(shape: Tuple[int, int]):
     with torch.inference_mode(), torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
         inputs = {
-            "input_ids": torch.ones(shape, device="cuda", dtype=torch.long),
+            "input_ids": torch.randint(2, 10000, shape, device="cuda", dtype=torch.long),
             "attention_mask": torch.ones(shape, device="cuda", dtype=torch.long),
         }
-        _ = model(**inputs)
+        output_pytorch = model(**inputs)
+        optimized_model = optimize_model(model)
+        output_optimized = optimized_model(**inputs)
 
-
-optimized_model = optimize_model(model)
-
-
-@pytest.mark.parametrize("shape", [(1, w) for w in range(8, 128 + 8, 8)], ids=lambda s: "x".join(map(str, s)))
-def test_optimized_model(shape: Tuple[int, int]):
-    with torch.inference_mode(), torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
-        inputs = {
-            "input_ids": torch.ones(shape, device="cuda", dtype=torch.long),
-            "attention_mask": torch.ones(shape, device="cuda", dtype=torch.long),
-        }
-        _ = optimized_model(**inputs)
+        assert torch.allclose(output_pytorch.logits, output_optimized.logits, atol=1e-1)
 
         # assert that the original model can not be used after otpimization:
         with pytest.raises(Exception) as exc_info:
