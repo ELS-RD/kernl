@@ -204,3 +204,53 @@ We tried several disabled by default optimizations but none of them worked:
 By default, `CUDA graphs` is enabled.
 
 The last one is important and should bring some speedup when working.
+
+## [Deepspeed](https://github.com/microsoft/DeepSpeed)
+
+### Version
+
+0.7.4
+
+### Results
+
+| batch | sequence length | Time (ms) |
+|-------|-----------------|-----------|
+| 1     | 16              | 0.0009    |
+| 1     | 32              | 0.0008    |
+| 1     | 64              | 0.0009    |
+| 1     | 128             | 0.0012    |
+| 1     | 256             | 0.0019    |
+| 1     | 384             | 0.0023    |
+| 1     | 512             | 0.0032    |
+| 8     | 16              | 0.0011    |
+| 8     | 32              | 0.0016    |
+| 8     | 64              | 0.0025    |
+| 8     | 128             | 0.0051    |
+| 8     | 256             | 0.0106    |
+| 8     | 384             | 0.0161    |
+| 8     | 512             | 0.0219    |
+| 32    | 16              | 0.0025    |
+| 32    | 32              | 0.0050    |
+| 32    | 64              | 0.0097    |
+| 32    | 128             | 0.0176    |
+| 32    | 256             | 0.0374    |
+
+### Running the benchmark
+
+```shell
+# reuse AITemplate docker image based on nvidia/cuda:11.6.2-devel-ubuntu20.04
+docker run --rm -it --gpus all -v $(pwd):/work -v $(pwd):/work ait
+pip install deepspeed transformers
+deepspeed --num_gpus 1 experimental/benchmarks/deepspeed_.py --deepspeed
+```
+
+### Notes
+
+The benchmark script is built over the one provided in the `deepspeed` repo:
+https://github.com/microsoft/DeepSpeed/blob/master/benchmarks/inference/bert-bench.py
+
+We rebuilt a model for each shape to leverage Cuda-graphs and get best possible performances.  
+In real scenario, we would need something on top of it to handle multiple graphs.
+
+Model got its weights completly converted to fp16 (instead of doing mixed precision) as it is done that way in the 
+benchmark script. 
