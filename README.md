@@ -6,7 +6,7 @@ Kernl is a collection of optimized kernels for `transformer` models to speed-up 
 
 ## Install dependencies
 
-**IMPORTANT**: This package requires `pytorch` being installed.\
+**IMPORTANT**: This package requires `pytorch` being installed.  
 Please install it first.
 
 ```shell

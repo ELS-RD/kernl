@@ -14,20 +14,22 @@ We rely on the Docker image `nvcr.io/nvidia/tensorrt:22.09-py3`.
 | batch | sequence length | Time (ms) |
 |-------|-----------------|-----------|
  | 1     | 16              | 0.0010    |
- | 1     | 32              | 0.0012    |
+ | 1     | 32              | 0.0010    |
  | 1     | 64              | 0.0011    |
  | 1     | 128             | 0.0013    |
  | 1     | 256             | 0.0016    |
+| 1     | 384             | 0.0026    |
  | 1     | 512             | 0.0026    |
- | 8     | 16              | 0.0012    |
+ | 8     | 16              | 0.0011    |
  | 8     | 32              | 0.0015    |
- | 8     | 64              | 0.0020    |
+ | 8     | 64              | 0.0019    |
  | 8     | 128             | 0.0036    |
  | 8     | 256             | 0.0064    |
- | 8     | 512             | 0.0142    |
+| 8     | 384             | 0.0139    |
+ | 8     | 512             | 0.0139    |
  | 32    | 16              | 0.0020    |
  | 32    | 32              | 0.0031    |
- | 32    | 64              | 0.0055    |
+ | 32    | 64              | 0.0054    |
  | 32    | 128             | 0.0103    |
  | 32    | 256             | 0.0210    |
 
@@ -37,12 +39,12 @@ We rely on the Docker image `nvcr.io/nvidia/tensorrt:22.09-py3`.
 docker run --rm -it --gpus all -v $(pwd):/work nvcr.io/nvidia/tensorrt:22.09-py3
 cd /work
 pip install transformers torch -U --extra-index-url https://download.pytorch.org/whl/cu116
-python experimental/benchmarks/tensorrt.py
+python experimental/benchmarks/tensorrt_.py
 ```
 
 ### Notes
 
-As `TensorRT` complains where there are 2 dynamic axes, we build one model per batch size.
+As `TensorRT` (`Myelin` code generator) complains where there are 2 dynamic axes, we build one model per batch size.
 Only sequence length axis is dynamic.
 
 Model building takes time, around 30mn on a beefy machine.
@@ -72,18 +74,20 @@ Main branch commit used:
 | 1     | 64              | 0.0013    |
 | 1     | 128             | 0.0015    |
 | 1     | 256             | 0.0020    |
+| 1     | 384             | 0.0022    |
 | 1     | 512             | 0.0031    |
 | 8     | 16              | 0.0013    |
 | 8     | 32              | 0.0017    |
 | 8     | 64              | 0.0026    |
-| 8     | 128             | 0.0044    |
+| 8     | 128             | 0.0043    |
 | 8     | 256             | 0.0076    |
+| 8     | 384             | 0.0115    |
 | 8     | 512             | 0.0149    |
-| 32    | 16              | 0.0027    |
+| 32    | 16              | 0.0026    |
 | 32    | 32              | 0.0043    |
 | 32    | 64              | 0.0073    |
-| 32    | 128             | 0.0131    |
-| 32    | 256             | 0.0249    |
+| 32    | 128             | 0.0127    |
+| 32    | 256             | 0.0242    |
 
 ### Running the benchmark
 
@@ -91,7 +95,7 @@ Main branch commit used:
 # in AITemplate root directory
 ./docker/build.sh cuda
 # in kernl root directory
-docker run --rm -it  --gpus all -v $(pwd):/work -v $(pwd):/work ait
+docker run --rm -it --gpus all -v $(pwd):/work -v $(pwd):/work ait
 cp /work/experimental/benchmarks/aitemplate.py /AITemplate/examples/03_bert/demo_new.py
 cd AITemplate/
 python3 ./examples/03_bert/demo_new.py
@@ -146,33 +150,41 @@ CPP implementation of benchmark function is [here](https://github.com/facebookin
 ### Version
 
 * Triton: https://github.com/openai/triton@af76c989eb4799b015f8b288ccd8421558772e56#subdirectory=python
-* Pytorch (includes Torchdynamo): 1.14.0.dev20221015+cu117
+* Pytorch (includes Torchdynamo): 1.14.0.dev20221015+cu116
 
 ### Results
 
 | batch | sequence length | Time (ms) |
 |-------|-----------------|-----------|
-| 1     | 16              | 0.0017    |
-| 1     | 32              | 0.0018    |
-| 1     | 64              | 0.0019    |
-| 1     | 128             | 0.0024    |
-| 1     | 256             | 0.0029    |
-| 1     | 512             | 0.0047    |
-| 8     | 16              | 0.0024    |
-| 8     | 32              | 0.0028    |
-| 8     | 64              | 0.0042    |
-| 8     | 128             | 0.0069    |
-| 8     | 256             | 0.0115    |
-| 8     | 512             | 0.0207    |
-| 32    | 16              | 0.0041    |
-| 32    | 32              | 0.0066    |
-| 32    | 64              | 0.0114    |
-| 32    | 128             | 0.0173    |
-| 32    | 256             | 0.0345    |
+| 1     | 16              | 0.0018    |
+| 1     | 32              | 0.0020    |
+| 1     | 64              | 0.0020    |
+| 1     | 128             | 0.0025    |
+| 1     | 256             | 0.0030    |
+| 1     | 384             | 0.0036    |
+| 1     | 512             | 0.0048    |
+| 8     | 16              | 0.0023    |
+| 8     | 32              | 0.0027    |
+| 8     | 64              | 0.0039    |
+| 8     | 128             | 0.0065    |
+| 8     | 256             | 0.0117    |
+| 8     | 386             | 0.0156    |
+| 8     | 512             | 0.0212    |
+| 32    | 16              | 0.0039    |
+| 32    | 32              | 0.0062    |
+| 32    | 64              | 0.0108    |
+| 32    | 128             | 0.0177    |
+| 32    | 256             | 0.0357    |
 
 ### Running the benchmark
 
 ```shell
+# reuse AITemplate docker image based on nvidia/cuda:11.6.2-devel-ubuntu20.04
+docker run --rm -it --gpus all -v $(pwd):/work -v $(pwd):/work ait
+cd work/
+apt install git
+pip3 install --pre torch==1.14.0.dev20221015+cu116 --extra-index-url https://download.pytorch.org/whl/nightly/cu116 -U
+pip3 install git+https://github.com/openai/triton@af76c989eb4799b015f8b288ccd8421558772e56#subdirectory=python
 python experimental/benchmarks/inductor.py
 ```
 

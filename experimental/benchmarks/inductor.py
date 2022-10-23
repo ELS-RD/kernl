@@ -13,7 +13,7 @@ def apply(*args, **kwargs):
     return model(*args, **kwargs)
 
 
-for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 256, 512] if bs * seq_l < 10000]:
+for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 256, 384, 512] if bs * seq_l < 10000]:
     inputs = {
         "input_ids": torch.randint(10, 10000, shape, device="cuda", dtype=torch.long),
         "attention_mask": torch.ones(shape, device="cuda", dtype=torch.long),

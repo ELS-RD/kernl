@@ -22,7 +22,7 @@ from modeling.torch_model import BertBaseUncased as BertPt
 
 def run_model(activation: str, graph_mode: bool, use_fp16_acc: bool, verify: bool):
     f = open("measures.txt", mode="w")
-    for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 256, 512] if bs * seq_l < 10000]:
+    for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 256, 384, 512] if bs * seq_l < 10000]:
         inputs_pt = {
             "input_ids": torch.randint(2, 1000, size=shape, dtype=torch.int64, device="cuda"),
             "position_ids": torch.arange(shape[1], dtype=torch.int64).expand(shape).contiguous().cuda(),

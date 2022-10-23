@@ -293,7 +293,7 @@ model.eval()
 
 start_complete = perf_counter()
 for bs in [1, 8, 32]:
-    seq_len_to_test = [s for s in [16, 32, 64, 128, 256, 512] if bs * s <= 10000]
+    seq_len_to_test = [s for s in [16, 32, 64, 128, 256, 384, 512] if bs * s <= 10000]
 
     min_s = seq_len_to_test[0]
     opt_s = (seq_len_to_test[-1] - seq_len_to_test[0]) // 2 + seq_len_to_test[0]
