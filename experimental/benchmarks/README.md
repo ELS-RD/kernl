@@ -1,7 +1,7 @@
 # Benchmark of Third-Party Libraries
 
 This directory contains benchmarks of third-party libraries. The benchmarks are
-written as simple Python script and have been run on a Nvidia 3090 RTX GPU.
+written as simple Python script and have been run on a Nvidia 3090 RTX GPU and a 12 cores Intel CPU.
 
 ## [TensorRT](https://github.com/NVIDIA/TensorRT/)
 
@@ -51,8 +51,9 @@ Model building takes time, around 30mn on a beefy machine.
 
 Most of the code has been taken from [transformer-deploy](https://github.com/ELS-RD/transformer-deploy).
 
-It is important to note that `TensorRT` is a black box and we cannot disable fast GELU, fp16 accumulation, 
-or whatever optimization they are using.
+It is important to note that `TensorRT` is a black box and we are not aware of simple ways to disable fast GELU, 
+fp16 accumulation, or whatever optimization leveraged (we know they use many of them because of the precision issues 
+we experienced in prod with this tool).
 
 ## [AITemplate](https://github.com/facebookincubator/AITemplate/)
 
@@ -109,13 +110,13 @@ The script is based on the official [demo script](https://github.com/facebookinc
 
 The model do not support `attention_mask`, so we don't use it in benchmarks.
 It is important to keep in mind that `attention mask` adds operations on top of an already computation bounded kernel.
-Said otherwise, it would it slower.
-On the other side, without `attentino mask`, batch inference is useless right now.
-So numbers for AITemplate have to be taken with a grain of salt.
+Said otherwise, it would likely make it slower.
+Moreover, without `attentino mask`, batch inference is useless right now.  
+There is a multithreads mode which would get much more overhead than batch mode (launching n threads times more kernels).
 
-According 
+**TL;DR**: numbers for AITemplate have to be taken with a grain of salt.
 
-For follow-up, an issue has been opened [here](https://github.com/facebookincubator/AITemplate/issues/46) on the repo:
+An issue has been opened [here](https://github.com/facebookincubator/AITemplate/issues/46) on the repo:
 
 ```cite
 @antinucleon
@@ -246,8 +247,10 @@ deepspeed --num_gpus 1 experimental/benchmarks/deepspeed_.py --deepspeed
 
 ### Notes
 
-The benchmark script is built over the one provided in the `deepspeed` repo:
-https://github.com/microsoft/DeepSpeed/blob/master/benchmarks/inference/bert-bench.py
+The benchmark script is built over the 
+[one](https://github.com/microsoft/DeepSpeed/blob/master/benchmarks/inference/bert-bench.py) provided in the 
+`deepspeed` repo.
+
 
 We rebuilt a model for each shape to leverage Cuda-graphs and get best possible performances.  
 In real scenario, we would need something on top of it to handle multiple graphs.
