@@ -2,16 +2,22 @@
 
 ---
 
-> Kernl let you run Pytorch transformer models several times faster on GPU with a single line of code, and is 
-> designed to be easily hackacble.
-
-Kernl leverages TorchDynamo and supports dynamic behavior of big generative language models.
+> Kernl lets you run Pytorch transformer models several times faster than baseline on GPU with a single line of code, 
+> and is designed to be **easily** hackacble.
 
 <p align="center">
   <img src="./resources/images/speedup.png">
 </p>
 
-## Install dependencies
+*benchmarks ran on a 3090 RTX*
+
+Kernl is the first OSS inference engine written in ~~CUDA C~~ [OpenAI Triton](https://openai.com/blog/triton/), 
+a new language designed by OpenAI to make it easier to write GPU kernels.  
+Each kernel is less than 200 lines of code, and is **easy to understand** and modify.
+
+🎅🎄 Training support comming soon... 🤯
+
+## Installation
 
 **IMPORTANT**: This package requires `pytorch` being installed.  
 Please install it first.
@@ -20,8 +26,6 @@ Please install it first.
 pip install torch -U --extra-index-url https://download.pytorch.org/whl/cu116
 git clone https://github.com/ELS-RD/kernl
 pip install -e .
-# or to enable all benchmarks
-pip install -e ".[benchmark]"
 ```
 
 This project requires `Python` >= 3.9.
@@ -52,6 +56,8 @@ Note that the original model will raise an error if you try to use it after opti
 # tada!
 pytest
 ```
+
+There are over 2K benchmarks, and they take a while to run.
 
 Some rules on how `PyTest` works, in particular for benchmarks:
 
