@@ -51,6 +51,11 @@ em {
     display: none;
 }
 
+/* hides the title of the site and the logo of the mobile drawer */
+div[data-md-component="sidebar"] .md-nav__title {
+    display: none;
+}
+
 form[name="search"] {
     border-radius: var(--border-radius-md) !important;
 }
