@@ -6,11 +6,6 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 /* additional fonts */
 /* ----- ----- ----- ----- ----- */
 @font-face {
-    font-family: "Fredoka One";
-    src: url("../assets/fonts/FredokaOne-Regular.ttf") format("truetype");
-}
-
-@font-face {
     font-family: "Fredoka";
     src: url("../assets/fonts/Fredoka-VariableFont_wdth,wght.ttf") format("truetype");
 }
@@ -18,8 +13,34 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 /* ----- ----- ----- ----- ----- */
 /* variables */
 /* ----- ----- ----- ----- ----- */
+/* breakpoints */
+/* xs, extra-small: 0px*/
+/* sm, small: 600px */
+/* md, medium: 900px */
+/* lg, large: 1200px */
+/* xl, extra-large: 1536px */
 :root {
-    --section-padding-x: 16px;
+    /* colors */
+    --color-primary: #4351E8;
+
+    /* spaces */
+    --section-padding-y: 56px;
+
+    /* fonts */
+    --font-fredoka-semibold: 600;
+
+    /* text */
+    --accessible-line-height: 150%;
+
+    /* border */
+    --border-radius-md: 8px
+}
+
+/* ----- ----- ----- ----- ----- */
+/* initialization */
+/* ----- ----- ----- ----- ----- */
+em {
+    font-style: normal;
 }
 
 /* ----- ----- ----- ----- ----- */
@@ -30,12 +51,63 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
     display: none;
 }
 
-/* ----- ----- ----- ----- ----- */
-.knl-hero__container {
-    background: linear-gradient(to bottom, #fff, hsla(160deg, 47%, 55%, 1) 99%);
+form[name="search"] {
+    border-radius: var(--border-radius-md) !important;
 }
+
+div[class="md-search__scrollwrap"] {
+    margin-top: 4px;
+    border-radius: var(--border-radius-md) !important;
+}
+
+/* ----- ----- ----- ----- ----- */
+
 
 /* ----- ----- ----- ----- ----- */
 /* hero */
 .knl-hero {
+    padding: var(--section-padding-y) 0;
+    background: linear-gradient(to bottom, #fff, hsla(160deg, 47%, 55%, 1) 99%);
+    border: 5px solid red;
+}
+
+.knl-hero__content {
+    border: 3px solid blue;
+}
+
+.knl-hero__text {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+
+    border: 3px solid green;
+}
+
+.knl-hero__title {
+    margin: 0;
+    font-family: "Fredoka", sans-serif;
+    font-size: 64px;
+    font-weight: var(--font-fredoka-semibold);
+    text-align: center;
+
+    border: 1px solid orange;
+}
+
+.knl-hero__title em {
+    color: var(--color-primary);
+}
+
+.knl-hero__description {
+    margin: 0;
+    font-family: "Poppins", sans-serif;
+    font-size: 24px;
+    text-align: center;
+    line-height: var(--accessible-line-height);
+
+    border: 1px solid orange;
+}
+
+.knl-hero__description em {
+    font-weight: bold;
+    color: var(--color-primary);
 }
