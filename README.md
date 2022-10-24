@@ -2,7 +2,14 @@
 
 ---
 
-Kernl is a collection of optimized kernels for `transformer` models to speed-up inference and soon training.
+> Kernl let you run Pytorch transformer models several times faster on GPU with a single line of code, and is 
+> designed to be easily hackacble.
+
+Kernl leverages TorchDynamo and supports dynamic behavior of big generative language models.
+
+<p align="center">
+  <img src="./resources/images/speedup.png">
+</p>
 
 ## Install dependencies
 
@@ -19,7 +26,7 @@ pip install -e ".[benchmark]"
 
 This project requires `Python` >= 3.9.
 
-## Use
+## Getting started
 
 ```python
 from kernl.model_optimization import optimize_model
