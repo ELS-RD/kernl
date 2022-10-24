@@ -81,18 +81,18 @@ extra_javascript:
 # Customization
 extra:
   social:
-    - icon: fontawesome/brands/twitter
-      link: https://google.com/
-      name: Kernel Fusion on Twitter
+#    - icon: fontawesome/brands/twitter
+#      link: https://google.com/
+#      name: Kernel Fusion on Twitter
     - icon: fontawesome/brands/github
       link: https://google.com/
       name: Kernel Fusion on Github
     - icon: fontawesome/brands/medium
       link: https://google.com/
       name: Kernel Fusion on Medium
-    - icon: fontawesome/brands/linkedin
-      link: https://google.com/
-      name: Kernel Fusion on LinkedIn
+#    - icon: fontawesome/brands/linkedin
+#      link: https://google.com/
+#      name: Kernel Fusion on LinkedIn
     - icon: fontawesome/brands/slack
       link: https://google.com/
       name: Kernel Fusion on Slack
@@ -162,7 +162,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Get Started:
-      - Start: get-started/start.md
+      - Get started: get-started/start.md
   - How it works:
       - Page 1: how-it-works/page.md
   - Code Reference:
