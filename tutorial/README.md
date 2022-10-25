@@ -15,7 +15,7 @@ Tutorials below will show you how to implement a GPU kernel.
 It requires basic knowledge of how GPU works, in particular its memory hierarchy.  
 If you are not familiar with that, check [this article](https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html) first.
 
-Tutarials below are written in `Pytorch` in the style of `triton` (rewriting is trivial), to ease the learning.
+Tutorials below are written in `Pytorch` in the style of `triton` (rewriting is trivial), to ease the learning.
 
 * [tiled matmul](./1%20-%20tiled%20matmul.ipynb): matrix multiplication implementation in `CUDA` style
 * [online softmax](./3%20-%20online%20softmax.ipynb): parallelized softmax computation, a key ingredient of flash attention
