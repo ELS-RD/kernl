@@ -1,8 +1,8 @@
 import dataclasses
 import os.path
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from time import perf_counter
 from typing import Callable, Dict, List, Optional
 
 import tensorrt as trt
@@ -136,10 +136,10 @@ def build_engine(
         network_def = fp16_fix(network_def)
 
     logger.log(msg="building engine. depending on model size this may take a while", severity=trt.ILogger.WARNING)
-    start = perf_counter()
+    start = time.perf_counter()
     trt_engine = builder.build_serialized_network(network_def, config)
     engine: ICudaEngine = runtime.deserialize_cuda_engine(trt_engine)
-    logger.log(msg=f"building engine took {perf_counter() - start:4.1f} seconds", severity=trt.ILogger.WARNING)
+    logger.log(msg=f"building engine took {time.perf_counter() - start:4.1f} seconds", severity=trt.ILogger.WARNING)
     assert engine is not None, "error during engine generation, check error messages above :-("
     return engine
 
@@ -291,7 +291,7 @@ model = AutoModel.from_pretrained(MODEL_NAME, torch_dtype=torch.float32)
 model.to("cuda")
 model.eval()
 
-start_complete = perf_counter()
+start_complete = time.perf_counter()
 for bs in [1, 8, 32]:
     seq_len_to_test = [s for s in [16, 32, 64, 128, 256, 384, 512] if bs * s <= 10000]
 
@@ -339,12 +339,12 @@ for bs in [1, 8, 32]:
         timings = list()
         for _ in range(10):
             torch.cuda.synchronize()
-            start = perf_counter()
+            start = time.perf_counter()
             run(inputs)
             torch.cuda.synchronize()
-            end = perf_counter()
+            end = time.perf_counter()
             timings.append(end - start)
 
         print(f"({bs}, {seq_len}) : {torch.median(torch.tensor(timings)):.4f}")
 
-print(f"Total time: {perf_counter() - start_complete}")
+print(f"Total time: {time.perf_counter() - start_complete}")
