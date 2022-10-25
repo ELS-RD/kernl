@@ -1,7 +1,9 @@
 # Benchmark of Third-Party Libraries
 
 This directory contains benchmarks of third-party libraries. The benchmarks are
-written as simple Python script and have been run on a Nvidia 3090 RTX GPU and a 12 cores Intel CPU.
+written as simple Python script and have been run on a Nvidia 3090 RTX GPU, 128 Gb RAM, 12 cores Intel CPU.
+
+Measures are done in wall-clock time, and output tensors are kept on GPU.
 
 ## [TensorRT](https://github.com/NVIDIA/TensorRT/)
 
@@ -111,7 +113,7 @@ The script is based on the official [demo script](https://github.com/facebookinc
 The model do not support `attention_mask`, so we don't use it in benchmarks.
 It is important to keep in mind that `attention mask` adds operations on top of an already computation bounded kernel.
 Said otherwise, it would likely make it slower.
-Moreover, without `attentino mask`, batch inference is useless right now.  
+Moreover, without `attention mask`, batch inference is useless right now.  
 There is a multithreads mode which would get much more overhead than batch mode (launching n threads times more kernels).
 
 **TL;DR**: numbers for AITemplate have to be taken with a grain of salt.
@@ -139,7 +141,7 @@ We choose to use the following options:
 
 We do not use the [benchmark](https://github.com/facebookincubator/AITemplate/blob/main/examples/03_bert/benchmark_ait.py)
 script provided in the `AITemplate` repo because:
-* it reports GPU times through CUDA events and compare inference engines on wall-clock times which better matches our end-to-end use cases.
+* it reports GPU times through CUDA events and we compare inference engines on wall-clock times which better matches our end-to-end use cases.
 * we are not sure of the meaning of the reported times in case of multiple threads/cuda streams used
   (see [here](https://github.com/facebookincubator/AITemplate/issues/44)), it doesn't match latency or throughput definition
 
@@ -151,7 +153,7 @@ CPP implementation of benchmark function is [here](https://github.com/facebookin
 ### Version
 
 * Triton: https://github.com/openai/triton@af76c989eb4799b015f8b288ccd8421558772e56#subdirectory=python
-* Pytorch (includes Torchdynamo): 1.14.0.dev20221015+cu116
+* PyTorch (includes TorchDynamo): 1.14.0.dev20221015+cu116
 
 ### Results
 
@@ -192,7 +194,7 @@ python experimental/benchmarks/inductor.py
 ### Notes
 
 `Torchinductor` is still in prototype stage, results may be different with final version.  
-We are using the version included in `Pytorch` nightly for this benchmark.  
+We are using the version included in PyTorch nightly for this benchmark.  
 The dependency of this project is an older version not requiring nightly version as we only need `Torchdynamo`.
 Project info on https://github.com/pytorch/torchdynamo even if code is not anymore updated in this repo.
 
@@ -251,8 +253,7 @@ The benchmark script is built over the
 [one](https://github.com/microsoft/DeepSpeed/blob/master/benchmarks/inference/bert-bench.py) provided in the 
 `deepspeed` repo.
 
-
-We rebuilt a model for each shape to leverage Cuda-graphs and get best possible performances.  
+We rebuilt a model for each shape to leverage CUDA Graphs and get best possible performances.  
 In real scenario, we would need something on top of it to handle multiple graphs.
 
 Model got its weights completly converted to fp16 (instead of doing mixed precision) as it is done that way in the 

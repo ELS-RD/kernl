@@ -34,7 +34,7 @@ for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 25
         for _ in range(10):
 
             start = time.perf_counter()
-            output_inductor = apply(**inputs)
+            apply(**inputs)
             torch.cuda.synchronize()
             end = time.perf_counter()
             timings.append(end - start)

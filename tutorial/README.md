@@ -2,7 +2,7 @@
 
 This folder contains 2 kinds of tutorials:
 - end to end examples of how to use the library
-- on-board team members and others on this project.
+- onboard team members and contributors on this project.
 
 ## End to end examples
 
@@ -20,6 +20,7 @@ Tutorials below are written in `Pytorch` in the style of `triton` (rewriting is 
 * [tiled matmul](./1%20-%20tiled%20matmul.ipynb): matrix multiplication implementation in `CUDA` style
 * [online softmax](./3%20-%20online%20softmax.ipynb): parallelized softmax computation, a key ingredient of flash attention
 * [flash attention](./4%20-%20flash%20attention.ipynb): attention computation without saving attention matrix to global memory
-* [matmul offsets](./2%20-%20matmul%20offsets.ipynb): detailed explanations related to a trick used in [`triton` matmul tutorial](https://triton-lang.org/master/getting-started/tutorials/03-matrix-multiplication.html#sphx-glr-getting-started-tutorials-03-matrix-multiplication-py)
+* [matmul offsets](./2%20-%20matmul%20offsets.ipynb): detailed explanations related to a performance trick used in 
+  [`triton` matmul tutorial](https://triton-lang.org/master/getting-started/tutorials/03-matrix-multiplication.html#sphx-glr-getting-started-tutorials-03-matrix-multiplication-py)
 
 **flash attention** tutorial covers most of what you need to know.
