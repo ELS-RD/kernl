@@ -33,11 +33,17 @@ This project requires `Python` >= 3.9.
 ## Getting started
 
 ```python
+import torch
+from transformers import AutoModel
 from kernl.model_optimization import optimize_model
 
-model = AutoModelForSequenceClassification.from_pretrained(model_name).eval().cuda()
-
+model = AutoModel.from_pretrained(model_name).eval().cuda()
 optimized_model = optimize_model(model)
+
+inputs = ...
+
+with torch.inference_mode(), torch.cuda.amp.autocast():
+    outputs = optimized_model(**inputs)
 ```
 
 Note that the original model will raise an error if you try to use it after optimization.
