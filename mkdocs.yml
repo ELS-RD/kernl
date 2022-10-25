@@ -29,20 +29,20 @@ theme:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/toggle-switch-off-outline
-        name: Switch to dark mode
+      primary: white
+      accent: blue
+#      toggle:
+#        icon: material/toggle-switch-off-outline
+#        name: Switch to dark mode
 
-    # Palette toggle for dark mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: slate
-      primary: deep purple
-      accent: indigo
-      toggle:
-        icon: material/toggle-switch
-        name: Switch to light mode
+# Palette toggle for dark mode
+#    - media: "(prefers-color-scheme: dark)"
+#      scheme: slate
+#      primary: white
+#      accent: light blue
+#      toggle:
+#        icon: material/toggle-switch
+#        name: Switch to light mode
 
   # Default values, taken from mkdocs_theme.yml
   features:
@@ -74,45 +74,19 @@ extra_javascript:
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
-# Plugins
-#plugins:
-#  - search
-
 # Customization
 extra:
   social:
-#    - icon: fontawesome/brands/twitter
-#      link: https://google.com/
-#      name: Kernel Fusion on Twitter
     - icon: fontawesome/brands/github
       link: https://google.com/
-      name: Kernel Fusion on Github
-    - icon: fontawesome/brands/medium
-      link: https://google.com/
-      name: Kernel Fusion on Medium
-#    - icon: fontawesome/brands/linkedin
-#      link: https://google.com/
-#      name: Kernel Fusion on LinkedIn
+      name: Kernl on Github
     - icon: fontawesome/brands/slack
       link: https://google.com/
-      name: Kernel Fusion on Slack
+      name: Kernl on Slack
+    - icon: fontawesome/brands/discord
+      link: https://google.com/
+      name: Kernl on Discord
   generator: false
-#  alternate:
-#    - name: English
-#      link: /en/
-#      lang: en
-#    - name: Français
-#      link: /fr/
-#      lang: fr
-#  consent:
-#    title: Cookie consent
-#    description:
-#      We use cookies to recognize your repeated visits and preferences, as well
-#      as to measure the effectiveness of our documentation and whether users
-#      find what they're searching for. With your consent, you're helping us to
-#      make our documentation better.
-#  version:
-#    provider: mike
 
 # Extensions
 markdown_extensions:
