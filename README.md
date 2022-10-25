@@ -19,6 +19,18 @@ pip install -e ".[benchmark]"
 
 This project requires `Python` >= 3.9.
 
+## Use
+
+```python
+from kernl.model_optimization import optimize_model
+
+model = AutoModelForSequenceClassification.from_pretrained(model_name).eval().cuda()
+
+optimized_model = optimize_model(model)
+```
+
+Note that the original model will raise an error if you try to use it after optimization.
+
 ## Test and Benchmark
 
 ### Conventions
