@@ -55,14 +55,13 @@ em {
     display: none;
 }
 
-/* hides the title of the site and the logo of the mobile drawer */
-.md-nav--primary .md-nav__title {
+/* hides the title of the site of the mobile drawer */
+.md-nav--primary > .md-nav__title {
+    color: transparent !important;
 }
 
-.md-nav--primary .md-nav__title .md-logo {
-}
-
-.md-nav--primary .md-nav__title .md-logo img {
+.md-nav--primary > .md-nav__title > .md-logo > img {
+    width: 80% !important;
 }
 
 /* rounds up the search field and the suggestion panel */
