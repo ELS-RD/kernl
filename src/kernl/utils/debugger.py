@@ -52,7 +52,7 @@ class TritonDebugger:
         Add inputs for triton debugger.
         @param tensor: torch.Tensor to be added as input
         """
-        assert tensor.device.type == "cuda", print(f"Tensor {tensor} is not on cuda")
+        assert tensor.device.type == "cuda", f"Tensor {tensor} is not on cuda"
         self.tensor_dict[(self.previous_boundary, self.previous_boundary + tensor.nelement())] = tensor
         self.previous_boundary = self.previous_boundary + tensor.nelement()
         self.tensor_ptr = {tensor: range_ptrs[0] for range_ptrs, tensor in self.tensor_dict.items()}
