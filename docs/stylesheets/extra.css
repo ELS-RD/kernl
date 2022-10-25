@@ -152,21 +152,21 @@ div[class="md-search__scrollwrap"] {
     cursor: pointer;
 }
 
-.button_primary__contained {
+.button__primary--contained {
     color: white;
     background-color: var(--color-primary);
 }
 
-.button_primary__contained svg {
+.button__primary--contained svg {
     fill: white;
 }
 
-.button_secondary__outlined {
+.button__secondary--outlined {
     color: var(--color-secondary);
     border: 1px solid var(--color-secondary);
 }
 
-.button_secondary__outlined svg {
+.button__secondary--outlined svg {
     fill: var(--color-secondary);
 }
 
