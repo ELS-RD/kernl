@@ -154,7 +154,7 @@ We leverage mostly 3 technologies:
 
 * [CUDA graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) : you may have heard that Python is slow,
   blablabla and to limit overhead C++/Rust should be the solution.
-  It is true but better than low overhead is no overhead at all. That’s cuda-graphs!
+  It is true but better than low overhead is no overhead at all. That’s CUDA graphs!
   During a warmup step, it will save every kernel launched and their parameters, and then, with a single GPU instruction,
   we can replay the whole inference.
 
@@ -164,3 +164,7 @@ We leverage mostly 3 technologies:
   We replace some operations of this graph with our kernels and recompile it in Python.
   We do that for any possible dynamic behavior we expect to have. During inference, inputs are analyzed, and the correct
   static graph is used. It’s really an awesome project, check their repo to know more.
+
+## Acknowledgments
+
+Code of OpenAI Triton kernels takes inspiration from examples from OpenAI Triton tutorials or xformers library.  
