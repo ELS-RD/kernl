@@ -111,7 +111,8 @@ cat measures.txt
 The script is based on the official [demo script](https://github.com/facebookincubator/AITemplate/tree/main/examples/03_bert).
 
 The model do not support `attention_mask`, so we don't use it in benchmarks.
-It is important to keep in mind that `attention mask` adds operations on top of an already computation bounded kernel.
+It is important to keep in mind that `attention mask` adds operations on top of an already computation bounded kernel,
+in particular for long sequence length inputs.
 Said otherwise, it would likely make it slower.
 Moreover, without `attention mask`, batch inference is useless right now.  
 There is a multithreads mode which would get much more overhead than batch mode (launching n threads times more kernels).
