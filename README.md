@@ -2,7 +2,7 @@
 
 ---
 
-> Kernl lets you run Pytorch transformer models several times faster than baseline on GPU with a single line of code, 
+> Kernl lets you run Pytorch transformer models several times faster on GPU with a single line of code, 
 > and is designed to be **easily** hackacble.
 
 <p align="center">
