@@ -26,6 +26,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 :root {
     /* colors */
     --color-primary: #4351E8;
+    --color-secondary: #F92672;
 
     /* spaces */
     --section-padding-y: 56px;
@@ -84,6 +85,9 @@ div[class="md-search__scrollwrap"] {
 
 .knl-hero__content {
     padding: 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
     border: 1px solid blue;
 }
 
@@ -109,7 +113,7 @@ div[class="md-search__scrollwrap"] {
 .knl-hero__description {
     margin: 0;
     font-family: "Poppins", sans-serif;
-    font-size: clamp(14px, 3vw, 24px);
+    font-size: clamp(16px, 3vw, 24px);
     font-weight: normal;
     text-align: center;
     line-height: var(--accessible-line-height);
@@ -120,6 +124,52 @@ div[class="md-search__scrollwrap"] {
     font-weight: bold;
     color: var(--color-primary);
 }
+
+.knl-hero__cta {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    border: 1px solid blue;
+}
+
+/* ----- ----- ----- ----- ----- */
+/* buttons */
+/* ----- ----- ----- ----- ----- */
+.button {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 32px;
+    font-family: "Poppins", sans-serif;
+    font-size: clamp(14px, 3vw, 16px);
+    font-weight: bold;
+    border-radius: 8px;
+    box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.25);
+}
+
+.button:hover {
+    filter: brightness(110%);
+    cursor: pointer;
+}
+
+.button_primary__contained {
+    color: white;
+    background-color: var(--color-primary);
+}
+
+.button_primary__contained svg {
+    fill: white;
+}
+
+.button_secondary__outlined {
+    color: var(--color-secondary);
+    border: 1px solid var(--color-secondary);
+}
+
+.button_secondary__outlined svg {
+    fill: var(--color-secondary);
+}
+
 
 /* ----- ----- ----- ----- ----- */
 /* media queries */
@@ -133,5 +183,9 @@ div[class="md-search__scrollwrap"] {
 /*@media screen and (max-width: 576px) {*/
 /*}*/
 
-/*@media screen and (max-width: 416px) {*/
-/*}*/
+@media screen and (max-width: 416px) {
+    .knl-hero__cta {
+        flex-direction: column;
+        align-items: center;
+    }
+}
