@@ -18,7 +18,7 @@ for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 25
         "attention_mask": torch.ones(shape, device="cuda", dtype=torch.long),
     }
 
-    # rebuild to use cuda graphs
+    # rebuild to use CUDA graphs
     model_ds = deepspeed.init_inference(
         model,
         dtype=torch.float16,

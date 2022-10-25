@@ -148,7 +148,7 @@ script provided in the `AITemplate` repo because:
 CPP implementation of benchmark function is [here](https://github.com/facebookincubator/AITemplate/blob/44026ba7e7f5376a80cf0f2b333a0f25c0eeda6c/static/csrc/model_container.cpp).
 
 
-## [Torchdynamo + inductor](https://github.com/pytorch/torchdynamo)
+## [TorchDynamo + inductor](https://github.com/pytorch/torchdynamo)
 
 ### Version
 
@@ -195,7 +195,7 @@ python experimental/benchmarks/inductor.py
 
 `Torchinductor` is still in prototype stage, results may be different with final version.  
 We are using the version included in PyTorch nightly for this benchmark.  
-The dependency of this project is an older version not requiring nightly version as we only need `Torchdynamo`.
+The dependency of this project is an older version not requiring nightly version as we only need `TorchDynamo`.
 Project info on https://github.com/pytorch/torchdynamo even if code is not anymore updated in this repo.
 
 We tried several disabled by default optimizations but none of them worked:

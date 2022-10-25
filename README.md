@@ -2,8 +2,8 @@
 
 ---
 
-> Kernl lets you run Pytorch transformer models several times faster on GPU with a single line of code, 
-> and is designed to be **easily** hackable.
+**Kernl lets you run Pytorch transformer models several times faster on GPU with a single line of code,** 
+**and is designed to be easily hackable.**
 
 <p align="center">
   <img src="./resources/images/speedup.png">
@@ -144,22 +144,21 @@ Counterintuitively, to make things faster, you don’t need to be faster in comp
 We leverage mostly 3 technologies:
 
 * [OpenAI Triton](https://triton-lang.org/): it’s a language to write GPU kernels like CUDA (not to be confused with 
-  Nvidia inference server), but much more productive (at least for us). 
+  Nvidia Triton inference server), but much more productive (at least for us). 
   Improvement is due to the fusion of several ops, making us able to chain computations without
   saving intermediate results in GPU memory. We are using it to rewrite:
 
-  * Attention (replaced by Flash attention),
+  * Attention (replaced by Flash Attention),
   * Linear layer and their activation,
   * and finally Layernorm/Rmsnorm.
 
-* [Cuda graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) : you may have heard that Python is slow,
+* [CUDA graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) : you may have heard that Python is slow,
   blablabla and to limit overhead C++/Rust should be the solution.
   It is true but better than low overhead is no overhead at all. That’s cuda-graphs!
   During a warmup step, it will save every kernel launched and their parameters, and then, with a single GPU instruction,
-  we can replay the whole inference with a single and fast call to Python code (or any other CPU overhead instruction) 
-  at all.
+  we can replay the whole inference.
 
-* [Torchdynamo](https://github.com/pytorch/torchdynamo/): this prototype from Meta helps us to cope with dynamic
+* [TorchDynamo](https://github.com/pytorch/torchdynamo/): this prototype from Meta helps us to cope with dynamic
   behavior. It’s described [here](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747),
   and in a few words during a warmup step it traces the model and provides a Fx graph (a static computation graph).
   We replace some operations of this graph with our kernels and recompile it in Python.

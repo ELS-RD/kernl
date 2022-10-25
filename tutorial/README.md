@@ -18,9 +18,9 @@ If you are not familiar with that, check [this article](https://docs.nvidia.com/
 Tutorials below are written in `Pytorch` in the style of `triton` (rewriting is trivial), to ease the learning.
 
 * [tiled matmul](./1%20-%20tiled%20matmul.ipynb): matrix multiplication implementation in `CUDA` style
-* [online softmax](./3%20-%20online%20softmax.ipynb): parallelized softmax computation, a key ingredient of flash attention
-* [flash attention](./4%20-%20flash%20attention.ipynb): attention computation without saving attention matrix to global memory
+* [online softmax](./3%20-%20online%20softmax.ipynb): parallelized softmax computation, a key ingredient of Flash Attention
+* [Flash Attention](./4%20-%20flash%20attention.ipynb): attention computation without saving attention matrix to global memory
 * [matmul offsets](./2%20-%20matmul%20offsets.ipynb): detailed explanations related to a performance trick used in 
   [`triton` matmul tutorial](https://triton-lang.org/master/getting-started/tutorials/03-matrix-multiplication.html#sphx-glr-getting-started-tutorials-03-matrix-multiplication-py)
 
-**flash attention** tutorial covers most of what you need to know.
+**Flash Attention** tutorial covers most of what you need to know.
