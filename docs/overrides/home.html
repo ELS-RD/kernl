@@ -54,6 +54,18 @@
             </div>
         </div>
     </section>
+    <section class="knl-snippet md-grid">
+        <pre><code class="knl-snippet__code"><span class="instruction">from</span> transformers <span
+                class="instruction">import</span> <span
+                class="class">AutoModel</span>
+<span class="instruction">from</span> kernl.model_optimization <span class="instruction">import</span> optimize_model
+
+model <span class="instruction">=</span> <span class="class">AutoModel</span>.<span
+                    class="function">from_pretrained</span>(model_name).<span class="function">eval</span>().<span
+                    class="function">cuda</span>()
+<span class="comment">// model optimization in one line of code</span> 🙂
+optimized_model <span class="instruction">=</span> <span class="function">optimize_model</span>(model)</code></pre>
+    </section>
 </main>
 {% endblock %}
 {% block content %}{% endblock %}

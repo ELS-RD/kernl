@@ -28,6 +28,11 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
     --color-primary: #4351E8;
     --color-secondary: #F92672;
 
+    --color-snippet-primary: #A6E22E;
+    --color-snippet-secondary: #F92672;
+    --color-snippet-ternary: #66D9EF;
+    --color-snippet-background: #232A55;
+
     /* spaces */
     --section-padding-y: 56px;
 
@@ -38,7 +43,10 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
     --accessible-line-height: 150%;
 
     /* border */
-    --border-radius-md: 8px
+    --border-radius-md: 8px;
+
+    /* shadows */
+    --shadow-primary: 0 0 8px 0 rgba(0, 0, 0, 0.25);
 }
 
 /* ----- ----- ----- ----- ----- */
@@ -143,8 +151,8 @@ div[class="md-search__scrollwrap"] {
     font-family: "Poppins", sans-serif;
     font-size: clamp(14px, 3vw, 16px);
     font-weight: bold;
-    border-radius: 8px;
-    box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.25);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-primary);
 }
 
 .button:hover {
@@ -170,6 +178,51 @@ div[class="md-search__scrollwrap"] {
     fill: var(--color-secondary);
 }
 
+/* ----- ----- ----- ----- ----- */
+/* snippet */
+/* ----- ----- ----- ----- ----- */
+.knl-snippet {
+    display: flex;
+    padding-bottom: var(--section-padding-y);
+    justify-content: center;
+    border: 1px solid red;
+}
+
+.knl-snippet pre {
+    margin: 0;
+}
+
+.knl-snippet__code {
+    display: block;
+    position: relative;
+    padding: clamp(8px, 5vw, 48px) clamp(8px, 5vw, 64px);
+
+    font-family: 'Roboto Mono', monospace;
+    font-size: clamp(10px, 2vw, 16px);
+    color: white;
+    line-height: var(--accessible-line-height);
+
+    border-radius: var(--border-radius-md);
+    background-color: var(--color-snippet-background);
+    box-shadow: var(--shadow-primary);
+}
+
+.knl-snippet__code .function {
+    color: var(--color-snippet-primary);
+}
+
+.knl-snippet__code .instruction {
+    color: var(--color-snippet-secondary);
+}
+
+.knl-snippet__code .class,
+.knl-snippet__code .comment {
+    color: var(--color-snippet-ternary);
+}
+
+.knl-snippet__code .comment {
+    font-style: italic;
+}
 
 /* ----- ----- ----- ----- ----- */
 /* media queries */
@@ -187,5 +240,9 @@ div[class="md-search__scrollwrap"] {
     .knl-hero__cta {
         flex-direction: column;
         align-items: center;
+    }
+
+    .knl-snippet {
+        display: none;
     }
 }
