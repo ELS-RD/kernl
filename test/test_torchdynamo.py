@@ -30,7 +30,7 @@ import pytest
 import torch
 import torchdynamo
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
+import whisper
 from conftest import check_all_close, set_seed
 
 
@@ -153,3 +153,24 @@ def test_t5():
             do_sample=False,
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
+
+def test_whisper():
+    model = whisper.load_model("base")
+
+    # load audio and pad/trim it to fit 30 seconds
+    audio = whisper.load_audio("tests_jfk.flac")
+    audio = whisper.pad_or_trim(audio)
+
+    # make log-Mel spectrogram and move to the same device as the model
+    mel = whisper.log_mel_spectrogram(audio).to(model.device)
+
+    # detect the spoken language
+    _, probs = model.detect_language(mel)
+    print(f"Detected language: {max(probs, key=probs.get)}")
+
+    # decode the audio
+    options = whisper.DecodingOptions()
+    model.encoder.forward = get_model_optimized(model.encoder.forward)
+    result = whisper.decode(model, mel, options)
+
+    assert result.text == "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
