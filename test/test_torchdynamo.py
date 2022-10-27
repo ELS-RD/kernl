@@ -177,5 +177,6 @@ def test_whisper():
         result = whisper.decode(model, mel, options)
         assert (
             result.text
-            == "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+            == "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your "
+            "country."
         )

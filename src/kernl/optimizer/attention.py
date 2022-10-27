@@ -61,3 +61,21 @@ def fuse_attention_pattern_2(gm: torch.fx.GraphModule, is_causal: bool):
         return output
 
     replace_pattern(gm, pattern, replace)
+
+
+def fuse_attention_pattern_3(gm: torch.fx.GraphModule, is_causal: bool):
+    def pattern(mul_10, mul_11, permute_23):
+        matmul_10 = mul_10 @ mul_11
+        float_17 = matmul_10.float()
+        softmax_5 = torch.nn.functional.softmax(float_17, dim=-1)
+        to_70 = softmax_5.to(torch.float16)
+        matmul_11 = to_70 @ permute_23
+        return matmul_11
+
+    def replace(q, k, v):
+        output = torch.empty_like(q)
+        # Need to remove the transpose here, very bad !!!
+        output = attention_wrapper(q, k.transpose(-1, -2), v, output, 1.0, is_causal, None)
+        return output
+
+    replace_pattern(gm, pattern, replace)
