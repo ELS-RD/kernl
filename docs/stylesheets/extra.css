@@ -28,6 +28,9 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
     --color-primary: #4351E8;
     --color-secondary: #F92672;
 
+    --color-background-what: #232A55;
+    --color-background-oss: #E9EBF6;
+
     --color-snippet-primary: #A6E22E;
     --color-snippet-secondary: #F92672;
     --color-snippet-ternary: #66D9EF;
@@ -222,6 +225,58 @@ div[class="md-search__scrollwrap"] {
 
 .knl-snippet__code .comment {
     font-style: italic;
+}
+
+/* ----- ----- ----- ----- ----- */
+/* what | why | oss */
+/* ----- ----- ----- ----- ----- */
+.knl-what {
+    background-color: var(--color-background-what);
+}
+
+.knl-what__content {
+    height: 50px;
+    /*border: 1px solid red;*/
+}
+
+/* ----- ----- ----- ----- ----- */
+.knl-why {
+    border: 1px solid red;
+}
+
+.knl-why__content {
+    height: 50px;
+    border: 1px solid blue;
+}
+
+/* ----- ----- ----- ----- ----- */
+.knl-oss {
+    background-color: var(--color-background-oss);
+}
+
+.knl-oss__content {
+    height: 50px;
+}
+
+/* ----- ----- ----- ----- ----- */
+
+.svg-curve {
+    position: relative;
+    height: 32px;
+}
+
+.svg-curve svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.knl-svg__what svg {
+    fill: var(--color-background-what);
+}
+
+.knl-svg__oss svg {
+    fill: var(--color-background-oss);
 }
 
 /* ----- ----- ----- ----- ----- */
