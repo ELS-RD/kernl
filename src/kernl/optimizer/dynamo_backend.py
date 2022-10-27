@@ -15,7 +15,7 @@
 
 import torch
 
-from src.kernl.optimizer.layer_norm import replace_layer_norm_rms
+from kernl.optimizer.layer_norm import replace_layer_norm_rms
 
 from kernl.optimizer.attention import fuse_attention_pattern_1, fuse_attention_pattern_2
 from kernl.optimizer.dropout import remove_dropout
