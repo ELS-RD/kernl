@@ -186,10 +186,11 @@ CPP implementation of benchmark function is [here](https://github.com/facebookin
 # reuse AITemplate docker image based on nvidia/cuda:11.6.2-devel-ubuntu20.04
 docker run --rm -it --gpus all -v $(pwd):/work -v $(pwd):/work ait
 cd work/
+apt update
 apt install git
 pip3 install --pre torch==1.14.0.dev20221015+cu116 --extra-index-url https://download.pytorch.org/whl/nightly/cu116 -U
 pip3 install git+https://github.com/openai/triton@af76c989eb4799b015f8b288ccd8421558772e56#subdirectory=python
-python experimental/benchmarks/inductor.py
+python3 experimental/benchmarks/inductor.py
 ```
 
 ### Notes
