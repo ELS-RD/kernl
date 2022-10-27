@@ -63,5 +63,5 @@ setup(
     extras_require={
         "benchmark": extra_benchmark,
     },
-    python_requires="==3.9.0",
+    python_requires="==3.9.*",
 )
