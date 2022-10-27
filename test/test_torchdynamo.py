@@ -29,8 +29,9 @@ from typing import Callable
 import pytest
 import torch
 import torchdynamo
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import whisper
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 from conftest import check_all_close, set_seed
 
 
@@ -154,6 +155,7 @@ def test_t5():
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
+
 def test_whisper():
     model = whisper.load_model("base")
 
@@ -171,6 +173,9 @@ def test_whisper():
     # decode the audio
     options = whisper.DecodingOptions()
     model.encoder.forward = get_model_optimized(model.encoder.forward)
-    result = whisper.decode(model, mel, options)
-
-    assert result.text == "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
+        result = whisper.decode(model, mel, options)
+        assert (
+            result.text
+            == "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+        )
