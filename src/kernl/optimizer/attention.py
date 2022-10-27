@@ -62,9 +62,17 @@ def fuse_attention_pattern_2(gm: torch.fx.GraphModule, is_causal: bool):
 
     replace_pattern(gm, pattern, replace)
 
-
+# TODO: We need constant matching, else it will only work for 1 model !!!
 def fuse_attention_pattern_3(gm: torch.fx.GraphModule, is_causal: bool):
-    def pattern(mul_10, mul_11, permute_23):
+    def pattern(q, k, v):
+        permute_21 = q.permute(0, 2, 1, 3)
+        mul_10 = permute_21 * 0.3535533905932738
+
+        permute_22 = k.permute(0, 2, 3, 1)
+        mul_11 = permute_22 * 0.3535533905932738
+
+        permute_23 = v.permute(0, 2, 1, 3)
+
         matmul_10 = mul_10 @ mul_11
         float_17 = matmul_10.float()
         softmax_5 = torch.nn.functional.softmax(float_17, dim=-1)
@@ -73,9 +81,20 @@ def fuse_attention_pattern_3(gm: torch.fx.GraphModule, is_causal: bool):
         return matmul_11
 
     def replace(q, k, v):
+        q = q.permute(0, 2, 1, 3)
+        k = k.permute(0, 2, 3, 1)
+        v = v.permute(0, 2, 1, 3)
+
         output = torch.empty_like(q)
-        # Need to remove the transpose here, very bad !!!
-        output = attention_wrapper(q, k.transpose(-1, -2), v, output, 1.0, is_causal, None)
+        output = attention_wrapper(
+            q,
+            k.transpose(-1, -2),
+            v,
+            output,
+            0.3535533905932738**2,  # n^2 needed because of scale is applied before qk^T
+            is_causal,
+            None,
+        )
         return output
 
     replace_pattern(gm, pattern, replace)
