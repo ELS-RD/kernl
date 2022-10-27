@@ -267,8 +267,15 @@ div[class="md-search__scrollwrap"] {
 
 .svg-curve svg {
     position: absolute;
-    top: 0;
     left: 0;
+}
+
+.svg-curve.top svg {
+    bottom: 0;
+}
+
+.svg-curve.bottom svg {
+    top: 0;
 }
 
 .knl-svg__what svg {
