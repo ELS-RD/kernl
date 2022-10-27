@@ -97,7 +97,7 @@ def test_benchmark(
     fn = implementations[implementation](layer_weight, layer_bias, activation)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x], pool=cuda_graphs_pool)
-        # cuda graphs wraps output in a tuple
+        # CUDA graphs wraps output in a tuple
         fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)

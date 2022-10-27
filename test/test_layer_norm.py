@@ -66,7 +66,7 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
     fn = implementations_layer_norm[implementation](layer_weight, layer_bias, eps)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x], copy_outputs=False)
-        # cuda graphs wraps output in a tuple
+        # CUDA graphs wraps output in a tuple
         fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
@@ -100,7 +100,7 @@ def test_benchmark_rms_norm(benchmark, shape: int, dtype, cuda_graphs: bool, imp
     fn = implementations_rms_norm[implementation](layer_weight, eps)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x], copy_outputs=False)
-        # cuda graphs wraps output in a tuple
+        # CUDA graphs wraps output in a tuple
         fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
