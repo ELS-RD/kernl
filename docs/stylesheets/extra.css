@@ -235,7 +235,7 @@ div[class="md-search__scrollwrap"] {
 }
 
 .knl-what__content {
-    height: 50px;
+    height: 100px;
     /*border: 1px solid red;*/
 }
 
@@ -245,7 +245,7 @@ div[class="md-search__scrollwrap"] {
 }
 
 .knl-why__content {
-    height: 50px;
+    height: 100px;
     border: 1px solid blue;
 }
 
@@ -255,11 +255,10 @@ div[class="md-search__scrollwrap"] {
 }
 
 .knl-oss__content {
-    height: 50px;
+    height: 100px;
 }
 
 /* ----- ----- ----- ----- ----- */
-
 .svg-curve {
     position: relative;
     height: 32px;
