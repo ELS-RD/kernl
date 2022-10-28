@@ -230,17 +230,59 @@ div[class="md-search__scrollwrap"] {
 /* ----- ----- ----- ----- ----- */
 /* what | why | oss */
 /* ----- ----- ----- ----- ----- */
+.knl-what,
+.knl-oss {
+    position: relative;
+    display: block;
+    padding: 64px 0;
+    border: 1px solid red;
+}
+
+.knl-what:before,
+.knl-oss:before,
+.knl-what:after,
+.knl-oss:after {
+    position: absolute;
+    content: " ";
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: 0;
+
+    -webkit-mask-size: 100% 100%;
+    -webkit-mask-clip: border-box;
+    mask-size: 100% 100%;
+    mask-clip: border-box;
+
+    background-color: white;
+}
+
+.knl-what:before,
+.knl-oss:before {
+    -webkit-mask-image: url(../assets/images/curve-mask-top.svg);
+    mask-image: url(../assets/images/curve-mask-top.svg);
+}
+
+.knl-what:after,
+.knl-oss:after {
+    -webkit-mask-image: url(../assets/images/curve-mask-bottom.svg);
+    mask-image: url(../assets/images/curve-mask-bottom.svg);
+}
+
+/* ----- ----- ----- ----- ----- */
 .knl-what {
     background-color: var(--color-background-what);
 }
 
 .knl-what__content {
     height: 100px;
-    /*border: 1px solid red;*/
+    border: 1px solid blue;
 }
 
 /* ----- ----- ----- ----- ----- */
 .knl-why {
+    position: relative;
     border: 1px solid red;
 }
 
@@ -256,34 +298,11 @@ div[class="md-search__scrollwrap"] {
 
 .knl-oss__content {
     height: 100px;
+    border: 1px solid blue;
 }
 
 /* ----- ----- ----- ----- ----- */
-.svg-curve {
-    position: relative;
-    height: 32px;
-}
 
-.svg-curve svg {
-    position: absolute;
-    left: 0;
-}
-
-.svg-curve.top svg {
-    bottom: 0;
-}
-
-.svg-curve.bottom svg {
-    top: 0;
-}
-
-.knl-svg__what svg {
-    fill: var(--color-background-what);
-}
-
-.knl-svg__oss svg {
-    fill: var(--color-background-oss);
-}
 
 /* ----- ----- ----- ----- ----- */
 /* media queries */
