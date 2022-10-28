@@ -230,11 +230,12 @@ div[class="md-search__scrollwrap"] {
 /* ----- ----- ----- ----- ----- */
 /* what | why | oss */
 /* ----- ----- ----- ----- ----- */
+/* curves */
 .knl-what,
 .knl-oss {
     position: relative;
     display: block;
-    padding: 64px 0;
+    padding: 88px 0; /* 32px + 56px */
     border: 1px solid red;
 }
 
@@ -271,23 +272,49 @@ div[class="md-search__scrollwrap"] {
 }
 
 /* ----- ----- ----- ----- ----- */
+/* titles */
+.knl-what h3,
+.knl-why h3,
+.knl-oss h3 {
+    margin: 0;
+    font-family: "Fredoka", sans-serif;
+    font-size: clamp(20px, 7vw, 40px);
+    font-weight: normal;
+    line-height: var(--accessible-line-height);
+    text-align: center;
+}
+
+.knl-what h3 em,
+.knl-why h3 em,
+.knl-oss h3 em {
+    font-weight: var(--font-fredoka-semibold);
+}
+
+.knl-what h3 em,
+.knl-why h3 em {
+    color: var(--color-secondary);
+}
+
+.knl-what h3 {
+    color: white;
+}
+
+/* ----- ----- ----- ----- ----- */
 .knl-what {
     background-color: var(--color-background-what);
 }
 
 .knl-what__content {
-    height: 100px;
     border: 1px solid blue;
 }
 
 /* ----- ----- ----- ----- ----- */
 .knl-why {
-    position: relative;
+    padding: var(--section-padding-y) 0;
     border: 1px solid red;
 }
 
 .knl-why__content {
-    height: 100px;
     border: 1px solid blue;
 }
 
@@ -297,7 +324,6 @@ div[class="md-search__scrollwrap"] {
 }
 
 .knl-oss__content {
-    height: 100px;
     border: 1px solid blue;
 }
 
@@ -310,11 +336,21 @@ div[class="md-search__scrollwrap"] {
 /*@media screen and (max-width: 992px) {*/
 /*}*/
 
-/*@media screen and (max-width: 768px) {*/
-/*}*/
+@media screen and (max-width: 768px) {
+    .knl-what,
+    .knl-why,
+    .knl-oss {
+        padding: 56px 0;
+    }
+}
 
-/*@media screen and (max-width: 576px) {*/
-/*}*/
+@media screen and (max-width: 576px) {
+    .knl-what,
+    .knl-why,
+    .knl-oss {
+        padding: 48px 0;
+    }
+}
 
 @media screen and (max-width: 416px) {
     .knl-hero__cta {
@@ -324,5 +360,11 @@ div[class="md-search__scrollwrap"] {
 
     .knl-snippet {
         display: none;
+    }
+
+    .knl-what,
+    .knl-why,
+    .knl-oss {
+        padding: 40px 0;
     }
 }
