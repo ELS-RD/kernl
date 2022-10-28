@@ -48,6 +48,11 @@ with torch.inference_mode(), torch.cuda.amp.autocast():
 
 Note that the original model will raise an error if you try to use it after optimization.
 
+For end-to-end use cases, you may want to check:
+
+* [XNLI classication with Robert](./tutorial/bert%20e2e.ipynb)
+* [text generation with T5](./tutorial/t5%20e2e.ipynb)
+
 ## Test and Benchmark
 
 ### Conventions
