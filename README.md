@@ -24,7 +24,7 @@ Please install it first.
 
 ```shell
 pip install torch==1.12.1 -U --extra-index-url https://download.pytorch.org/whl/cu116
-git clone https://github.com/ELS-RD/kernl
+git clone https://github.com/ELS-RD/kernl && cd kernl
 pip install -e .
 ```
 
