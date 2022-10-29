@@ -17,8 +17,8 @@ import tempfile
 from typing import List
 
 import torch
-import torchdynamo
-from torchdynamo.optimizations import BACKENDS
+import torch._dynamo as torchdynamo
+from torch._dynamo.optimizations import BACKENDS
 from transformers import AutoModel
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
@@ -48,9 +48,9 @@ def get_model_dynamo_nvfuser_ofi(base):
         compiled = BACKENDS["nvfuser_ofi"](gm, example_inputs)
         return compiled
 
+    @torchdynamo.optimize(compiler)
     def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
+        return base(*args, **kwargs)
 
     return run
 
@@ -60,9 +60,9 @@ def get_model_dynamo_cuda_graphs(base):
         compiled = BACKENDS["cudagraphs"](gm, example_inputs)
         return compiled
 
+    @torchdynamo.optimize(compiler)
     def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
+        return base(*args, **kwargs)
 
     return run
 
@@ -72,9 +72,9 @@ def get_model_optimized(base):
         dynamo_backend_ofi(gm)
         return gm  # return a python callable
 
+    @torchdynamo.optimize(compiler)
     def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
+        return base(*args, **kwargs)
 
     return run
 
@@ -84,9 +84,9 @@ def get_model_optimized_cuda_graphs(base):
         dynamo_backend_ofi(gm)
         return cuda_graphs_wrapper(gm, example_inputs)
 
+    @torchdynamo.optimize(compiler)
     def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
+        return base(*args, **kwargs)
 
     return run
 
@@ -96,8 +96,8 @@ def get_model_optimized_causal_cuda_graphs(base):
         dynamo_backend_ofi(gm, assume_causal=True)
         return cuda_graphs_wrapper(gm, example_inputs)
 
+    @torchdynamo.optimize(compiler)
     def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return base(*args, **kwargs)
+        return base(*args, **kwargs)
 
     return run

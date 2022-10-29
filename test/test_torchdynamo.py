@@ -28,7 +28,7 @@ from typing import Callable
 
 import pytest
 import torch
-import torchdynamo
+import torch._dynamo as torchdynamo
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from conftest import check_all_close, set_seed

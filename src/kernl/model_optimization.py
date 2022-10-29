@@ -15,7 +15,7 @@
 from typing import Callable, List
 
 import torch
-import torchdynamo
+import torch._dynamo as torchdynamo
 from transformers import PreTrainedModel
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
@@ -45,9 +45,9 @@ def optimize_model(original_model: PreTrainedModel, pool: (int, int) = torch.cud
         dynamo_backend_ofi(gm)
         return cuda_graphs_wrapper(gm, example_inputs, pool=pool)
 
+    @torchdynamo.optimize(compiler)
     def run(*args, **kwargs):
-        with torchdynamo.optimize(compiler):
-            return original_model.forward2(*args, **kwargs)
+        return original_model.forward2(*args, **kwargs)
 
     def forward_with_exception(*args, **kwargs):
         raise Exception("Original model can not be used after optimization")
