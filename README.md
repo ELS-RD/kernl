@@ -37,15 +37,13 @@ from transformers import AutoModel
 from kernl.model_optimization import optimize_model
 
 model = AutoModel.from_pretrained(model_name).eval().cuda()
-optimized_model = optimize_model(model)
+optimize_model(model)
 
 inputs = ...
 
 with torch.inference_mode(), torch.cuda.amp.autocast():
-    outputs = optimized_model(**inputs)
+    outputs = model(**inputs)
 ```
-
-Note that the original model will raise an error if you try to use it after optimization.
 
 For end-to-end use cases, you may want to check:
 

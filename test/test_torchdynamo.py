@@ -28,9 +28,15 @@ from typing import Callable
 
 import pytest
 import torch
+from torch._dynamo.optimizations import BACKENDS
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from conftest import check_all_close, reset_dynamo, set_seed
+
+from kernl.model_optimization import optimize_model
+
+
+BACKENDS
 
 
 @dataclasses.dataclass
@@ -140,8 +146,8 @@ def test_t5():
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
-    model.encoder.forward = get_model_optimized(model.encoder.forward)
-    model.decoder.forward = get_model_optimized(model.decoder.forward)
+    optimize_model(model.encoder)
+    optimize_model(model.decoder)
 
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
         output_sequences = model.generate(
