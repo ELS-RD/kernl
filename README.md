@@ -23,9 +23,8 @@ Each kernel is less than 200 lines of code, and is **easy to understand** and mo
 Please install it first.
 
 ```shell
-pip install --pre torch==1.14.0.dev20221029+cu116 -U --extra-index-url https://download.pytorch.org/whl/cu116
 git clone https://github.com/ELS-RD/kernl && cd kernl
-pip install -e .
+pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 This project requires `Python` >= 3.9.

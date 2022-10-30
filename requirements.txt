@@ -1,5 +1,5 @@
 triton==2.0.0.dev20221001
-torch==1.14.0.dev20221029+cu116
+torch==1.14.0.dev20221029+cu117
 numpy
 pytest
 tabulate
