@@ -18,6 +18,7 @@ from contextlib import contextmanager
 
 import pytest
 import torch
+import torch._dynamo as dynamo
 
 from kernl.benchmark.benchmark_fixture import BenchmarkFixture
 from kernl.benchmark.benchmark_session import BenchmarkSession
@@ -27,6 +28,13 @@ from kernl.benchmark.benchmark_session import BenchmarkSession
 def set_seed(seed: int = 0):
     torch.manual_seed(seed=seed)
     random.seed(seed)
+    yield
+
+
+@contextmanager
+def reset_dynamo():
+    dynamo.config.cache_size_limit = 512
+    dynamo.reset()
     yield
 
 
