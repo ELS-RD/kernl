@@ -48,10 +48,20 @@ with torch.inference_mode(), torch.cuda.amp.autocast():
 
 Note that the original model will raise an error if you try to use it after optimization.
 
-For end-to-end use cases, you may want to check:
+## Tutorials - End to End Use Cases
 
-* [XNLI classication with Robert](./tutorial/bert%20e2e.ipynb)
-* [text generation with T5](./tutorial/t5%20e2e.ipynb)
+A list of Examples contains how to use kernl with Pytorch.
+
+| Sr No | Topic                                                        | Colab                                                        |
+| ----- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 1.    | **tiled matmul: Matrix multiplication implementation in `CUDA` style** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ashishpatel26/kernl/blob/main/tutorial/1%20-%20tiled%20matmul.ipynb) |
+| 2.    | **online softmax: Parallelized softmax computation, a key ingredient of Flash Attention** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ashishpatel26/kernl/blob/main/tutorial/3%20-%20online%20softmax.ipynb) |
+| 3.    | **Flash Attention: Attention computation without saving attention matrix to global memory** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ashishpatel26/kernl/blob/main/tutorial/4%20-%20flash%20attention.ipynb) |
+| 4.    | **Matmul offsets: Detailed explanations related to a performance trick** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ashishpatel26/kernl/blob/main/tutorial/2%20-%20matmul%20offsets.ipynb) |
+| 5.    | **XNLI classification: Classification with / without optimizations (`Roberta` + `XNLI` classification task)** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ashishpatel26/kernl/blob/main/tutorial/bert%20e2e.ipynb) |
+| 6.    | **Text generation with/without optimizations (`T5`)**        | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ashishpatel26/kernl/blob/main/tutorial/t5%20e2e.ipynb) |
+
+
 
 ## Test and Benchmark
 
