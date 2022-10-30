@@ -130,7 +130,7 @@ def test_support_shape_change(implementation):
 
 @reset_dynamo()
 def test_t5():
-    tokenizer = AutoTokenizer.from_pretrained("t5-small")
+    tokenizer = AutoTokenizer.from_pretrained("t5-small", model_max_length=512)
     model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
     model = model.eval().cuda()
     task = "translate English to French: The house is wonderful."

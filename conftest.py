@@ -46,7 +46,7 @@ def benchmark(request):
     return fixture
 
 
-@pytest.mark.trylast
+@pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config):
     config._benchmarksession = BenchmarkSession(config)
 
