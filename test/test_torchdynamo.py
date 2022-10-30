@@ -121,6 +121,7 @@ def test_support_shape_change(implementation):
         check_all_close(
             result["last_hidden_state"].float(), expected["last_hidden_state"].float(), atol=1e-1, rtol=1e-1
         )
+    torchdynamo.reset()
 
 
 def test_t5():
