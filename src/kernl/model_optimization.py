@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from typing import Callable, List
+from typing import List
 
 import torch
 import torch._dynamo as torchdynamo
@@ -20,6 +20,7 @@ from transformers import PreTrainedModel
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
+
 
 # single shared pool by default
 _pool: (int, int) = torch.cuda.graph_pool_handle()
