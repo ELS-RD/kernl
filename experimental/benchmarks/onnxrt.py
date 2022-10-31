@@ -151,7 +151,7 @@ models_dir = tempfile.TemporaryDirectory().name
 bert_model = AutoModel.from_pretrained(pretrained_model_name_or_path="bert-base-uncased")
 bert_model.eval().cuda()
 
-apply = get_model_optim_fp16_onnx(model=bert_model, model_path="./model.onnx")
+apply = get_model_optim_fp16_onnx(model=bert_model, model_path=os.path.join(models_dir, "model.onnx"))
 
 
 for shape in [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 32, 64, 128, 256, 384, 512] if bs * seq_l < 10000]:
