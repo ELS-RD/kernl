@@ -15,25 +15,25 @@ We rely on the Docker image `nvcr.io/nvidia/tensorrt:22.09-py3`.
 
 | batch | sequence length | Time (ms) |
 |-------|-----------------|-----------|
- | 1     | 16              | 0.0010    |
- | 1     | 32              | 0.0010    |
- | 1     | 64              | 0.0011    |
- | 1     | 128             | 0.0013    |
- | 1     | 256             | 0.0016    |
+| 1     | 16              | 0.0010    |
+| 1     | 32              | 0.0010    |
+| 1     | 64              | 0.0011    |
+| 1     | 128             | 0.0013    |
+| 1     | 256             | 0.0016    |
 | 1     | 384             | 0.0026    |
- | 1     | 512             | 0.0026    |
- | 8     | 16              | 0.0011    |
- | 8     | 32              | 0.0015    |
- | 8     | 64              | 0.0019    |
- | 8     | 128             | 0.0036    |
- | 8     | 256             | 0.0064    |
+| 1     | 512             | 0.0026    |
+| 8     | 16              | 0.0011    |
+| 8     | 32              | 0.0015    |
+| 8     | 64              | 0.0019    |
+| 8     | 128             | 0.0036    |
+| 8     | 256             | 0.0064    |
 | 8     | 384             | 0.0139    |
- | 8     | 512             | 0.0139    |
- | 32    | 16              | 0.0020    |
- | 32    | 32              | 0.0031    |
- | 32    | 64              | 0.0054    |
- | 32    | 128             | 0.0103    |
- | 32    | 256             | 0.0210    |
+| 8     | 512             | 0.0139    |
+| 32    | 16              | 0.0020    |
+| 32    | 32              | 0.0031    |
+| 32    | 64              | 0.0054    |
+| 32    | 128             | 0.0103    |
+| 32    | 256             | 0.0210    |
 
 ### Running the benchmark
 
@@ -260,3 +260,44 @@ In real scenario, we would need something on top of it to handle multiple graphs
 
 Model got its weights completly converted to fp16 (instead of doing mixed precision) as it is done that way in the 
 benchmark script. 
+
+## [ONNX Runtime](https://github.com/microsoft/onnxruntime)
+
+### Version
+
+1.12.1
+
+### Results
+
+| batch | sequence length | Time (ms) |
+|-------|-----------------|-----------|
+| 1     | 16              | 0.0024    |
+| 1     | 128             | 0.0025    |
+| 1     | 256             | 0.0027    |
+| 1     | 384             | 0.0027    |
+| 1     | 512             | 0.0038    |
+| 8     | 16              | 0.0025    |
+| 8     | 128             | 0.0057    |
+| 8     | 256             | 0.0112    |
+| 8     | 384             | 0.0155    |
+| 8     | 512             | 0.0207    |
+| 32    | 16              | 0.0031    |
+| 32    | 128             | 0.0177    |
+| 32    | 256             | 0.0348    |
+
+### Running the benchmark
+
+```shell
+python experimental/benchmarks/onnxrt.py
+```
+
+### Notes
+
+We have not been able to use CUDA graphs on this engine.
+It appears to have a limited support:
+https://github.com/microsoft/onnxruntime/issues/12977#issuecomment-1258406358
+
+It may explain why we are not able to get the same performances as the other engines on small shapes where overhead
+dominates.
+
+We have converted the model to fp16 to get best performances using utils from ONNX Runtime package.
