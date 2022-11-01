@@ -28,15 +28,11 @@ from typing import Callable
 
 import pytest
 import torch
-from torch._dynamo.optimizations import BACKENDS
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from conftest import check_all_close, reset_dynamo, set_seed
 
 from kernl.model_optimization import optimize_model
-
-
-BACKENDS
 
 
 @dataclasses.dataclass
