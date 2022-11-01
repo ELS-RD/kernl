@@ -277,10 +277,11 @@ div[class="md-search__scrollwrap"] {
 .knl-what__content,
 .knl-why__content,
 .knl-oss__content {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 48px;
-
+    z-index: 100;
     border: 1px solid blue;
 }
 
