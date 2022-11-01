@@ -163,11 +163,13 @@ div[class="md-search__scrollwrap"] {
     font-weight: bold;
     border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-primary);
+    transition: var(--hover-transform);
 }
 
 .button:hover {
     filter: brightness(110%);
     cursor: pointer;
+    transform: var(--hover-scale);
 }
 
 .button__primary--contained {
