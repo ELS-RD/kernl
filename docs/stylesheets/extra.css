@@ -53,6 +53,10 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 
     /* shadows */
     --shadow-primary: 0 0 8px 0 rgba(0, 0, 0, 0.25);
+
+    /*animations*/
+    --hover-transform: transform .5s cubic-bezier(.075, .85, .175, 1);
+    --hover-scale: scale(1.050);
 }
 
 /* ----- ----- ----- ----- ----- */
@@ -337,6 +341,38 @@ div[class="md-search__scrollwrap"] {
 }
 
 .knl-why__content {
+    align-items: center;
+    border: 1px solid green;
+}
+
+.knl-why__content > p {
+    width: 100%;
+    margin: 0;
+    padding: 0 24px;
+    font-family: "Poppins", sans-serif;
+    font-size: clamp(16px, 3vw, 18px);
+    line-height: var(--accessible-line-height);
+    text-align: center;
+    color: var(--color-text-gray);
+    border: 1px solid blue;
+}
+
+.knl-why__content > p em {
+    font-weight: bold;
+}
+
+.knl-why__content > a img {
+    border: 1px solid hsla(237, 93%, 72%, 0.5);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-primary);
+}
+
+.knl-why__content > a {
+    transition: var(--hover-transform);
+}
+
+.knl-why__content > a:hover {
+    transform: var(--hover-scale);
 }
 
 /* ----- ----- ----- ----- ----- */
