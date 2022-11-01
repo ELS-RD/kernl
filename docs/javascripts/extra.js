@@ -11,7 +11,7 @@ slideUpElements.forEach(function (element) {
             toggleActions: "restart none none reset"
             // markers: true
         },
-        y: 50,
-        duration: 1
+        y: 48,
+        duration: 0.48
     });
 })
