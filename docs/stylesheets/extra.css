@@ -28,6 +28,8 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
     --color-primary: #4351E8;
     --color-secondary: #F92672;
 
+    --color-text-gray: #4D4D4D;
+
     --color-background-what: #232A55;
     --color-background-oss: #E9EBF6;
     --color-background-what-key: #2A336C;
@@ -345,6 +347,14 @@ div[class="md-search__scrollwrap"] {
 .knl-oss__content {
 }
 
+.knl-oss__content .knl-argument {
+    background-color: white;
+}
+
+.knl-oss__content .knl-argument p {
+    color: var(--color-text-gray);
+}
+
 /* ----- ----- ----- ----- ----- */
 /* generic arguments */
 .knl-arguments {
@@ -392,6 +402,14 @@ div[class="md-search__scrollwrap"] {
 
 .knl-argument p em {
     font-weight: bold;
+}
+
+.knl-argument a {
+    text-decoration: underline;
+}
+
+.knl-argument a:hover {
+    text-decoration: none;
 }
 
 /* ----- ----- ----- ----- ----- */
