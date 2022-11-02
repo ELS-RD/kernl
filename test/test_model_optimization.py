@@ -14,9 +14,8 @@
 #
 
 
-import pytest
 import torch
-from transformers import AutoModelForSequenceClassification
+from transformers import AutoModel
 
 from conftest import set_seed
 
@@ -27,8 +26,9 @@ from kernl.model_optimization import optimize_model
 def test_optimized_model():
     shape = (1, 128)
     model_name = "bert-base-uncased"
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-    model = model.eval().cuda()
+    model = AutoModel.from_pretrained(model_name).eval().cuda()
+    optimized_model = AutoModel.from_pretrained(model_name).eval().cuda()
+    optimize_model(optimized_model)
 
     with torch.inference_mode(), torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
         inputs = {
@@ -36,12 +36,6 @@ def test_optimized_model():
             "attention_mask": torch.ones(shape, device="cuda", dtype=torch.long),
         }
         output_pytorch = model(**inputs)
-        optimized_model = optimize_model(model)
         output_optimized = optimized_model(**inputs)
 
-        assert torch.allclose(output_pytorch.logits, output_optimized.logits, atol=1e-1)
-
-        # assert that the original model can not be used after otpimization:
-        with pytest.raises(Exception) as exc_info:
-            _ = model(**inputs)
-        assert exc_info.value.args[0] == "Original model can not be used after optimization"
+        assert torch.allclose(output_pytorch.last_hidden_state, output_optimized.last_hidden_state.float(), atol=1e-1)

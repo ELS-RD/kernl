@@ -16,7 +16,7 @@
 import pytest
 import torch
 
-from conftest import check_all_close, set_seed
+from conftest import assert_all_close, set_seed
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.implementations.layer_norm import (
@@ -78,14 +78,14 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
         fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
-    check_all_close(value.float(), expected, atol=1e-1)
+    assert_all_close(value.float(), expected, atol=1e-1)
 
     value.backward(dy, retain_graph=True)
 
     dx_fn, dw_fn, db_fn = [_.grad.clone() for _ in [x, layer_weight, layer_bias]]
-    check_all_close(dx_ref.float(), dx_fn.float(), atol=1e-1)
-    check_all_close(dw_ref.float(), dw_fn.float(), atol=1e-1)
-    check_all_close(db_ref.float(), db_fn.float(), atol=1e-1)
+    assert_all_close(dx_ref.float(), dx_fn.float(), atol=1e-1)
+    assert_all_close(dw_ref.float(), dw_fn.float(), atol=1e-1)
+    assert_all_close(db_ref.float(), db_fn.float(), atol=1e-1)
 
 
 implementations_rms_norm = {
@@ -119,4 +119,4 @@ implementations_rms_norm = {
 #         fn = lambda tensor: run(tensor)[0]  # noqa: E731
 #
 #     value = benchmark(fn, x)
-#     check_all_close(value.float(), expected, atol=1e-1)
+#     assert_all_close(value.float(), expected, atol=1e-1)
