@@ -32,7 +32,7 @@ def set_seed(seed: int = 0):
 
 
 @contextmanager
-def reset_dynamo():
+def setup_dynamo():
     dynamo.config.cache_size_limit = 512
     dynamo.reset()
     yield

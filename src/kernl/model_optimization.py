@@ -35,9 +35,11 @@ def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
 
 def optimize_model(original_model: PreTrainedModel) -> None:
     """
-    Optimizes a given model. Optimization is done in two steps:
+    Optimizes a given model by replacing forward method by a call to optimized code.
+    It is done in two steps:
     *  first step is to convert the given model to fx graph.
-    *  second step is to replace patterns found in the graph in order to optimize the model.
+    *  second step is to replace patterns found in the graph by fast to run kernels.
+
     Example:
     model = AutoModel.from_pretrained(...).eval().cuda()
 
