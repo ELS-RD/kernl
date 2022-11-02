@@ -33,6 +33,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
     --color-background-what: #232A55;
     --color-background-oss: #E9EBF6;
     --color-background-what-key: #2A336C;
+    --color-background-contribute: #2A336C;
 
     --color-snippet-primary: #A6E22E;
     --color-snippet-secondary: #F92672;
@@ -241,7 +242,8 @@ div[class="md-search__scrollwrap"] {
 /* ----- ----- ----- ----- ----- */
 /* curves */
 .knl-what,
-.knl-oss {
+.knl-oss,
+.knl-contribute {
     position: relative;
     display: block;
     padding: 88px 0; /* 32px + 56px */
@@ -250,6 +252,7 @@ div[class="md-search__scrollwrap"] {
 
 .knl-what:before,
 .knl-oss:before,
+.knl-contribute:before,
 .knl-what:after,
 .knl-oss:after {
     position: absolute;
@@ -274,6 +277,11 @@ div[class="md-search__scrollwrap"] {
     mask-image: url(../assets/images/curve-mask-top.svg);
 }
 
+.knl-contribute:before {
+    -webkit-mask-image: url(../assets/images/curve-mask-top-contribute.svg);
+    mask-image: url(../assets/images/curve-mask-top-contribute.svg);
+}
+
 .knl-what:after,
 .knl-oss:after {
     -webkit-mask-image: url(../assets/images/curve-mask-bottom.svg);
@@ -284,12 +292,14 @@ div[class="md-search__scrollwrap"] {
 /* flex content disposition */
 .knl-what__content,
 .knl-why__content,
-.knl-oss__content {
+.knl-oss__content,
+.knl-contribute__content {
     position: relative;
     display: flex;
     flex-direction: column;
     gap: 48px;
     z-index: 1;
+
     border: 1px solid blue;
 }
 
@@ -297,7 +307,8 @@ div[class="md-search__scrollwrap"] {
 /* titles */
 .knl-what__content h3,
 .knl-why__content h3,
-.knl-oss__content h3 {
+.knl-oss__content h3,
+.knl-contribute__content h3 {
     margin: 0;
     font-family: "Fredoka", sans-serif;
     font-size: clamp(20px, 7vw, 40px);
@@ -310,16 +321,19 @@ div[class="md-search__scrollwrap"] {
 
 .knl-what__content h3 em,
 .knl-why__content h3 em,
-.knl-oss__content h3 em {
+.knl-oss__content h3 em,
+.knl-contribute__content h3 em {
     font-weight: var(--font-fredoka-semibold);
 }
 
 .knl-what__content h3 em,
-.knl-why__content h3 em {
+.knl-why__content h3 em,
+.knl-contribute__content h3 em {
     color: var(--color-secondary);
 }
 
-.knl-what__content h3 {
+.knl-what__content h3,
+.knl-contribute__content h3 {
     color: white;
 }
 
@@ -394,6 +408,32 @@ div[class="md-search__scrollwrap"] {
 }
 
 /* ----- ----- ----- ----- ----- */
+.knl-contribute {
+    padding: 88px 0 32px; /* 32px + 56px */
+    background-color: var(--color-background-contribute);
+
+    border: 1px solid red;
+}
+
+.knl-contribute__content {
+    gap: 24px;
+    align-items: center;
+}
+
+.knl-contribute__content svg {
+    width: 96px;
+    fill: white;
+}
+
+.knl-contribute__content > a {
+    transition: var(--hover-transform);
+}
+
+.knl-contribute__content > a:hover {
+    transform: var(--hover-scale);
+}
+
+/* ----- ----- ----- ----- ----- */
 /* generic arguments */
 .knl-arguments {
     display: flex;
@@ -459,7 +499,8 @@ div[class="md-search__scrollwrap"] {
 @media screen and (max-width: 768px) {
     .knl-what,
     .knl-why,
-    .knl-oss {
+    .knl-oss,
+    .knl-contribute {
         padding: 56px 0;
     }
 }
@@ -467,7 +508,8 @@ div[class="md-search__scrollwrap"] {
 @media screen and (max-width: 576px) {
     .knl-what,
     .knl-why,
-    .knl-oss {
+    .knl-oss,
+    .knl-contribute {
         padding: 48px 0;
     }
 
@@ -488,7 +530,8 @@ div[class="md-search__scrollwrap"] {
 
     .knl-what,
     .knl-why,
-    .knl-oss {
+    .knl-oss,
+    .knl-contribute {
         padding: 40px 0;
     }
 }
