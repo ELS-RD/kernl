@@ -47,24 +47,18 @@ class TritonDebugger:
         self.total_gm_read = 0
         self.total_gm_write = 0
 
-    def _add_input(self, tensor: torch.Tensor):
+    def _add_input_if_not_exists(self, tensor: torch.Tensor):
         """
         Add inputs for triton debugger.
         @param tensor: torch.Tensor to be added as input
         """
+        if any([x is tensor for x in self.tensor_dict.values()]):
+            return
         assert tensor.device.type == "cuda", f"Tensor {tensor} is not on cuda"
         self.tensor_dict[(self.previous_boundary, self.previous_boundary + tensor.nelement())] = tensor
         self.previous_boundary = self.previous_boundary + tensor.nelement()
         self.tensor_ptr = {tensor: range_ptrs[0] for range_ptrs, tensor in self.tensor_dict.items()}
         self.range_tensor_dict = RangeKeyDict(self.tensor_dict)
-
-    def _check_input_exists(self, input: torch.Tensor) -> bool:
-        """
-        Check whether the given tensor exists already in the inputs
-        @param input: data to check if it already exists
-        @return: whether the given data exist or not
-        """
-        return any([tensor is input for tensor in self.tensor_dict.values()])
 
     def new_program(self):
         """
@@ -169,8 +163,7 @@ class TritonDebugger:
         :param tensor: input tensor
         :return: pointer as an integer
         """
-        if not self._check_input_exists(tensor):
-            self._add_input(tensor)
+        self._add_input_if_not_exists(tensor)
         return self.tensor_ptr[tensor]
 
     @staticmethod
