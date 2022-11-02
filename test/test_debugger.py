@@ -29,8 +29,8 @@ def test_adding_inputs():
 
     tl.new_program()
     add_x = tl.get_ptr(x)
-    assert tl.get_ptr(x) == add_x, f"existing inputs can not be added again."
-    assert tl.get_ptr(out) != add_x, f"different tensors should have different references"
+    assert tl.get_ptr(x) == add_x, "existing inputs can not be added again."
+    assert tl.get_ptr(out) != add_x, "different tensors should have different references"
 
 
 @set_seed()
