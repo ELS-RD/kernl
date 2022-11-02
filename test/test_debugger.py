@@ -20,6 +20,19 @@ from conftest import check_all_close, set_seed
 from kernl.utils.debugger import TritonDebugger
 
 
+def test_adding_inputs():
+    M, N = 32, 64
+    x_shape = (M, N)
+    x = torch.randn(x_shape, device="cuda")
+    out = torch.zeros_like(x)
+    tl = TritonDebugger([M], shuffle=True)
+
+    tl.new_program()
+    add_x = tl.get_ptr(x)
+    assert tl.get_ptr(x) == add_x, f"existing inputs can not be added again."
+    assert tl.get_ptr(out) != add_x, f"different tensors should have different references"
+
+
 @set_seed()
 def test_add():
     vec_len = 25

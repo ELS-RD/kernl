@@ -58,6 +58,14 @@ class TritonDebugger:
         self.tensor_ptr = {tensor: range_ptrs[0] for range_ptrs, tensor in self.tensor_dict.items()}
         self.range_tensor_dict = RangeKeyDict(self.tensor_dict)
 
+    def _check_input_exists(self, input: torch.Tensor) -> bool:
+        """
+        Check whether the given tensor exists already in the inputs
+        @param input: data to check if it already exists
+        @return: whether the given data exist or not
+        """
+        return any([tensor is input for tensor in self.tensor_dict.values()])
+
     def new_program(self):
         """
         Update program id from the grid.
@@ -161,7 +169,8 @@ class TritonDebugger:
         :param tensor: input tensor
         :return: pointer as an integer
         """
-        self._add_input(tensor)
+        if not self._check_input_exists(tensor):
+            self._add_input(tensor)
         return self.tensor_ptr[tensor]
 
     @staticmethod
