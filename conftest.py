@@ -33,9 +33,11 @@ def set_seed(seed: int = 0):
 
 @contextmanager
 def setup_dynamo():
+    cache_limit = dynamo.config.cache_size_limit
     dynamo.config.cache_size_limit = 512
     dynamo.reset()
     yield
+    dynamo.config.cache_size_limit = cache_limit
 
 
 @pytest.fixture(scope="function")
