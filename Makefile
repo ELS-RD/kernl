@@ -9,7 +9,10 @@ source_code_check_format:
 	isort --check-only . && \
 	flake8 .
 
-
 .PHONY: docker_build
 docker_build:
 	DOCKER_BUILDKIT=1 docker build -t kernl .
+
+.PHONY: docker_run
+docker_run:
+	docker run --rm -it --gpus all -v $(pwd):/kernl kernl

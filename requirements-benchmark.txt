@@ -1,5 +1,0 @@
-onnx
-onnxruntime-gpu
-isort
-black[jupyter]
-flake8

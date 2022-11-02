@@ -54,20 +54,6 @@ implementations: [Implementation] = [
 ]
 
 
-# try:
-#     # check imports and initialize optimized fp16 onnx model
-#     from test.models.bert import get_bert_optim_fp16_onnx
-#
-#     _ = get_bert_optim_fp16_onnx(get_model_from_hf("bert-base-uncased"))
-#     implementations.append(Implementation("onnx_optim_fp16", get_bert_optim_fp16_onnx, is_causal=False))
-# except ImportError as e:
-#     error = (
-#         f"It seems that you are missing some dependencies: "
-#         f"onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
-#     )
-#     warnings.warn(UserWarning(error))
-
-
 @pytest.fixture
 def reference_fp32(request):
     return get_model_from_hf(request.param)
@@ -88,9 +74,7 @@ def reference_fp32(request):
 )
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int), implementation: Implementation):
-    if (
-        "onnx" in implementation.name or "nvfuser" in implementation.name
-    ) and reference_fp32.config.name_or_path != "bert-base-uncased":
+    if "nvfuser" in implementation.name and reference_fp32.config.name_or_path != "bert-base-uncased":
         pytest.skip("Only supported for BERT")
 
     inputs = get_input(reference_fp32, shape, is_causal=implementation.is_causal)

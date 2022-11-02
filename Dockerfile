@@ -44,5 +44,5 @@ COPY ./src/__init__.py ./src/__init__.py
 COPY ./src/kernl/__init__.py ./src/kernl/__init__.py
 
 
-RUN pip install -e ".[benchmark]"
+RUN pip install -e .
 COPY ./ ./
