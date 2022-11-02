@@ -3,26 +3,27 @@
 {{ super() }}
 <style>
     .md-header {
-        position: initial
+        position: initial;
     }
 
     .md-main__inner {
-        margin: 0
+        margin: 0;
+        height: 0;
     }
 
     .md-content {
-        display: none
+        display: none;
     }
 
     @media screen and (min-width: 60em) {
         .md-sidebar--secondary {
-            display: none
+            display: none;
         }
     }
 
     @media screen and (min-width: 76.25em) {
         .md-sidebar--primary {
-            display: none
+            display: none;
         }
     }
 </style>
@@ -41,7 +42,8 @@
                         <path d="M9.09 16.59 13.67 12 9.09 7.41 10.5 6l6 6-6 6-1.41-1.41Z"/>
                     </svg>
                 </a>
-                <a href="https://github.com/ELS-RD/kernl" class="button button__secondary--outlined" target="_blank" rel="noopener noreferrer">
+                <a href="https://github.com/ELS-RD/kernl" class="button button__secondary--outlined" target="_blank"
+                   rel="noopener noreferrer">
                     <svg width="25" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M11.4 2.1c-4.6.5-8.3 4.2-8.8 8.7-.5 4.7 2.2 8.9 6.3 10.5.3.1.6-.1.6-.5v-1.6s-.4.1-.9.1c-1.4 0-2-1.2-2.1-1.9-.1-.4-.3-.7-.6-1-.3-.1-.4-.1-.4-.2 0-.2.3-.2.4-.2.6 0 1.1.7 1.3 1 .5.8 1.1 1 1.4 1 .4 0 .7-.1.9-.2.1-.7.4-1.4 1-1.8-2.3-.5-4-1.8-4-4 0-1.1.5-2.2 1.2-3-.1-.2-.2-.7-.2-1.4 0-.4 0-1 .3-1.6 0 0 1.4 0 2.8 1.3.5-.2 1.2-.3 1.9-.3s1.4.1 2 .3C15.8 6 17.3 6 17.3 6c.2.6.2 1.2.2 1.6 0 .8-.1 1.2-.2 1.4.7.8 1.2 1.8 1.2 3 0 2.2-1.7 3.5-4 4 .6.5 1 1.4 1 2.3v2.6c0 .3.3.6.7.5 3.7-1.5 6.3-5.1 6.3-9.3 0-6-5.1-10.7-11.1-10Z"/>
                     </svg>
@@ -161,6 +163,16 @@ optimized_model <span class="instruction">=</span> <span class="function">optimi
                         We are actively and humbly working to <em>optimize and reduce our energy impact</em>.</p>
                 </li>
             </ul>
+        </div>
+    </section>
+    <section class="knl-contribute">
+        <div class="knl-contribute__content md-grid slide-up">
+            <h3><em>Contribute</em> in your own way!</h3>
+            <a href="https://github.com/ELS-RD/kernl" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 25 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11.4 2.1c-4.6.5-8.3 4.2-8.8 8.7-.5 4.7 2.2 8.9 6.3 10.5.3.1.6-.1.6-.5v-1.6s-.4.1-.9.1c-1.4 0-2-1.2-2.1-1.9-.1-.4-.3-.7-.6-1-.3-.1-.4-.1-.4-.2 0-.2.3-.2.4-.2.6 0 1.1.7 1.3 1 .5.8 1.1 1 1.4 1 .4 0 .7-.1.9-.2.1-.7.4-1.4 1-1.8-2.3-.5-4-1.8-4-4 0-1.1.5-2.2 1.2-3-.1-.2-.2-.7-.2-1.4 0-.4 0-1 .3-1.6 0 0 1.4 0 2.8 1.3.5-.2 1.2-.3 1.9-.3s1.4.1 2 .3C15.8 6 17.3 6 17.3 6c.2.6.2 1.2.2 1.6 0 .8-.1 1.2-.2 1.4.7.8 1.2 1.8 1.2 3 0 2.2-1.7 3.5-4 4 .6.5 1 1.4 1 2.3v2.6c0 .3.3.6.7.5 3.7-1.5 6.3-5.1 6.3-9.3 0-6-5.1-10.7-11.1-10Z"/>
+                </svg>
+            </a>
         </div>
     </section>
 </main>
