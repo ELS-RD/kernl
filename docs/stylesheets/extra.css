@@ -408,6 +408,11 @@ div[class="md-search__scrollwrap"] {
 }
 
 /* ----- ----- ----- ----- ----- */
+.knl-highlights {
+    height: 56px;
+}
+
+/* ----- ----- ----- ----- ----- */
 .knl-contribute {
     padding: 88px 0 32px; /* 32px + 56px */
     background-color: var(--color-background-contribute);
