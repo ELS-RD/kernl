@@ -29,7 +29,7 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 &&
 
 RUN python3.9 -m ensurepip --default-pip --upgrade
 
-RUN pip install torch==1.12.1 --extra-index-url https://download.pytorch.org/whl/cu116
+RUN pip install --pre torch==1.14.0.dev20221029+cu117 --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 
 
 WORKDIR /syncback
@@ -39,11 +39,9 @@ COPY ./setup.py ./setup.py
 COPY ./setup.cfg ./setup.cfg
 COPY ./requirements.txt ./requirements.txt
 COPY ./README.md ./README.md
-COPY ./requirements-benchmark.txt ./requirements-benchmark.txt
 COPY ./src/__init__.py ./src/__init__.py
 COPY ./src/kernl/__init__.py ./src/kernl/__init__.py
 
 
-ENV SKIP_CUDA_ASSERT=1
 RUN pip install -e .
 COPY ./ ./
