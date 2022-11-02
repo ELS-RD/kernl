@@ -45,5 +45,5 @@ COPY ./src/kernl/__init__.py ./src/kernl/__init__.py
 
 
 ENV SKIP_CUDA_ASSERT=1
-RUN pip install -e ".[benchmark]"
+RUN pip install -e .
 COPY ./ ./

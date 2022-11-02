@@ -13,7 +13,6 @@
 #  limitations under the License.
 #
 
-import tempfile
 from typing import List
 
 import torch
@@ -32,15 +31,6 @@ def get_model_from_hf(model_name):
 
 def get_model_baseline(base):
     return base
-
-
-models_dir = tempfile.TemporaryDirectory().name
-
-
-def get_bert_optim_fp16_onnx(base):
-    from test.models.onnx_utils import get_model_optim_fp16_onnx
-
-    return get_model_optim_fp16_onnx(base, models_dir)
 
 
 def get_model_dynamo_nvfuser_ofi(base):
