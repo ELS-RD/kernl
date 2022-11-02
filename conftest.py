@@ -70,7 +70,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus):
     yield
 
 
-def check_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None:
+def assert_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None:
     """
     Check that all elements of tensors a and b are within provided thresholds.
     """
