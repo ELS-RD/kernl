@@ -62,7 +62,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus):
 
 def check_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None:
     """
-    Check that all elements of tensors a and b are close.
+    Check that all elements of tensors a and b are within provided thresholds.
     """
     assert a.shape == b.shape, f"Shapes don't match: {a.shape} != {b.shape}"
     assert a.dtype == b.dtype, f"Dtypes don't match: {a.dtype} != {b.dtype}"

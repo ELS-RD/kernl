@@ -36,9 +36,6 @@ except ImportError:
 with pathlib.Path("requirements.txt").open() as f:
     install_requires = [str(requirement) for requirement in pkg_resources.parse_requirements(f)]
 
-with pathlib.Path("requirements-benchmark.txt").open() as f:
-    extra_benchmark = [str(requirement) for requirement in pkg_resources.parse_requirements(f)]
-
 
 setup(
     name="kernl",
@@ -60,8 +57,5 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     install_requires=install_requires,
-    extras_require={
-        "benchmark": extra_benchmark,
-    },
-    python_requires=">=3.9.0",
+    python_requires="==3.9.*",
 )

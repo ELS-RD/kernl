@@ -256,7 +256,7 @@ class SubgraphMatcher:
                     backtracking(anchor_index + 1, match)
 
                     # revert to saved_match before matching with current anchor
-                    match = copy.copy(saved_match)
+                match = copy.copy(saved_match)
 
         match = InternalMatch(anchors=self.pattern_anchors)
         backtracking(0, match)
