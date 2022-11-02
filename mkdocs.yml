@@ -78,14 +78,8 @@ extra_javascript:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://google.com/
+      link: https://github.com/ELS-RD/kernl
       name: Kernl on Github
-    - icon: fontawesome/brands/slack
-      link: https://google.com/
-      name: Kernl on Slack
-    - icon: fontawesome/brands/discord
-      link: https://google.com/
-      name: Kernl on Discord
   generator: false
 
 # Extensions
