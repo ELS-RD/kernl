@@ -39,7 +39,6 @@ COPY ./setup.py ./setup.py
 COPY ./setup.cfg ./setup.cfg
 COPY ./requirements.txt ./requirements.txt
 COPY ./README.md ./README.md
-COPY ./requirements-benchmark.txt ./requirements-benchmark.txt
 COPY ./src/__init__.py ./src/__init__.py
 COPY ./src/kernl/__init__.py ./src/kernl/__init__.py
 
