@@ -30,7 +30,7 @@ import pytest
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-from conftest import check_all_close, set_seed, setup_dynamo
+from conftest import assert_all_close, set_seed, setup_dynamo
 
 from kernl.model_optimization import optimize_model
 
@@ -84,10 +84,10 @@ def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int),
         with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
             value = benchmark(model, **inputs)
 
-    check_all_close(value["last_hidden_state"].float(), expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1)
+    assert_all_close(value["last_hidden_state"].float(), expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1)
 
     if "pooler_output" in expected:
-        check_all_close(value["pooler_output"].float(), expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
+        assert_all_close(value["pooler_output"].float(), expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
 
 
 @setup_dynamo()
@@ -103,7 +103,7 @@ def test_support_shape_change(implementation):
             expected = model_reference_fp32(**pytorch_input)
             with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
                 result = model_tested(**pytorch_input)
-        check_all_close(
+        assert_all_close(
             result["last_hidden_state"].float(), expected["last_hidden_state"].float(), atol=1e-1, rtol=1e-1
         )
 
