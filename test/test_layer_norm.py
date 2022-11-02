@@ -45,8 +45,8 @@ implementations_layer_norm = {
 torch.autograd.set_detect_anomaly(True)
 
 @set_seed()
-@pytest.mark.parametrize("shape", [128, 256, 512, 1024], ids=lambda x: f"shape={x}x{x}")
-@pytest.mark.parametrize("cuda_graphs", [True])
+@pytest.mark.parametrize("shape", [128, 256, 512], ids=lambda x: f"shape={x}x{x}")
+@pytest.mark.parametrize("cuda_graphs", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=["fp16"])
 @pytest.mark.parametrize("implementation", implementations_layer_norm.keys())
 def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, implementation: str):
@@ -56,9 +56,9 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
     layer_bias = torch.randn_like(layer_weight, requires_grad=True)
 
     # not marked as requires_grad to avoid the gradient computation
-    x = -20 + 0.5 * torch.randn((M, N), device="cuda", dtype=torch.float32)
+    x = -20 + 0.5 * torch.randn((M, N), device="cuda", dtype=torch.float32, requires_grad=True)
+    x.retain_grad()
     dy = .1 * torch.randn_like(x)
-    x.requires_grad_(True)
     expected = torch.nn.functional.layer_norm(x, layer_weight.shape, layer_weight, layer_bias, eps)
 
     expected.backward(dy, retain_graph=True)
@@ -66,13 +66,10 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
     x.grad, layer_weight.grad, layer_bias.grad = None, None, None
 
     # tensors casting
-    layer_weight = layer_weight.to(dtype)
-    layer_bias = layer_bias.to(dtype)
-    x = x.to(dtype)
+    layer_weight = layer_weight.to(dtype).detach().requires_grad_(True)
+    layer_bias = layer_bias.to(dtype).detach().requires_grad_(True)
+    x = x.to(dtype).detach().requires_grad_(True)
     dy = dy.to(dtype)
-    x.retain_grad()
-    layer_weight.retain_grad()
-    layer_bias.retain_grad()
 
     fn = implementations_layer_norm[implementation](layer_weight, layer_bias, eps)
     if cuda_graphs:
