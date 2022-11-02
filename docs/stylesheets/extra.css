@@ -289,7 +289,7 @@ div[class="md-search__scrollwrap"] {
     display: flex;
     flex-direction: column;
     gap: 48px;
-    z-index: 100;
+    z-index: 1;
     border: 1px solid blue;
 }
 
