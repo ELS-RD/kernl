@@ -27,11 +27,10 @@ class TritonDebugger:
     float32 = torch.float32
     float16 = torch.float16
 
-    def __init__(self, grid: list[int], inputs: list[torch.Tensor], shuffle: bool = False):
+    def __init__(self, grid: list[int], shuffle: bool = False):
         """
         Initialize a serialized triton code runner.
         :param grid: execution grid, should match what you would provide to Cuda
-        :param inputs: a list of all tensors you plan to use in triton code. Will generate fake pointers.
         :param shuffle: suffle execution order like in parallel execution. Helps to avoid mistakes like relying on
             some order which is not possible in parallel execution.
         """
@@ -41,20 +40,25 @@ class TritonDebugger:
 
         self.current_grid_position = None
         self.constexpr = Union[int, str]
-        previous_boundary = 0
-
-        range_tensor_dict = dict()
-        for t in inputs:
-            assert t.device.type == "cuda", print(f"Tensor {t} is not on cuda")
-            range_tensor_dict[(previous_boundary, previous_boundary + t.nelement())] = t
-            previous_boundary = previous_boundary + t.nelement()
-
-        self.range_tensor_dict = RangeKeyDict(range_tensor_dict)
-        self.tensor_ptr: dict[torch.Tensor, int] = {
-            tensor: range_ptrs[0] for range_ptrs, tensor in range_tensor_dict.items()
-        }
+        self.previous_boundary = 0
+        self.tensor_dict: dict[tuple(int, int), torch.Tensor] = dict()
+        self.range_tensor_dict: RangeKeyDict = dict()
+        self.tensor_ptr: dict[torch.Tensor, int] = dict()
         self.total_gm_read = 0
         self.total_gm_write = 0
+
+    def _add_input_if_not_exists(self, tensor: torch.Tensor):
+        """
+        Add inputs for triton debugger.
+        @param tensor: torch.Tensor to be added as input
+        """
+        if any([x is tensor for x in self.tensor_dict.values()]):
+            return
+        assert tensor.device.type == "cuda", f"Tensor {tensor} is not on cuda"
+        self.tensor_dict[(self.previous_boundary, self.previous_boundary + tensor.nelement())] = tensor
+        self.previous_boundary = self.previous_boundary + tensor.nelement()
+        self.tensor_ptr = {tensor: range_ptrs[0] for range_ptrs, tensor in self.tensor_dict.items()}
+        self.range_tensor_dict = RangeKeyDict(self.tensor_dict)
 
     def new_program(self):
         """
@@ -159,6 +163,7 @@ class TritonDebugger:
         :param tensor: input tensor
         :return: pointer as an integer
         """
+        self._add_input_if_not_exists(tensor)
         return self.tensor_ptr[tensor]
 
     @staticmethod
