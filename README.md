@@ -23,9 +23,8 @@ Each kernel is less than 200 lines of code, and is **easy to understand** and mo
 Please install it first.
 
 ```shell
-pip install torch -U --extra-index-url https://download.pytorch.org/whl/cu116
-git clone https://github.com/ELS-RD/kernl
-pip install -e .
+git clone https://github.com/ELS-RD/kernl && cd kernl
+pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 This project requires `Python` >= 3.9.
@@ -38,15 +37,18 @@ from transformers import AutoModel
 from kernl.model_optimization import optimize_model
 
 model = AutoModel.from_pretrained(model_name).eval().cuda()
-optimized_model = optimize_model(model)
+optimize_model(model)
 
 inputs = ...
 
 with torch.inference_mode(), torch.cuda.amp.autocast():
-    outputs = optimized_model(**inputs)
+    outputs = model(**inputs)
 ```
 
-Note that the original model will raise an error if you try to use it after optimization.
+For end-to-end use cases, you may want to check:
+
+* [XNLI classication with Robert](./tutorial/bert%20e2e.ipynb)
+* [text generation with T5](./tutorial/t5%20e2e.ipynb)
 
 ## Test and Benchmark
 

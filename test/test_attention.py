@@ -18,7 +18,7 @@ from typing import Callable
 import pytest
 import torch
 
-from conftest import check_all_close, set_seed
+from conftest import assert_all_close, set_seed
 
 from kernl.implementations.attention import attention_forward, attention_reference
 from kernl.implementations.attention_masked_original import masked_attention_forward_original
@@ -106,7 +106,7 @@ def test_benchmark_masked(
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
 
-    check_all_close(a=value.float(), b=expected, atol=1e-1)
+    assert_all_close(a=value.float(), b=expected, atol=1e-1)
 
 
 @set_seed()
@@ -128,7 +128,7 @@ def test_mixed_stride():
     )
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
-    check_all_close(a=output, b=expected, atol=1e-2)
+    assert_all_close(a=output, b=expected, atol=1e-2)
 
 
 @set_seed()
@@ -144,4 +144,4 @@ def test_cross_attention():
     )
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
-    check_all_close(a=output, b=expected, atol=1e-2)
+    assert_all_close(a=output, b=expected, atol=1e-2)

@@ -28,11 +28,12 @@ from typing import Callable
 
 import pytest
 import torch
-import torchdynamo
 import whisper
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-from conftest import check_all_close, set_seed
+from conftest import assert_all_close, set_seed, setup_dynamo
+
+from kernl.model_optimization import optimize_model
 
 
 @dataclasses.dataclass
@@ -54,25 +55,12 @@ implementations: [Implementation] = [
 ]
 
 
-# try:
-#     # check imports and initialize optimized fp16 onnx model
-#     from test.models.bert import get_bert_optim_fp16_onnx
-#
-#     _ = get_bert_optim_fp16_onnx(get_model_from_hf("bert-base-uncased"))
-#     implementations.append(Implementation("onnx_optim_fp16", get_bert_optim_fp16_onnx, is_causal=False))
-# except ImportError as e:
-#     error = (
-#         f"It seems that you are missing some dependencies: "
-#         f"onnx_optim_fp16 won't be included in benchmarks. \n {str(e)}"
-#     )
-#     warnings.warn(UserWarning(error))
-
-
 @pytest.fixture
 def reference_fp32(request):
     return get_model_from_hf(request.param)
 
 
+@setup_dynamo()
 @set_seed()
 @pytest.mark.parametrize(
     "reference_fp32",
@@ -87,9 +75,7 @@ def reference_fp32(request):
 )
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int), implementation: Implementation):
-    if (
-        "onnx" in implementation.name or "nvfuser" in implementation.name
-    ) and reference_fp32.config.name_or_path != "bert-base-uncased":
+    if "nvfuser" in implementation.name and reference_fp32.config.name_or_path != "bert-base-uncased":
         pytest.skip("Only supported for BERT")
 
     inputs = get_input(reference_fp32, shape, is_causal=implementation.is_causal)
@@ -99,14 +85,13 @@ def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int),
         with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
             value = benchmark(model, **inputs)
 
-    torchdynamo.reset()
-
-    check_all_close(value["last_hidden_state"].float(), expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1)
+    assert_all_close(value["last_hidden_state"].float(), expected["last_hidden_state"].float(), rtol=1e-1, atol=1e-1)
 
     if "pooler_output" in expected:
-        check_all_close(value["pooler_output"].float(), expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
+        assert_all_close(value["pooler_output"].float(), expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
 
 
+@setup_dynamo()
 @set_seed()
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_support_shape_change(implementation):
@@ -119,14 +104,14 @@ def test_support_shape_change(implementation):
             expected = model_reference_fp32(**pytorch_input)
             with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
                 result = model_tested(**pytorch_input)
-        check_all_close(
+        assert_all_close(
             result["last_hidden_state"].float(), expected["last_hidden_state"].float(), atol=1e-1, rtol=1e-1
         )
 
 
+@setup_dynamo()
 def test_t5():
-    torchdynamo.config.cache_size_limit = 512
-    tokenizer = AutoTokenizer.from_pretrained("t5-small")
+    tokenizer = AutoTokenizer.from_pretrained("t5-small", model_max_length=512)
     model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
     model = model.eval().cuda()
     task = "translate English to French: The house is wonderful."
@@ -142,8 +127,8 @@ def test_t5():
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
-    model.encoder.forward = get_model_optimized(model.encoder.forward)
-    model.decoder.forward = get_model_optimized(model.decoder.forward)
+    optimize_model(model.encoder)
+    optimize_model(model.decoder)
 
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
         output_sequences = model.generate(
@@ -155,7 +140,7 @@ def test_t5():
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
-
+@setup_dynamo()
 def test_whisper():
     model = whisper.load_model("base")
 
@@ -172,7 +157,7 @@ def test_whisper():
 
     # decode the audio
     options = whisper.DecodingOptions()
-    model.encoder.forward = get_model_optimized(model.encoder.forward)
+    optimize_model(model.encoder)
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
         result = whisper.decode(model, mel, options)
         assert (

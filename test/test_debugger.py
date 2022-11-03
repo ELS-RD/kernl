@@ -15,9 +15,22 @@
 
 import torch
 
-from conftest import check_all_close, set_seed
+from conftest import assert_all_close, set_seed
 
 from kernl.utils.debugger import TritonDebugger
+
+
+def test_adding_inputs():
+    M, N = 32, 64
+    x_shape = (M, N)
+    x = torch.randn(x_shape, device="cuda")
+    out = torch.zeros_like(x)
+    tl = TritonDebugger([M], shuffle=True)
+
+    tl.new_program()
+    add_x = tl.get_ptr(x)
+    assert tl.get_ptr(x) == add_x, "existing inputs can not be added again."
+    assert tl.get_ptr(out) != add_x, "different tensors should have different references"
 
 
 @set_seed()
@@ -27,7 +40,7 @@ def test_add():
     x = torch.rand(vec_len, device="cuda")
     y = torch.rand_like(x, device="cuda")
     o = torch.zeros_like(x, device="cuda")
-    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], inputs=[x, y, o], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(vec_len, block_size)], shuffle=True)
 
     def add_kernel(
         x_ptr,  # *Pointer* to first input vector
@@ -66,7 +79,7 @@ def test_add():
             n_elements=x.numel(),
             BLOCK_SIZE=block_size,
         )
-    check_all_close(o, x + y)
+    assert_all_close(o, x + y)
     assert tl.total_gm_read == x.nelement() + y.nelement()
     assert tl.total_gm_write == o.numel()
 
@@ -78,7 +91,7 @@ def test_softmax():
     block_ncols = 256  # do not match vec_len to use masks
     x = torch.rand((nrows, ncols), device="cuda")
     o = torch.zeros_like(x, device="cuda")
-    tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], inputs=[x, o], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(x.nelement(), block_ncols)], shuffle=True)
 
     def softmax_kernel(output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols, BLOCK_SIZE: tl.constexpr):
         # The rows of the softmax are independent, so we parallelize across those
@@ -112,7 +125,7 @@ def test_softmax():
             n_cols=ncols,
             BLOCK_SIZE=block_ncols,
         )
-    check_all_close(o, torch.softmax(x, dim=1))
+    assert_all_close(o, torch.softmax(x, dim=1))
     assert tl.total_gm_read == x.nelement()
     assert tl.total_gm_write == o.nelement()
 
@@ -125,9 +138,7 @@ def test_matmul():
     A = torch.rand((m, k), device="cuda", dtype=torch.float16)
     B = torch.rand((k, n), device="cuda", dtype=torch.float16)
     C = torch.zeros((m, n), device="cuda", dtype=torch.float16)
-    tl = TritonDebugger(
-        [TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], inputs=[A, B, C], shuffle=True
-    )
+    tl = TritonDebugger([TritonDebugger.cdiv(m, block_m) * TritonDebugger.cdiv(n, block_n)], shuffle=True)
 
     def leaky_relu(x):
         x = x + 1
@@ -252,7 +263,7 @@ def test_matmul():
         x = x + 1
         return torch.where(x >= 0, x, 0.01 * x)
 
-    check_all_close(C, leaky_relu_pytorch(A @ B), atol=1e-1)
+    assert_all_close(C, leaky_relu_pytorch(A @ B), atol=1e-1)
     assert tl.total_gm_write == m * n
     # we load tile a and tile b for each position on M and N, and repeat along K axis
     assert tl.total_gm_read == ((block_m * block_k) + (block_k * block_n)) * (k / block_k) * (n / block_n) * (
@@ -266,7 +277,7 @@ def test_dropout():
     x = torch.randn(size=(10, 1000), device="cuda")
     o = torch.zeros_like(x)
     block_m = 32
-    tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], inputs=[x, o], shuffle=True)
+    tl = TritonDebugger([TritonDebugger.cdiv(x.numel(), block_m)], shuffle=True)
 
     def _seeded_dropout(
         x_ptr,
@@ -301,9 +312,9 @@ def test_dropout():
             BLOCK_SIZE=block_m,
         )
 
-    check_all_close(torch.sum(o == 0) / x.numel(), torch.tensor(p, device="cuda"), atol=0.1)
+    assert_all_close(torch.sum(o == 0) / x.numel(), torch.tensor(p, device="cuda"), atol=0.1)
     # check L1 norm are similar (+/- 10%)
-    check_all_close(torch.linalg.norm(x, dim=1, ord=1), torch.linalg.norm(o, dim=1, ord=1), rtol=0.1)
+    assert_all_close(torch.linalg.norm(x, dim=1, ord=1), torch.linalg.norm(o, dim=1, ord=1), rtol=0.1)
     assert tl.total_gm_read == x.numel()
     assert tl.total_gm_write == o.numel() == x.numel()
 
@@ -317,14 +328,13 @@ def test_layernorm():
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
-    dy = 0.1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
     mean = torch.zeros((M,), device="cuda")
     rstd = torch.zeros((M,), device="cuda")
     eps = 1e-5
 
-    tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=True)
+    tl = TritonDebugger([M], shuffle=True)
 
     def _layer_norm_fwd_fused(
         Out,
@@ -390,9 +400,9 @@ def test_layernorm():
             BLOCK_SIZE=BLOCK_SIZE,
         )
 
-    check_all_close(mean, torch.mean(x, dim=1), atol=0.1)
-    check_all_close(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
-    check_all_close(
+    assert_all_close(mean, torch.mean(x, dim=1), atol=0.1)
+    assert_all_close(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
+    assert_all_close(
         out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1
     )
     # read M times a block size of the 5 inputs
@@ -412,14 +422,13 @@ def test_layernorm_welford_variance():
     weight = torch.rand(w_shape, device="cuda")
     bias = torch.rand(w_shape, device="cuda")
     x = -2.3 + 0.5 * torch.randn(x_shape, device="cuda")
-    dy = 0.1 * torch.randn_like(x)
 
     out = torch.zeros_like(x)
     mean = torch.zeros((M,), device="cuda")
     rstd = torch.zeros((M,), device="cuda")
     eps = 1e-5
 
-    tl = TritonDebugger([M], inputs=[x, weight, bias, dy, mean, rstd, out], shuffle=False)
+    tl = TritonDebugger([M], shuffle=False)
 
     def _layer_norm_fwd_fused(
         Out,
@@ -493,9 +502,9 @@ def test_layernorm_welford_variance():
             BLOCK_SIZE=BLOCK_SIZE,
         )
 
-    check_all_close(mean, torch.mean(x, dim=1), atol=0.1)
-    check_all_close(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
-    check_all_close(
+    assert_all_close(mean, torch.mean(x, dim=1), atol=0.1)
+    assert_all_close(rstd, 1 / torch.sqrt(torch.var(x, dim=1, unbiased=False) + eps), atol=0.1)
+    assert_all_close(
         out, torch.layer_norm(input=x, normalized_shape=w_shape, weight=weight, bias=bias, eps=eps), atol=0.1
     )
     # read M times a block size of the 5 inputs
@@ -531,7 +540,6 @@ def test_flash_attention():
     BLOCK = 128
     tl = TritonDebugger(
         [TritonDebugger.cdiv(q.shape[2], BLOCK), q.shape[0] * q.shape[1]],
-        inputs=[q, k, v, dout, L, m, tmp],
         shuffle=True,
     )
 
@@ -670,4 +678,4 @@ def test_flash_attention():
             BLOCK_DMODEL=Lk,
         )
 
-    check_all_close(dout, ref_out.float(), atol=1e-2)
+    assert_all_close(dout, ref_out.float(), atol=1e-2)

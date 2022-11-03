@@ -16,7 +16,7 @@
 import pytest
 import torch
 
-from conftest import check_all_close, set_seed
+from conftest import assert_all_close, set_seed
 
 from kernl.implementations.batched_matmul import batched_matmul
 
@@ -37,4 +37,4 @@ def test_benchmark(benchmark, m, n, k, batch, implementation):
         value = benchmark(batched_matmul, a, b)
     else:
         raise ValueError(f"Unknown implementation: {implementation}")
-    check_all_close(value, expected, atol=1e-2)
+    assert_all_close(value, expected, atol=1e-2)

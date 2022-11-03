@@ -1,9 +1,9 @@
 triton==2.0.0.dev20221001
-torch>=1.12.0
-numpy
+torch==1.14.0.dev20221029+cu117
 pytest
 tabulate
 termcolor
-functorch
 transformers
-torchdynamo @ git+https://github.com/pytorch/torchdynamo.git@6bd5b8bb8888d5dab0b9574b20f00de975eebc72
+isort
+black[jupyter]
+flake8

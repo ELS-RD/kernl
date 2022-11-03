@@ -18,6 +18,7 @@ from contextlib import contextmanager
 
 import pytest
 import torch
+import torch._dynamo as dynamo
 
 from kernl.benchmark.benchmark_fixture import BenchmarkFixture
 from kernl.benchmark.benchmark_session import BenchmarkSession
@@ -30,6 +31,15 @@ def set_seed(seed: int = 0):
     yield
 
 
+@contextmanager
+def setup_dynamo():
+    cache_limit = dynamo.config.cache_size_limit
+    dynamo.config.cache_size_limit = 512
+    dynamo.reset()
+    yield
+    dynamo.config.cache_size_limit = cache_limit
+
+
 @pytest.fixture(scope="function")
 def benchmark(request):
     bs = request.config._benchmarksession
@@ -38,7 +48,7 @@ def benchmark(request):
     return fixture
 
 
-@pytest.mark.trylast
+@pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config):
     config._benchmarksession = BenchmarkSession(config)
 
@@ -60,7 +70,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus):
     yield
 
 
-def check_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None:
+def assert_all_close(a: torch.Tensor, b: torch.Tensor, rtol=0, atol=1e-1) -> None:
     """
     Check that all elements of tensors a and b are within provided thresholds.
     """

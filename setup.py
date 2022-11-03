@@ -13,31 +13,14 @@
 #  limitations under the License.
 #
 
-import os
 import pathlib
 
 import pkg_resources
 from setuptools import find_packages, setup
 
 
-try:
-    import torch
-
-    assert torch.__version__ >= "1.12.0"
-    if not os.environ.get("SKIP_CUDA_ASSERT", False):
-        assert torch.cuda.is_available(), "CUDA is required to install kernl"
-        major, _ = torch.cuda.get_device_capability()
-        if major < 8:
-            raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to install kernl")
-except ImportError:
-    raise ImportError("Please install torch before installing kernl")
-
-
 with pathlib.Path("requirements.txt").open() as f:
     install_requires = [str(requirement) for requirement in pkg_resources.parse_requirements(f)]
-
-with pathlib.Path("requirements-benchmark.txt").open() as f:
-    extra_benchmark = [str(requirement) for requirement in pkg_resources.parse_requirements(f)]
 
 
 setup(
@@ -60,8 +43,5 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     install_requires=install_requires,
-    extras_require={
-        "benchmark": extra_benchmark,
-    },
-    python_requires="==3.9.0",
+    python_requires="==3.9.*",
 )
