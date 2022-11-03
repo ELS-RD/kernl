@@ -32,7 +32,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from conftest import assert_all_close, set_seed, setup_dynamo
 
-from kernl.model_optimization import optimize_model
+from kernl.utils.model_optimization import optimize_model
 
 
 @dataclasses.dataclass

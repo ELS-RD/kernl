@@ -19,7 +19,7 @@ from transformers import AutoModel
 
 from conftest import set_seed
 
-from kernl.model_optimization import optimize_model
+from kernl.utils.model_optimization import optimize_model
 
 
 @set_seed()

@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from typing import List
+from typing import Callable, List
 
 import torch
 import torch._dynamo as torchdynamo
@@ -22,18 +22,16 @@ from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
-# single shared pool by default
-_pool: (int, int) = torch.cuda.graph_pool_handle()
-
-
 # needs to be generated once to be reused several times, like encoder/decoder models
 # https://github.com/pytorch/torchdynamo/issues/1816
-def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]) -> Callable:
+    assert hasattr(_compiler, "pool")
+    pool = getattr(_compiler, "pool")
     dynamo_backend_ofi(gm)
-    return cuda_graphs_wrapper(gm, example_inputs, pool=_pool)
+    return cuda_graphs_wrapper(gm, example_inputs, pool=pool)
 
 
-def optimize_model(original_model: PreTrainedModel) -> None:
+def optimize_model(original_model: PreTrainedModel, pool: (int, int) = torch.cuda.graph_pool_handle()) -> None:
     """
     Optimizes a given model by replacing forward method by a call to optimized code.
     It is done in two steps:
@@ -48,6 +46,7 @@ def optimize_model(original_model: PreTrainedModel) -> None:
     model(**inputs)
 
     @param original_model: model to optimize
+    @param pool: cuda graph pool handle
     """
     assert torch.cuda.is_available(), "CUDA capacity is required to use Kernl"
     major, _ = torch.cuda.get_device_capability()
@@ -55,6 +54,7 @@ def optimize_model(original_model: PreTrainedModel) -> None:
         raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to use Kernl")
     assert next(original_model.parameters()).device.type == "cuda", "Model must be on GPU"
     original_model.forward2 = original_model.forward
+    setattr(_compiler, "pool", pool)
 
     @torchdynamo.optimize(_compiler)
     def run(*args, **kwargs):
