@@ -82,18 +82,55 @@ def fuse_attention_pattern_3(gm: torch.fx.GraphModule, is_causal: bool):
 
     def replace(q, k, v):
         q = q.permute(0, 2, 1, 3)
-        k = k.permute(0, 2, 3, 1)
+        k = k.permute(0, 2, 1, 3)
         v = v.permute(0, 2, 1, 3)
 
         output = torch.empty_like(q)
         output = attention_wrapper(
             q,
-            k.transpose(-1, -2),
+            k,
             v,
             output,
-            0.3535533905932738**2,  # n^2 needed because of scale is applied before qk^T
+            0.125,  # scale^2 needed because of scale is applied before qk^T
             is_causal,
             None,
+        )
+        return output
+
+    replace_pattern(gm, pattern, replace)
+
+
+def fuse_attention_pattern_4(gm: torch.fx.GraphModule, is_causal: bool):
+    def pattern(q, k, v, mask):
+        permute = q.permute(0, 2, 1, 3)
+        mul = permute * 0.3535533905932738
+        permute_1 = k.permute(0, 2, 3, 1)
+        mul_1 = permute_1 * 0.3535533905932738
+        permute_2 = v.permute(0, 2, 1, 3)
+        matmul = mul @ mul_1
+        add = matmul + mask
+        float_1 = add.float()
+        softmax = torch.nn.functional.softmax(float_1, dim=-1)
+        to_5 = softmax.to(torch.float16)
+        matmul_1 = to_5 @ permute_2
+
+        return matmul_1
+
+    def replace(q, k, v, mask):
+        q = q.permute(0, 2, 1, 3)
+        k = k.permute(0, 2, 1, 3)
+        v = v.permute(0, 2, 1, 3)
+
+        output = torch.empty_like(q)
+        output = attention_wrapper(
+            q,
+            k,
+            v,
+            output,
+            0.125,  # scale^2 needed because of scale is applied before qk^T
+            is_causal,
+            # mask, # REPLACE HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            None
         )
         return output
 
