@@ -1,4 +1,4 @@
 ---
-title: Title
+title: 
 template: home.html
 ---
