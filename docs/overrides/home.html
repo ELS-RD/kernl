@@ -1,0 +1,188 @@
+{% extends "main.html" %}
+{% block tabs %}
+{{ super() }}
+<style>
+    .md-header {
+        position: initial;
+    }
+
+    .md-main__inner {
+        margin: 0;
+        height: 0;
+    }
+
+    .md-content {
+        display: none;
+    }
+
+    @media screen and (min-width: 60em) {
+        .md-sidebar--secondary {
+            display: none;
+        }
+    }
+
+    @media screen and (min-width: 76.25em) {
+        .md-sidebar--primary {
+            display: none;
+        }
+    }
+</style>
+<main>
+    <section class="knl-hero" data-md-color-scheme="slate">
+        <div class="knl-hero__content md-grid">
+            <div class="knl-hero__text">
+                <h1 class="knl-hero__title">Machine Learning Models<br><em>Optimization</em> Environment</h1>
+                <h2 class="knl-hero__description"><em>Kernl</em> is an <em>open source project</em><br>
+                    that <em>optimizes</em> and <em>accelerates</em> your <em>PyTorch model</em></h2>
+            </div>
+            <div class="knl-hero__cta">
+                <a href="./get-started/start/#welcome-to-kernlai" class="button button__primary--contained">
+                    <span>Get started</span>
+                    <svg width="25" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9.09 16.59 13.67 12 9.09 7.41 10.5 6l6 6-6 6-1.41-1.41Z"/>
+                    </svg>
+                </a>
+                <a href="https://github.com/ELS-RD/kernl" class="button button__secondary--outlined" target="_blank"
+                   rel="noopener noreferrer">
+                    <svg width="25" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M11.4 2.1c-4.6.5-8.3 4.2-8.8 8.7-.5 4.7 2.2 8.9 6.3 10.5.3.1.6-.1.6-.5v-1.6s-.4.1-.9.1c-1.4 0-2-1.2-2.1-1.9-.1-.4-.3-.7-.6-1-.3-.1-.4-.1-.4-.2 0-.2.3-.2.4-.2.6 0 1.1.7 1.3 1 .5.8 1.1 1 1.4 1 .4 0 .7-.1.9-.2.1-.7.4-1.4 1-1.8-2.3-.5-4-1.8-4-4 0-1.1.5-2.2 1.2-3-.1-.2-.2-.7-.2-1.4 0-.4 0-1 .3-1.6 0 0 1.4 0 2.8 1.3.5-.2 1.2-.3 1.9-.3s1.4.1 2 .3C15.8 6 17.3 6 17.3 6c.2.6.2 1.2.2 1.6 0 .8-.1 1.2-.2 1.4.7.8 1.2 1.8 1.2 3 0 2.2-1.7 3.5-4 4 .6.5 1 1.4 1 2.3v2.6c0 .3.3.6.7.5 3.7-1.5 6.3-5.1 6.3-9.3 0-6-5.1-10.7-11.1-10Z"/>
+                    </svg>
+                    <span>Contribute</span>
+                </a>
+            </div>
+        </div>
+    </section>
+    <section class="knl-snippet md-grid">
+        <pre><code class="knl-snippet__code"><span class="instruction">from</span> transformers <span
+                class="instruction">import</span> <span
+                class="class">AutoModel</span>
+<span class="instruction">from</span> kernl.model_optimization <span class="instruction">import</span> optimize_model
+
+model <span class="instruction">=</span> <span class="class">AutoModel</span>.<span
+                    class="function">from_pretrained</span>(model_name).<span class="function">eval</span>().<span
+                    class="function">cuda</span>()
+<span class="comment">// model optimization in one line of code</span> 🙂
+<span class="function">optimize_model</span>(model)</code></pre>
+    </section>
+    <section class="knl-what">
+        <div class="knl-what__content md-grid slide-up">
+            <h3>What is <em>kernl</em>?</h3>
+            <ul class="knl-arguments">
+                <li class="knl-argument">
+                    <img src="./assets/images/icon-bear.svg" alt="Drop-in solution icon" loading="lazy">
+                    <h4>Drop-in solution</h4>
+                    <p>Kernl's goal is to <em>optimize</em> the most common <em>models in one line</em> and
+                        <em>simplify the way you work</em>.
+                        <br>
+                        <br>
+                        Its philosophy is to remain <em>simple</em> and <em>accessible</em>.
+                        <br>
+                        <em>No need to rewrite</em> your PyTorch model, you <em>stay in the comfort of Python</em> to
+                        train and infer.</p>
+                </li>
+                <li class="knl-argument">
+                    <img src="./assets/images/icon-handyman.svg" alt="Optimization tooling icon" loading="lazy">
+                    <h4>Optimization tooling</h4>
+                    <p>For <em>advanced cases</em>, Kernl provides resources such as a debugger, tutorials, etc., to
+                        <em>allow everyone to tweak and optimize their own models</em> with OpenAI Triton.
+                        <br>
+                        <br>
+                        More accessible than CUDA, there is <em>no need to relearn everything</em>, we remain in the
+                        world of
+                        PyTorch.</p>
+                </li>
+                <li class="knl-argument">
+                    <img src="./assets/images/icon-atom.svg" alt="Performant and efficient solution icon"
+                         loading="lazy">
+                    <h4>Performant & efficient solution</h4>
+                    <p>Kernl is based on <em>kernel fusion</em> and <em>relies on open source technologies</em>, such as
+                        CUDA Graphs, OpenAI Triton, TorchDynamo.
+                        <br>
+                        <br>
+                        This combination <em>drastically reduces memory accesses</em>, <em>eliminates CPU overhead</em>
+                        and ultimately makes the <em>models significantly much faster</em>.</p>
+                </li>
+            </ul>
+        </div>
+    </section>
+    <section class="knl-why">
+        <div class="knl-why__content md-grid slide-up">
+            <h3>Why <em>kernl</em>?</h3>
+            <p>
+                At <em>Lefebvre Sarrut</em> we dedicate our <em>innovation</em> and <em>R&D</em> initiatives to empower
+                legal professionals,
+                enabling knowledge in law, tax and regulation.
+                <br>
+                <br>
+                We already run several large language models to <em>make law more accessible</em>.
+                <br>
+                <br>
+                Our need is to <em>explore and iterate quickly</em>, at <em>low cost</em>, to train and infer our own
+                models <em>without being dependent</em> on other solutions we had used like TensorRT or ONNX.
+                <br>
+                <br>
+                <em>Our goal with Kernl</em> is to be able to <em>optimize any model</em>, <em>simply and
+                efficiently</em>, while remaining
+                <em>autonomous</em> and <em>independent</em> of complex CUDA code.
+            </p>
+            <a href="https://www.lefebvre-sarrut.eu" target="_blank" rel="noopener noreferrer">
+                <img src="./assets/images/logo-ls.svg" alt="Lefebvre Sarrut logo" loading="lazy" height="104"/>
+            </a>
+        </div>
+    </section>
+    <section class="knl-oss">
+        <div class="knl-oss__content md-grid slide-up">
+            <h3><em>Open source</em> and <em>ethics</em></h3>
+            <ul class="knl-arguments">
+                <li class="knl-argument">
+                    <img src="./assets/images/icon-open-source.svg" alt="Share icon" loading="lazy">
+                    <h4>Share</h4>
+                    <p>Providing educational materials to help you is one of our goals because <em>sharing is part of
+                        our DNA</em>.
+                        <br>
+                        <br>
+                        Kernl is part of an <em>Open Source</em> approach because <em>we firmly believe in its
+                            virtues</em> of <em>sharing</em> and <em>exchange</em>.</p>
+                </li>
+                <li class="knl-argument">
+                    <img src="./assets/images/icon-team.svg" alt="Contribution icon" loading="lazy">
+                    <h4>Contribution</h4>
+                    <p>We are working to make the project as accessible as possible and <em>we encourage everyone to
+                        contribute in their own way</em>.
+                        <br>
+                        <br>
+                        Please feel free to <a href="./contribution-guide/page/#welcome-to-kernlai"><em>consult the
+                            contribution guide</em></a>.</p>
+                </li>
+                <li class="knl-argument">
+                    <img src="./assets/images/icon-lotus.svg" alt="Ethics icon" loading="lazy">
+                    <h4>Ethics</h4>
+                    <p>
+                        The purpose of kernl is to <em>make latest models more accessible</em> to a wider audience of
+                        developers, with time-cost <em>efficiency at heart</em>.
+                        <br>
+                        <br>
+                        By doing so, not only we democratize large language models but we also contribute to <em>a more
+                        resilient AI ecosystem</em>.
+                    </p>
+                </li>
+            </ul>
+        </div>
+    </section>
+    <section class="knl-highlights"></section>
+    <section class="knl-contribute">
+        <div class="knl-contribute__content md-grid slide-up">
+            <h3><em>Contribute</em> in your own way!</h3>
+            <a href="https://github.com/ELS-RD/kernl" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 25 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11.4 2.1c-4.6.5-8.3 4.2-8.8 8.7-.5 4.7 2.2 8.9 6.3 10.5.3.1.6-.1.6-.5v-1.6s-.4.1-.9.1c-1.4 0-2-1.2-2.1-1.9-.1-.4-.3-.7-.6-1-.3-.1-.4-.1-.4-.2 0-.2.3-.2.4-.2.6 0 1.1.7 1.3 1 .5.8 1.1 1 1.4 1 .4 0 .7-.1.9-.2.1-.7.4-1.4 1-1.8-2.3-.5-4-1.8-4-4 0-1.1.5-2.2 1.2-3-.1-.2-.2-.7-.2-1.4 0-.4 0-1 .3-1.6 0 0 1.4 0 2.8 1.3.5-.2 1.2-.3 1.9-.3s1.4.1 2 .3C15.8 6 17.3 6 17.3 6c.2.6.2 1.2.2 1.6 0 .8-.1 1.2-.2 1.4.7.8 1.2 1.8 1.2 3 0 2.2-1.7 3.5-4 4 .6.5 1 1.4 1 2.3v2.6c0 .3.3.6.7.5 3.7-1.5 6.3-5.1 6.3-9.3 0-6-5.1-10.7-11.1-10Z"/>
+                </svg>
+            </a>
+        </div>
+    </section>
+</main>
+{% endblock %}
+{% block content %}{% endblock %}
+{% block footer %}
+{{ super() }}
+{% endblock %}
