@@ -141,7 +141,8 @@ def test_t5():
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
 @setup_dynamo()
-def test_whisper():
+@pytest.mark.parametrize("implementation", ["base", "optimized"])
+def test_whisper(implementation, benchmark):
     model = whisper.load_model("base")
 
     # load audio and pad/trim it to fit 30 seconds
@@ -157,9 +158,11 @@ def test_whisper():
 
     # decode the audio
     options = whisper.DecodingOptions()
-    optimize_model(model.encoder)
+    if implementation == "optimized":
+        optimize_model(model.encoder)
+
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
-        result = whisper.decode(model, mel, options)
+        result = benchmark(whisper.decode, model, mel, options)
         assert (
             result.text
             == "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your "
