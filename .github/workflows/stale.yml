@@ -16,10 +16,10 @@ jobs:
           days-before-issue-close: 14
           stale-issue-label: "stale"
           stale-issue-message: "This issue is marked as stale because it has been open for 30 days with no activity."
-          close-issue-message:
-            "This issue has been automatically marked as stale because it has not had "
-            "recent activity. If you think this still needs to be addressed "
-            "please comment on this thread."
+          close-issue-message: >
+            This issue has been automatically marked as stale because it has not had 
+            recent activity. If you think this still needs to be addressed 
+            please comment on this thread.
           days-before-pr-stale: -1
           days-before-pr-close: -1
           repo-token: ${{ secrets.GITHUB_TOKEN }}
