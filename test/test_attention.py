@@ -145,3 +145,19 @@ def test_cross_attention():
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     assert_all_close(a=output, b=expected, atol=1e-2)
+
+
+@set_seed()
+def test_large_attention():
+    q = torch.rand((8, 1, 1500, 64), dtype=torch.float16, device="cuda") * 2
+    k = torch.rand((8, 1, 1500, 64), dtype=torch.float16, device="cuda") * 2
+    v = torch.rand_like(k) * 2
+    mask = None
+    sm_scale = 1.0
+
+    expected = attention_reference(
+        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+    )
+    output = torch.empty_like(q)
+    attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
+    assert_all_close(a=output, b=expected, atol=1e-1)
