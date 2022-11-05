@@ -100,7 +100,7 @@ def test_benchmark_masked(
             pytest.skip("Original Triton implementation doesn't support masks")
 
     # bf16 reduced precision is sensitive to this value
-    scale = 1. if dtype == torch.bfloat16 else 2.
+    scale = 1.0 if dtype == torch.bfloat16 else 2.0
 
     args = {
         "q": torch.rand(mat_shape, device="cuda") * scale,
