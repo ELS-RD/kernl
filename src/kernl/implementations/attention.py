@@ -262,6 +262,9 @@ def _fwd_kernel(
         else:
             k = tl.load(k_ptrs + n_row_offset * k_n_stride)
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+
+        if NEED_LOAD_MASK_SIZE_N:
+            qk = tl.where(offs_n[None, :] < size_n, qk, float("-inf"))
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
         if IS_CAUSAL:
