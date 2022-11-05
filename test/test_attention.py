@@ -70,7 +70,7 @@ def generate_none_mask(*_) -> None:
 
 @set_seed()
 @pytest.mark.parametrize(
-    "mat_shape",
+    "shape",
     [(bs, 48, seq_l, 64) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 384, 512]]
     + [(8, 1, 1500, 64), (32, 48, 32, 64)],
     ids=lambda x: f"shape=(batch={x[0]},heads={x[1]},seq_length={x[2]},dhead={x[3]})",
@@ -86,13 +86,13 @@ def generate_none_mask(*_) -> None:
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_masked(
     benchmark,
-    mat_shape: (int, int, int, int),
+    shape: (int, int, int, int),
     implementation: Callable,
     mask_fn: Callable,
     dtype: torch.dtype,
     is_causal: bool,
 ):
-    batch, heads, seq_length, dhead = mat_shape
+    batch, heads, seq_length, dhead = shape
     if implementation == "original":
         if dtype == torch.bfloat16 or seq_length != 512:
             pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
@@ -103,10 +103,10 @@ def test_benchmark_masked(
     scale = 1.0 if dtype == torch.bfloat16 else 2.0
 
     args = {
-        "q": torch.rand(mat_shape, device="cuda") * scale,
-        "k": torch.rand(mat_shape, device="cuda") * scale,
-        "v": torch.rand(mat_shape, device="cuda") * scale,
-        "output": torch.empty(mat_shape, device="cuda"),
+        "q": torch.rand(shape, device="cuda") * scale,
+        "k": torch.rand(shape, device="cuda") * scale,
+        "v": torch.rand(shape, device="cuda") * scale,
+        "output": torch.empty(shape, device="cuda"),
         "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
         "is_causal": is_causal,
         "attention_mask": mask_fn(batch, heads, seq_length, dhead),
