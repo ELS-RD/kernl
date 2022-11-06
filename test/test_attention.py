@@ -19,6 +19,7 @@ import pytest
 import torch
 
 from conftest import assert_all_close, set_seed
+from experimental.kernels.hazzyresearch.flash_attention import flash_attn_func
 
 from kernl.implementations.attention import attention_forward, attention_reference
 from kernl.implementations.attention_masked_original import masked_attention_forward_original
@@ -41,6 +42,9 @@ implementations = {
     ),
     "torch": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_reference(
         q, k, v, output, sm_scale, is_causal, attention_mask
+    ),
+    "hazyresearch": lambda q, k, v, output, sm_scale, is_causal, attention_mask: flash_attn_func(
+        q, k, v, output, None, False, sm_scale
     ),
 }
 
@@ -102,10 +106,15 @@ def test_benchmark_masked(
 
     expected = attention_reference(**args)
     cast_args = {k: v.to(dtype).clone() if isinstance(v, torch.Tensor) else v for k, v in args.items()}
-
+    if implementation == "hazyresearch":
+        cast_args["q"] = cast_args["q"].transpose(1, 2).contiguous()
+        cast_args["k"] = cast_args["k"].transpose(1, 2).contiguous()
+        cast_args["v"] = cast_args["v"].transpose(1, 2).contiguous()
+        cast_args["output"] = cast_args["output"].transpose(1, 2).contiguous()
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
-
+    if implementation == "hazyresearch":
+        value = value.transpose(1, 2)
     assert_all_close(a=value.float(), b=expected, atol=1e-1)
 
 
