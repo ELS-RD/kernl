@@ -1,4 +1,4 @@
-triton==2.0.0.dev20221001
+triton==2.0.0.dev20221105
 torch==1.14.0.dev20221029+cu117
 pytest
 tabulate
