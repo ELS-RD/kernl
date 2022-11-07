@@ -180,7 +180,7 @@ def _fwd_kernel(
     head_idx = tl.program_id(1)
 
     # offsets
-    offs_m = m_block_idx * BLOCK_M + tl.arange(0, BLOCK_M)  # rows offsets on M axis
+    offs_m = tl.arange(0, BLOCK_M)  # rows offsets on M axis
     offs_n = tl.arange(0, BLOCK_N)  # First block on N dimension
     offs_d = tl.arange(0, BLOCK_DHEAD)  # Full head
 
@@ -209,7 +209,7 @@ def _fwd_kernel(
     )
 
     # pointers to blocks in Q, K, V
-    q_ptrs = Q + off_q
+    q_ptrs = Q + off_q + m_block_idx * BLOCK_M
     k_ptrs = K + off_k
     v_ptrs = V + off_v
 
