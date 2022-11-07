@@ -169,7 +169,43 @@ model <span class="instruction">=</span> <span class="class">AutoModel</span>.<s
             </ul>
         </div>
     </section>
-    <section class="knl-highlights"></section>
+    <section class="knl-highlights">
+        <div class="knl-highlight md-grid slide-up">
+            <figure>
+                <img src="./assets/images/highlight-performance.png" alt="illustration of efficiency" loading="lazy">
+            </figure>
+            <div class="knl-highlight__content">
+                <header>
+                    <svg width="48" height="48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M27.333 28.606v-14.6a3.332 3.332 0 1 0-6.667 0v14.6A5.001 5.001 0 0 0 24 37.333a5.002 5.002 0 0 0 3.334-8.727ZM24 35.666a3.333 3.333 0 0 1-1.667-6.22V14.004c0-.923.747-1.67 1.667-1.67.926 0 1.667.747 1.667 1.67v15.442A3.333 3.333 0 0 1 24 35.666Z" fill="#4351E8"/><path d="M24.82 29.972a.711.711 0 0 0 .013-.141v-8.328a.832.832 0 0 0-.833-.836c-.46 0-.833.38-.833.836v8.328c0 .048.004.095.011.14a2.5 2.5 0 1 0 1.642 0Z" fill="#4351E8"/><rect x="1.5" y="1.5" width="45" height="45" rx="22.5" stroke="#B6BCF6" stroke-width="3"/></svg>
+                    <h3>How is it <em>efficient</em>?</h3>
+                </header>
+                <div class="knl-highlight__description">
+                    <p>
+                        Kernel fusion is <em>based on a simple recipe</em>:
+                    </p>
+                    <ul>
+                        <li><em>Make a graph</em> of the model with PyTorch FX and TorchDynamo</li>
+                        <li>Identify only <em>costly operations</em> (e.g. Attention, Linear Layer, etc.)</li>
+                        <li>Dynamically <em>replace these</em> by an OpenAI Triton operation that fuses them</li>
+                        <li>And <em>keep the pre-existing optimizations</em></li>
+                    </ul>
+                    <p>
+                        This simple recipe drastically <em>reduces GPU memory bandwidth bottleneck</em> and <em>accelerates
+                        inference</em> and
+                        <em>training</em>.
+                    </p>
+                </div>
+                <footer>
+                    <a href="./get-started/start/#welcome-to-kernlai" class="button button__primary--outlined">
+                        <span>See how it works</span>
+                        <svg width="25" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9.09 16.59 13.67 12 9.09 7.41 10.5 6l6 6-6 6-1.41-1.41Z"/>
+                        </svg>
+                    </a>
+                </footer>
+            </div>
+        </div>
+    </section>
     <section class="knl-contribute">
         <div class="knl-contribute__content md-grid slide-up">
             <h3><em>Contribute</em> in your own way!</h3>

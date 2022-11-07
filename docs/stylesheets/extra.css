@@ -54,6 +54,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 
     /* shadows */
     --shadow-primary: 0 0 8px 0 rgba(0, 0, 0, 0.25);
+    --shadow-secondary: 0 0 8px 0 rgba(0, 0, 0, 0.15);
 
     /*animations*/
     --hover-transform: transform .5s cubic-bezier(.075, .85, .175, 1);
@@ -175,6 +176,15 @@ div[class="md-search__scrollwrap"] {
 
 .button__primary--contained svg {
     fill: white;
+}
+
+.button__primary--outlined {
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+}
+
+.button__primary--outlined svg {
+    fill: var(--color-primary);
 }
 
 .button__secondary--outlined {
@@ -395,9 +405,81 @@ div[class="md-search__scrollwrap"] {
 
 /* ----- ----- ----- ----- ----- */
 .knl-highlights {
-    height: 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 64px;
+    padding: 96px 0;
 }
 
+.knl-highlight {
+    display: flex;
+    gap: 48px;
+    padding: 0 8px;
+}
+
+.knl-highlight figure {
+    flex: 1 0 49%;
+    margin: 0;
+    text-align: center;
+}
+
+.knl-highlight figure img {
+    width: 600px;
+    height: auto;
+    max-width: 100%;
+    padding: 8px;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-secondary);
+}
+
+.knl-highlight__content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    flex: 1 0 49%;
+}
+
+.knl-highlight__content header {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.knl-highlight__content header h3 {
+    margin: 0;
+    font-family: "Fredoka", sans-serif;
+    font-size: clamp(20px, 5vw, 32px);
+    font-weight: normal;
+    line-height: var(--accessible-line-height);
+}
+
+.knl-highlight__content header h3 em {
+    color: var(--color-primary);
+    font-weight: var(--font-fredoka-semibold);
+}
+
+.knl-highlight__description {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    font-family: "Poppins", sans-serif;
+    font-size: clamp(14px, 2vw, 16px);
+    line-height: var(--accessible-line-height);
+    color: var(--color-text-gray);
+}
+
+.knl-highlight__description em {
+    font-weight: bold;
+}
+
+.knl-highlight__description p,
+.knl-highlight__description ul {
+    margin: 0;
+}
+
+.knl-highlight__content footer {
+    display: flex;
+}
 /* ----- ----- ----- ----- ----- */
 .knl-contribute {
     padding: 88px 0 32px; /* 32px + 56px */
@@ -482,8 +564,15 @@ div[class="md-search__scrollwrap"] {
 /* ----- ----- ----- ----- ----- */
 /* media queries */
 /* ----- ----- ----- ----- ----- */
-/*@media screen and (max-width: 992px) {*/
-/*}*/
+@media screen and (max-width: 992px) {
+    .knl-highlights {
+        padding: 64px 0;
+    }
+
+    .knl-highlight {
+        flex-direction: column;
+    }
+}
 
 @media screen and (max-width: 768px) {
     .knl-what,
