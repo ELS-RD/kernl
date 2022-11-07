@@ -71,7 +71,7 @@ def generate_none_mask(batch, seq_length, dtype=torch.float32):
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 384, 512]] + [(32, 32)],
+    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 384, 257, 512]] + [(32, 32)],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
 # fp32 not yet possible because of a bug in triton
@@ -98,7 +98,7 @@ def test_benchmark_masked(
         "q": torch.rand(mat_shape, device="cuda"),
         "k": torch.rand(mat_shape, device="cuda"),
         "v": torch.rand(mat_shape, device="cuda"),
-        "output": torch.empty(mat_shape, device="cuda"),
+        "output": torch.zeros(mat_shape, device="cuda"),
         "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
         "is_causal": is_causal,
         "attention_mask": mask_fn(batch, seq_length),
@@ -106,13 +106,21 @@ def test_benchmark_masked(
 
     expected = attention_reference(**args)
     cast_args = {k: v.to(dtype).clone() if isinstance(v, torch.Tensor) else v for k, v in args.items()}
+    cast_args["output"].zero_()
     if implementation == "hazyresearch":
         cast_args["q"] = cast_args["q"].transpose(1, 2).contiguous()
         cast_args["k"] = cast_args["k"].transpose(1, 2).contiguous()
         cast_args["v"] = cast_args["v"].transpose(1, 2).contiguous()
         cast_args["output"] = cast_args["output"].transpose(1, 2).contiguous()
+        if cast_args["attention_mask"] is not None:
+            cast_args["attention_mask"] = cast_args["attention_mask"].transpose(1, 2).contiguous()
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
+
+    for _ in range(100):
+        cast_args["output"].zero_()
+        assert torch.allclose(value, func(**cast_args), atol=1e-3)
+
     if implementation == "hazyresearch":
         value = value.transpose(1, 2)
     assert_all_close(a=value.float(), b=expected, atol=1e-1)
