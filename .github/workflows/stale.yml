@@ -8,12 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      pull-requests: write
     steps:
       - uses: actions/stale@v6
         with:
           days-before-issue-stale: 30
           days-before-issue-close: 14
+          only-issue-labels: "question"
           stale-issue-label: "stale"
           stale-issue-message: "This issue is marked as stale because it has been open for 30 days with no activity."
           close-issue-message: >
