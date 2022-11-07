@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-
+import math
 from typing import Optional, Union
 
 import torch
@@ -66,6 +66,7 @@ def _fwd_kernel(
     heads,
     size_m,
     size_n,
+    size_m_rounded,
     Q,
     K,
     V,
@@ -190,24 +191,21 @@ def _fwd_kernel(
     off_q = (
         current_batch_idx * q_batch_stride
         + current_head_idx * q_head_stride
-        + offs_m[:, None] * q_m_stride
-        + offs_d[None, :] * q_k_stride
+        + (offs_m[:, None] * q_m_stride + offs_d[None, :] * q_k_stride)
     )
 
     # Offsets for the first block on matrix K
     off_k = (
         current_batch_idx * k_batch_stride
         + current_head_idx * k_head_stride
-        + offs_n[:, None] * k_n_stride
-        + offs_d[None, :] * k_k_stride
+        + (offs_n[:, None] * k_n_stride + offs_d[None, :] * k_k_stride)
     )
 
     # Offsets for the first block on matrix V
     off_v = (
         current_batch_idx * v_batch_stride
         + current_head_idx * v_head_stride
-        + offs_n[:, None] * v_k_stride
-        + offs_d[None, :] * v_n_stride
+        + (offs_n[:, None] * v_k_stride + offs_d[None, :] * v_n_stride)
     )
 
     # pointers to blocks in Q, K, V
@@ -216,7 +214,7 @@ def _fwd_kernel(
     v_ptrs = V + off_v
 
     # Temporary pointer to memory to fix bug in triton compiler
-    t_ptrs = TMP + head_idx * size_m + offs_m
+    t_ptrs = TMP + head_idx * size_m_rounded + offs_m
 
     # initialize pointer to m and d used to compute normalizer for softmax
     l_i = tl.zeros((BLOCK_M,), dtype=tl.float32) - float("inf")
@@ -337,9 +335,9 @@ def _fwd_kernel(
         # We now apply the last operation, the multiplication by a block of matrix V
         if NEED_LOAD_MASK_SIZE_N:
             load_mask = (n_row_offset + offs_n)[:, None] < size_n  # repeated otherwise triton segfault
-            v = tl.load(v_ptrs + n_row_offset * v_k_stride, mask=load_mask, other=0.0).to(Q.dtype.element_ty)
+            v = tl.load(v_ptrs + n_row_offset * v_k_stride, mask=load_mask, other=0.0)
         else:
-            v = tl.load(v_ptrs + n_row_offset * v_k_stride).to(Q.dtype.element_ty)
+            v = tl.load(v_ptrs + n_row_offset * v_k_stride)
         qk_softmax = qk_softmax.to(Q.dtype.element_ty)
         acc += tl.dot(qk_softmax, v)
 
@@ -406,17 +404,18 @@ class Attention(torch.autograd.Function):
         size_n = k.size(2)
 
         # if not power of 2
-        size_m_pow_2 = triton.next_power_of_2(size_m) if size_m & (size_m - 1) else size_m
-        BLOCK_M = max(min(128, size_m_pow_2), 16)  # minimal size
-        if BLOCK_M == 32:
-            BLOCK_M = 64  # there is a strange triton segfault with 32
-
+        # size_m_pow_2 = triton.next_power_of_2(size_m) if size_m & (size_m - 1) else size_m
+        # BLOCK_M = max(min(128, size_m_pow_2), 16)  # minimal size
+        # if BLOCK_M == 32:
+        #     BLOCK_M = 64  # there is a strange triton segfault with 32
+        BLOCK_M = 128
         # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
         NEED_LOAD_MASK_SIZE_N = size_n % BLOCK_M != 0
         NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
 
         grid = (triton.cdiv(size_m, BLOCK_M), batch * heads)
-        tmp = torch.empty((batch * heads, size_m), device=q.device, dtype=torch.float32)
+        size_m_rounded = math.ceil(size_m / BLOCK_M) * BLOCK_M
+        tmp = torch.empty((batch * heads, size_m_rounded), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
         if attention_mask is not None:
@@ -437,6 +436,7 @@ class Attention(torch.autograd.Function):
             heads=heads,
             size_m=size_m,
             size_n=size_n,
+            size_m_rounded=size_m_rounded,
             Q=q,
             K=k,
             V=v,
