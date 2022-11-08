@@ -8,6 +8,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 @font-face {
     font-family: "Fredoka";
     src: url("../assets/fonts/Fredoka-VariableFont_wdth,wght.ttf") format("truetype");
+    font-display: swap;
 }
 
 :root > * {
@@ -42,6 +43,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 
     /* spaces */
     --section-padding-y: 56px;
+    --highlight-content-flex: 1 0 48%;
 
     /* fonts */
     --font-fredoka-semibold: 600;
@@ -413,12 +415,12 @@ div[class="md-search__scrollwrap"] {
 
 .knl-highlight {
     display: flex;
-    gap: 48px;
+    gap: 32px;
     padding: 0 8px;
 }
 
 .knl-highlight figure {
-    flex: 1 0 49%;
+    flex: var(--highlight-content-flex);
     margin: 0;
     text-align: center;
 }
@@ -436,16 +438,21 @@ div[class="md-search__scrollwrap"] {
     display: flex;
     flex-direction: column;
     gap: 24px;
-    flex: 1 0 49%;
+    flex: var(--highlight-content-flex);
 }
 
-.knl-highlight__content header {
+.knl-highlight__content > header {
     display: flex;
     gap: 16px;
-    align-items: center;
+    align-items: flex-start;
 }
 
-.knl-highlight__content header h3 {
+.knl-highlight__content > header > svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.knl-highlight__content > header > h3 {
     margin: 0;
     font-family: "Fredoka", sans-serif;
     font-size: clamp(20px, 5vw, 32px);
@@ -453,7 +460,7 @@ div[class="md-search__scrollwrap"] {
     line-height: var(--accessible-line-height);
 }
 
-.knl-highlight__content header h3 em {
+.knl-highlight__content > header > h3 em {
     color: var(--color-primary);
     font-weight: var(--font-fredoka-semibold);
 }
@@ -480,6 +487,7 @@ div[class="md-search__scrollwrap"] {
 .knl-highlight__content footer {
     display: flex;
 }
+
 /* ----- ----- ----- ----- ----- */
 .knl-contribute {
     padding: 88px 0 32px; /* 32px + 56px */
@@ -571,6 +579,16 @@ div[class="md-search__scrollwrap"] {
 
     .knl-highlight {
         flex-direction: column;
+        padding: 0 32px;
+    }
+
+    .knl-highlight figure {
+        border-radius: var(--border-radius-md);
+        box-shadow: var(--shadow-secondary);
+    }
+
+    .knl-highlight figure img {
+        box-shadow: none;
     }
 }
 
@@ -580,6 +598,10 @@ div[class="md-search__scrollwrap"] {
     .knl-oss,
     .knl-contribute {
         padding: 56px 0;
+    }
+
+    .knl-highlight {
+        padding: 0 16px;
     }
 }
 
