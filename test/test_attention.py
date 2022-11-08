@@ -101,10 +101,11 @@ def test_benchmark_masked(
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
 
+    assert_all_close(a=value.float(), b=expected, atol=1e-1)
+
     for _ in range(10):
         o = func(**cast_args)
         assert_all_close(value, o, atol=1e-2)
-    assert_all_close(a=value.float(), b=expected, atol=1e-1)
 
 
 @set_seed()
