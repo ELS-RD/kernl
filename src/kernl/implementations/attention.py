@@ -261,6 +261,7 @@ def _fwd_kernel(
             k = tl.load(k_ptrs + n_row_offset * k_n_stride)
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
+        # required to fix a Triton compiler bug, if not done, there is a precision issue
         if NEED_LOAD_MASK_SIZE_N:
             qk = tl.where(offs_n[None, :] < size_n, qk, float("-inf"))
         qk += tl.dot(q, k, trans_b=True)
@@ -403,6 +404,7 @@ class Attention(torch.autograd.Function):
         batch, heads, size_m, dhead = q.size()
         size_n = k.size(2)
 
+        # use fix size, because triton otherwise race condition
         # if not power of 2
         # size_m_pow_2 = triton.next_power_of_2(size_m) if size_m & (size_m - 1) else size_m
         # BLOCK_M = max(min(128, size_m_pow_2), 16)  # minimal size
@@ -414,6 +416,7 @@ class Attention(torch.autograd.Function):
         NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
 
         grid = (triton.cdiv(size_m, BLOCK_M), batch * heads)
+        # following 2 ops required to fix race condition in Triton compiler
         size_m_rounded = math.ceil(size_m / BLOCK_M) * BLOCK_M
         tmp = torch.empty((batch * heads, size_m_rounded), device=q.device, dtype=torch.float32)
 
