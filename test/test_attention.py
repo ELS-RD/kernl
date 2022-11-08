@@ -100,12 +100,12 @@ def test_benchmark_masked(
             pytest.skip("Original Triton implementation doesn't support masks")
 
     # bf16 reduced precision is sensitive to this value
-    scale = 1.0 if dtype == torch.bfloat16 else 2.0
+    tensor_max_val = 1.0 if dtype == torch.bfloat16 else 2.0
 
     args = {
-        "q": torch.rand(shape, device="cuda") * scale,
-        "k": torch.rand(shape, device="cuda") * scale,
-        "v": torch.rand(shape, device="cuda") * scale,
+        "q": torch.rand(shape, device="cuda") * tensor_max_val,
+        "k": torch.rand(shape, device="cuda") * tensor_max_val,
+        "v": torch.rand(shape, device="cuda") * tensor_max_val,
         "output": torch.empty(shape, device="cuda"),
         "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
         "is_causal": is_causal,
