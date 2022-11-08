@@ -352,8 +352,7 @@ def _fwd_kernel(
     off_o = (
         current_batch_idx * o_batch_stride
         + current_head_idx * o_head_stride
-        + offs_m[:, None] * o_m_stride
-        + offs_n[None, :] * o_n_stride
+        + (offs_m[:, None] * o_m_stride + offs_n[None, :] * o_n_stride)
     )
 
     out_ptrs = output + off_o
