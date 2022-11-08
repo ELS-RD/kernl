@@ -70,6 +70,10 @@ em {
     font-style: normal;
 }
 
+.cursor-pointer {
+    cursor: pointer;
+}
+
 /* ----- ----- ----- ----- ----- */
 /* hacks */
 /* ----- ----- ----- ----- ----- */
@@ -567,6 +571,65 @@ div[class="md-search__scrollwrap"] {
 
 .knl-argument a:hover {
     text-decoration: none;
+}
+
+/* ----- ----- ----- ----- ----- */
+/* modal */
+/* ----- ----- ----- ----- ----- */
+.modal {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(1.1);
+    transition: visibility 0s linear 0.25s, opacity 0.25s 0s, transform 0.25s;
+    z-index: 10000;
+}
+
+.show-modal {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1.0);
+    transition: visibility 0s linear 0s, opacity 0.25s 0s, transform 0.25s;
+}
+
+.modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 97%;
+    max-width: 1024px;
+    height: auto;
+    max-height: 97%;
+    padding: 8px;
+    border-radius: 8px;
+    background-color: white;
+    z-index: 10001;
+}
+
+.modal-content img {
+    width: 100%;
+    height: auto;
+}
+
+.modal-content .close-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    border-radius: 4px;
+    background-color: lightgray;
+}
+
+.modal-content .close-button:hover {
+    background-color: darkgray;
 }
 
 /* ----- ----- ----- ----- ----- */
