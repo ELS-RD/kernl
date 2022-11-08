@@ -444,12 +444,11 @@ div[class="md-search__scrollwrap"] {
 .knl-highlight__content > header {
     display: flex;
     gap: 16px;
-    align-items: flex-start;
+    align-items: center;
 }
 
 .knl-highlight__content > header > svg {
     flex-shrink: 0;
-    margin-top: 2px;
 }
 
 .knl-highlight__content > header > h3 {
