@@ -22,21 +22,9 @@ from conftest import assert_all_close, set_seed
 from experimental.kernels.hazzyresearch.flash_attention import flash_attn_func
 
 from kernl.implementations.attention import attention_forward, attention_reference
-from kernl.implementations.attention_masked_original import masked_attention_forward_original
-from kernl.implementations.attention_original import attention_forward_original
-
-
-def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
-    if is_causal:
-        return masked_attention_forward_original(*args, **kwargs)
-    else:
-        return attention_forward_original(*args, **kwargs)
 
 
 implementations = {
-    "original": lambda q, k, v, output, sm_scale, is_causal, attention_mask: original_triton_flash_attention(
-        is_causal, q, k, v, output, sm_scale
-    ),
     "triton": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_forward(
         q, k, v, output, sm_scale, is_causal, attention_mask
     ),
@@ -49,7 +37,9 @@ implementations = {
 }
 
 
-def generate_broadcast_mask(batch, seq_length, dtype=torch.float32):
+def generate_broadcast_mask(
+    batch: int, heads: int, seq_length: int, dhead: int, dtype: torch.Tensor = torch.float32
+) -> torch.Tensor:
     attention_mask = (
         torch.randint(1, seq_length, (batch,), device="cuda")[:, None]
         > torch.arange(0, seq_length, device="cuda")[None, :]
@@ -60,19 +50,22 @@ def generate_broadcast_mask(batch, seq_length, dtype=torch.float32):
     return attention_mask
 
 
-def generate_bias_mask(batch, seq_length, dtype=torch.float32):
-    return torch.rand((batch, 48, seq_length, seq_length), dtype=dtype, device="cuda")
+def generate_bias_mask(
+    batch: int, heads: int, seq_length: int, dhead: int, dtype: torch.Tensor = torch.float32
+) -> torch.Tensor:
+    return torch.rand((batch, heads, seq_length, seq_length), dtype=dtype, device="cuda")
 
 
-def generate_none_mask(batch, seq_length, dtype=torch.float32):
+def generate_none_mask(*_) -> None:
     return None
 
 
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(bs, seq_l) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 257, 384, 512]] + [(32, 32)],
-    ids=lambda x: f"{x[0]}x{x[1]}",
+    [(bs, 48, seq_l, 64) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 257, 384, 512]]
+    + [(8, 1, 1500, 64), (32, 48, 32, 64)],
+    ids=lambda x: f"shape=(batch={x[0]},heads={x[1]},seq_length={x[2]},dhead={x[3]})",
 )
 # fp32 not yet possible because of a bug in triton
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
@@ -84,24 +77,26 @@ def generate_none_mask(batch, seq_length, dtype=torch.float32):
 )
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_masked(
-    benchmark, shape: (int, int), implementation: Callable, mask_fn: Callable, dtype: torch.dtype, is_causal: bool
+    benchmark,
+    shape: (int, int, int, int),
+    implementation: Callable,
+    mask_fn: Callable,
+    dtype: torch.dtype,
+    is_causal: bool,
 ):
-    batch, seq_length = shape
-    if implementation == "original" and (dtype == torch.bfloat16 or seq_length != 512):
-        pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
-    elif implementation == "original" and mask_fn != generate_none_mask:
-        pytest.skip("Original Triton implementation doesn't support masks")
+    batch, heads, seq_length, dhead = shape
 
-    # batch, heads, seq_length, dhead
-    mat_shape = (batch, 48, seq_length, 64)
+    # bf16 reduced precision is sensitive to this value
+    tensor_max_val = 1.0 if dtype == torch.bfloat16 else 2.0
+
     args = {
-        "q": torch.rand(mat_shape, device="cuda"),
-        "k": torch.rand(mat_shape, device="cuda"),
-        "v": torch.rand(mat_shape, device="cuda"),
-        "output": torch.zeros(mat_shape, device="cuda"),
+        "q": torch.rand(shape, device="cuda") * tensor_max_val,
+        "k": torch.rand(shape, device="cuda") * tensor_max_val,
+        "v": torch.rand(shape, device="cuda") * tensor_max_val,
+        "output": torch.zeros(shape, device="cuda"),
         "sm_scale": 0.3,  # Scaling applied before softmax (sqrt(dhead) in Vaswani et al.)
         "is_causal": is_causal,
-        "attention_mask": mask_fn(batch, seq_length),
+        "attention_mask": mask_fn(batch, heads, seq_length, dhead),
     }
 
     expected = attention_reference(**args)
@@ -124,6 +119,10 @@ def test_benchmark_masked(
     if implementation == "hazyresearch":
         value = value.transpose(1, 2)
     assert_all_close(a=value.float(), b=expected, atol=1e-1)
+
+    for _ in range(10):
+        o = func(**cast_args)
+        assert_all_close(value, o, atol=1e-2)
 
 
 @set_seed()
@@ -162,19 +161,3 @@ def test_cross_attention():
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     assert_all_close(a=output, b=expected, atol=1e-2)
-
-
-@set_seed()
-def test_large_attention():
-    q = torch.rand((8, 1, 1500, 64), dtype=torch.float16, device="cuda") * 2
-    k = torch.rand((8, 1, 1500, 64), dtype=torch.float16, device="cuda") * 2
-    v = torch.rand_like(k) * 2
-    mask = None
-    sm_scale = 1.0
-
-    expected = attention_reference(
-        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
-    )
-    output = torch.empty_like(q)
-    attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
-    assert_all_close(a=output, b=expected, atol=1e-1)
