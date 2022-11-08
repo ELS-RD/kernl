@@ -112,17 +112,14 @@ def test_benchmark_masked(
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
 
-    for _ in range(100):
-        cast_args["output"].zero_()
-        assert torch.allclose(value, func(**cast_args), atol=1e-3)
-
     if implementation == "hazyresearch":
-        value = value.transpose(1, 2)
+        expected = expected.transpose(1, 2)
+
     assert_all_close(a=value.float(), b=expected, atol=1e-1)
 
     for _ in range(10):
         o = func(**cast_args)
-        assert_all_close(value, o, atol=1e-2)
+        assert_all_close(value, o, atol=1e-3)
 
 
 @set_seed()
