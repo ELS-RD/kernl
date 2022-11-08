@@ -1,5 +1,5 @@
 // ----- ----- ----- ----- -----
-// gsap scrollTrigger management
+// gsap scrollTrigger management on landing page
 gsap.registerPlugin("scrollTrigger");
 
 var slideUpElements = gsap.utils.toArray(".slide-up");
@@ -15,3 +15,19 @@ slideUpElements.forEach(function (element) {
         duration: 0.48
     });
 })
+
+// ----- ----- ----- ----- -----
+// modal management on landing page
+var modal = document.querySelector(".modal");
+
+function toggleModal() {
+    modal.classList.toggle("show-modal");
+}
+
+function windowOnClick(event) {
+    if (event.target === modal) {
+        toggleModal();
+    }
+}
+
+window.addEventListener("click", windowOnClick);
