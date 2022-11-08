@@ -455,7 +455,7 @@ div[class="md-search__scrollwrap"] {
 .knl-highlight__content > header > h3 {
     margin: 0;
     font-family: "Fredoka", sans-serif;
-    font-size: clamp(20px, 5vw, 32px);
+    font-size: clamp(20px, 3vw, 32px);
     font-weight: normal;
     line-height: var(--accessible-line-height);
 }
