@@ -21,21 +21,9 @@ import torch
 from conftest import assert_all_close, set_seed
 
 from kernl.implementations.attention import attention_forward, attention_reference
-from kernl.implementations.attention_masked_original import masked_attention_forward_original
-from kernl.implementations.attention_original import attention_forward_original
-
-
-def original_triton_flash_attention(is_causal: bool, *args, **kwargs):
-    if is_causal:
-        return masked_attention_forward_original(*args, **kwargs)
-    else:
-        return attention_forward_original(*args, **kwargs)
 
 
 implementations = {
-    "original": lambda q, k, v, output, sm_scale, is_causal, attention_mask: original_triton_flash_attention(
-        is_causal, q, k, v, output, sm_scale
-    ),
     "triton": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_forward(
         q, k, v, output, sm_scale, is_causal, attention_mask
     ),
@@ -93,11 +81,6 @@ def test_benchmark_masked(
     is_causal: bool,
 ):
     batch, heads, seq_length, dhead = shape
-    if implementation == "original":
-        if dtype == torch.bfloat16 or seq_length != 512:
-            pytest.skip("Original Triton implementation only supports fp16 and seq_length=512")
-        elif mask_fn != generate_none_mask:
-            pytest.skip("Original Triton implementation doesn't support masks")
 
     # bf16 reduced precision is sensitive to this value
     tensor_max_val = 1.0 if dtype == torch.bfloat16 else 2.0
@@ -118,6 +101,9 @@ def test_benchmark_masked(
     func = implementations[implementation]
     value = benchmark(func, **cast_args)
 
+    for _ in range(10):
+        o = func(**cast_args)
+        assert_all_close(value, o, atol=1e-2)
     assert_all_close(a=value.float(), b=expected, atol=1e-1)
 
 
