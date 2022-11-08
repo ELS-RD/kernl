@@ -59,7 +59,7 @@ def generate_none_mask(*_) -> None:
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(bs, 48, seq_l, 64) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 384, 512]]
+    [(bs, 48, seq_l, 64) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 257, 384, 512]]
     + [(8, 1, 1500, 64), (32, 48, 32, 64)],
     ids=lambda x: f"shape=(batch={x[0]},heads={x[1]},seq_length={x[2]},dhead={x[3]})",
 )
