@@ -358,6 +358,7 @@ div[class="md-search__scrollwrap"] {
 
 .knl-why__content {
     align-items: center;
+    padding: 0 clamp(8px, 5vw, 104px);
 }
 
 .knl-why__content > p {
