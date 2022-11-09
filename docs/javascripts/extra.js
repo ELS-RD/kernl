@@ -1,14 +1,14 @@
 // ----- ----- ----- ----- -----
 // gsap scrollTrigger management on landing page
-gsap.registerPlugin("scrollTrigger");
+gsap.registerPlugin('scrollTrigger');
 
-var slideUpElements = gsap.utils.toArray(".slide-up");
+const slideUpElements = gsap.utils.toArray('.slide-up');
 
 slideUpElements.forEach(function (element) {
     gsap.from(element, {
         scrollTrigger: {
             trigger: element,
-            toggleActions: "restart none none reset"
+            toggleActions: 'restart none none reset'
             // markers: true
         },
         y: 48,
@@ -18,10 +18,10 @@ slideUpElements.forEach(function (element) {
 
 // ----- ----- ----- ----- -----
 // modal management on landing page
-var modal = document.querySelector(".modal");
+const modal = document.querySelector('.modal');
 
 function toggleModal() {
-    modal.classList.toggle("show-modal");
+    modal.classList.toggle('show-modal');
 }
 
 function windowOnClick(event) {
@@ -30,4 +30,4 @@ function windowOnClick(event) {
     }
 }
 
-window.addEventListener("click", windowOnClick);
+window.addEventListener('click', windowOnClick);
