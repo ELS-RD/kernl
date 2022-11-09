@@ -612,6 +612,7 @@ div[class="md-search__scrollwrap"] {
     height: auto;
     max-height: 97%;
     padding: 8px;
+    text-align: center;
     border-radius: 8px;
     background-color: white;
     z-index: 10001;
@@ -701,5 +702,13 @@ div[class="md-search__scrollwrap"] {
     .knl-oss,
     .knl-contribute {
         padding: 40px 0;
+    }
+}
+
+/* fix the image display in the modal for small screens in landscape mode */
+@media (orientation: landscape) and (max-height: 575px) {
+    .modal-content img {
+        width: auto;
+        max-height: 94vh;
     }
 }
