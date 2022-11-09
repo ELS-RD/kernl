@@ -70,10 +70,6 @@ em {
     font-style: normal;
 }
 
-.cursor-pointer {
-    cursor: pointer;
-}
-
 /* ----- ----- ----- ----- ----- */
 /* hacks */
 /* ----- ----- ----- ----- ----- */
@@ -437,6 +433,15 @@ div[class="md-search__scrollwrap"] {
     padding: 8px;
     border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-secondary);
+}
+
+.knl-highlight figure img.withModal {
+    transition: var(--hover-transform);
+}
+
+.knl-highlight figure img.withModal:hover {
+    cursor: pointer;
+    transform: var(--hover-scale);
 }
 
 .knl-highlight__content {
