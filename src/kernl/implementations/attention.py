@@ -61,12 +61,35 @@ def attention_reference(
     return ref_out
 
 
+def round_size_m(args):
+    return math.ceil(args["size_m"] / args["BLOCK_M"]) * args["BLOCK_M"]
+
+
+@triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=8),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 32}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+    ],
+    key=["size_m", "size_n", "heads", "HAS_MASK", "IS_CAUSAL"],
+)
+@triton.heuristics(
+    {
+        "size_m_rounded": round_size_m,
+        # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
+        "NEED_LOAD_MASK_SIZE_N": lambda args: args["size_n"] % args["BLOCK_N"] != 0,
+        "NEED_LOAD_MASK_SIZE_M": lambda args: args["size_m"] % args["BLOCK_M"] != 0,
+    }
+)
 @triton.jit
 def _fwd_kernel(
     heads,
     size_m,
     size_n,
-    size_m_rounded,
     Q,
     K,
     V,
@@ -95,17 +118,18 @@ def _fwd_kernel(
     attention_mask_m_stride,
     attention_mask_k_stride,
     min_clamp_value,
-    NEED_LOAD_MASK_SIZE_N: tl.constexpr,
-    NEED_LOAD_MASK_SIZE_M: tl.constexpr,
     MASK_BATCH_SIZE: tl.constexpr,
     MASK_HEAD_SIZE: tl.constexpr,
     MASK_M_SIZE: tl.constexpr,
     MASK_K_SIZE: tl.constexpr,
     HAS_MASK: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
-    BLOCK_M: tl.constexpr,
     BLOCK_DHEAD: tl.constexpr,
+    BLOCK_M: tl.constexpr,  # this parameter and below are managed by the autotune and need to be at the end
     BLOCK_N: tl.constexpr,
+    NEED_LOAD_MASK_SIZE_N: tl.constexpr,
+    NEED_LOAD_MASK_SIZE_M: tl.constexpr,
+    size_m_rounded,
 ):
     """
     Computes attention
@@ -403,21 +427,10 @@ class Attention(torch.autograd.Function):
         batch, heads, size_m, dhead = q.size()
         size_n = k.size(2)
 
-        # use fix size, because triton otherwise race condition
-        # if not power of 2
-        # size_m_pow_2 = triton.next_power_of_2(size_m) if size_m & (size_m - 1) else size_m
-        # BLOCK_M = max(min(128, size_m_pow_2), 16)  # minimal size
-        # if BLOCK_M == 32:
-        #     BLOCK_M = 64  # there is a strange triton segfault with 32
-        BLOCK_M = 128
-        # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
-        NEED_LOAD_MASK_SIZE_N = size_n % BLOCK_M != 0
-        NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
+        grid = lambda args: (triton.cdiv(size_m, args["BLOCK_M"]), batch * heads)  # noqa: E731
 
-        grid = (triton.cdiv(size_m, BLOCK_M), batch * heads)
-        # following 2 ops required to fix race condition in Triton compiler
-        size_m_rounded = math.ceil(size_m / BLOCK_M) * BLOCK_M
-        tmp = torch.empty((batch * heads, size_m_rounded), device=q.device, dtype=torch.float32)
+        # as we don't yet know BLOCK_M value, set TMP to the largest possible shape (assuming BLOCK_M=128)
+        tmp = torch.empty((batch * heads, math.ceil(size_m / 128) * 128), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
         if attention_mask is not None:
@@ -434,52 +447,45 @@ class Attention(torch.autograd.Function):
 
             HAS_MASK = True
 
-        _fwd_kernel[grid](
-            heads=heads,
-            size_m=size_m,
-            size_n=size_n,
-            size_m_rounded=size_m_rounded,
-            Q=q,
-            K=k,
-            V=v,
-            sm_scale=sm_scale,
-            attention_mask=attention_mask,
-            TMP=tmp,
-            output=output,
-            q_batch_stride=q.stride(0),
-            q_head_stride=q.stride(1),
-            q_m_stride=q.stride(2),
-            q_k_stride=q.stride(3),
-            k_batch_stride=k.stride(0),
-            k_head_stride=k.stride(1),
-            k_n_stride=k.stride(2),
-            k_k_stride=k.stride(3),
-            v_batch_stride=v.stride(0),
-            v_head_stride=v.stride(1),
-            v_k_stride=v.stride(2),
-            v_n_stride=v.stride(3),
-            o_batch_stride=output.stride(0),
-            o_head_stride=output.stride(1),
-            o_m_stride=output.stride(2),
-            o_n_stride=output.stride(3),
-            attention_mask_batch_stride=attention_mask.stride(0) if HAS_MASK else 0,
-            attention_mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
-            attention_mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
-            attention_mask_k_stride=attention_mask.stride(3) if HAS_MASK else 0,
-            NEED_LOAD_MASK_SIZE_N=NEED_LOAD_MASK_SIZE_N,
-            NEED_LOAD_MASK_SIZE_M=NEED_LOAD_MASK_SIZE_M,
-            min_clamp_value=torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,
-            MASK_BATCH_SIZE=attention_mask.size(0) if HAS_MASK else 0,
-            MASK_HEAD_SIZE=attention_mask.size(1) if HAS_MASK else 0,
-            MASK_M_SIZE=attention_mask.size(2) if HAS_MASK else 0,
-            MASK_K_SIZE=attention_mask.size(3) if HAS_MASK else 0,
-            HAS_MASK=HAS_MASK,
-            IS_CAUSAL=is_causal,
-            BLOCK_M=BLOCK_M,
-            BLOCK_N=BLOCK_M,
-            BLOCK_DHEAD=dhead,
-            num_warps=4,
-            num_stages=1,
+        _fwd_kernel[grid](  # can't use name args because of the way autotune is implemented :-(
+            heads,  # heads
+            size_m,  # size_m
+            size_n,  # size_n
+            q,  # Q
+            k,  # K
+            v,  # V
+            sm_scale,  # sm_scale
+            attention_mask,  # attention_mask
+            tmp,  # TMP
+            output,  # output
+            q.stride(0),  # q_batch_stride
+            q.stride(1),  # q_head_stride
+            q.stride(2),  # q_m_stride
+            q.stride(3),  # q_k_stride
+            k.stride(0),  # k_batch_stride
+            k.stride(1),  # k_head_stride
+            k.stride(2),  # k_n_stride
+            k.stride(3),  # k_k_stride
+            v.stride(0),  # v_batch_stride
+            v.stride(1),  # v_head_stride
+            v.stride(2),  # v_k_stride
+            v.stride(3),  # v_n_stride
+            output.stride(0),  # o_batch_stride
+            output.stride(1),  # o_head_stride
+            output.stride(2),  # o_m_stride
+            output.stride(3),  # o_n_stride
+            attention_mask.stride(0) if HAS_MASK else 0,  # attention_mask_batch_stride
+            attention_mask.stride(1) if HAS_MASK else 0,  # attention_mask_head_stride
+            attention_mask.stride(2) if HAS_MASK else 0,  # attention_mask_m_stride
+            attention_mask.stride(3) if HAS_MASK else 0,  # attention_mask_k_stride
+            torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,  # min_clamp_value
+            attention_mask.size(0) if HAS_MASK else 0,  # MASK_BATCH_SIZE
+            attention_mask.size(1) if HAS_MASK else 0,  # MASK_HEAD_SIZE
+            attention_mask.size(2) if HAS_MASK else 0,  # MASK_M_SIZE
+            attention_mask.size(3) if HAS_MASK else 0,  # MASK_K_SIZE
+            HAS_MASK,  # HAS_MASK
+            is_causal,  # IS_CAUSAL
+            dhead,  # BLOCK_DHEAD
         )
         ctx.save_for_backward(q, k, v, output)
         return output
