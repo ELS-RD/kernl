@@ -61,10 +61,6 @@ def attention_reference(
     return ref_out
 
 
-def round_size_m(args):
-    return math.ceil(args["size_m"] / args["BLOCK_M"]) * args["BLOCK_M"]
-
-
 @triton.autotune(
     configs=[
         triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=8),
@@ -77,12 +73,12 @@ def round_size_m(args):
     ],
     key=["size_m", "size_n", "heads", "HAS_MASK", "IS_CAUSAL"],
 )
-@triton.heuristics(
+@triton.heuristics(  # order should be the same than in function args, otherwise expect strange bugs
     {
-        "size_m_rounded": round_size_m,
         # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
         "NEED_LOAD_MASK_SIZE_N": lambda args: args["size_n"] % args["BLOCK_N"] != 0,
         "NEED_LOAD_MASK_SIZE_M": lambda args: args["size_m"] % args["BLOCK_M"] != 0,
+        "size_m_rounded": lambda args: math.ceil(args["size_m"] / args["BLOCK_M"]) * args["BLOCK_M"],
     }
 )
 @triton.jit
