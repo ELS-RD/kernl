@@ -33,18 +33,6 @@ def get_model_baseline(base):
     return base
 
 
-def get_model_dynamo_nvfuser_ofi(base):
-    def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        compiled = BACKENDS["nvfuser_ofi"](gm, example_inputs)
-        return compiled
-
-    @torchdynamo.optimize(compiler)
-    def run(*args, **kwargs):
-        return base(*args, **kwargs)
-
-    return run
-
-
 def get_model_dynamo_cuda_graphs(base):
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
         compiled = BACKENDS["cudagraphs"](gm, example_inputs)
