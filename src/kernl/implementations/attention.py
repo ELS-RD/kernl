@@ -282,6 +282,7 @@ def _fwd_kernel(
             else:
                 offs_mask += offs_m[:, None] * attention_mask_m_stride
                 if NEED_LOAD_MASK_SIZE_N:
+                    attention_load_mask &= offs_m[:, None] < size_m
                     m = tl.load(
                         attention_mask + offs_mask,
                         eviction_policy="evict_first",  # The mask matrix is never reused
