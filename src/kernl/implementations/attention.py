@@ -270,30 +270,27 @@ def _fwd_kernel(
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
         if HAS_MASK:
+            # mask is a vector
             offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * attention_mask_k_stride
             if NEED_LOAD_MASK_SIZE_N:
                 attention_load_mask = (n_row_offset + offs_n)[None, :] < size_n
-            # If it's a broadcast we only load vector size BLOCK_N else a matrix size (BLOCK_M, BLOCK_N)
-            if MASK_M_SIZE == 1:
-                if NEED_LOAD_MASK_SIZE_N:
-                    m = tl.load(attention_mask + offs_mask, mask=attention_load_mask, other=float("-inf"))
-                else:
-                    m = tl.load(attention_mask + offs_mask)
-            else:
+            if MASK_M_SIZE != 1:  # we load a mask with a matrix shape (BLOCK_M, BLOCK_N)
                 offs_mask += offs_m[:, None] * attention_mask_m_stride
-                if NEED_LOAD_MASK_SIZE_N:
-                    attention_load_mask &= offs_m[:, None] < size_m
-                    m = tl.load(
-                        attention_mask + offs_mask,
-                        eviction_policy="evict_first",  # The mask matrix is never reused
-                        mask=attention_load_mask,
-                        other=float("-inf"),
-                    )
-                else:
-                    m = tl.load(
-                        attention_mask + offs_mask,
-                        eviction_policy="evict_first",
-                    )
+            if NEED_LOAD_MASK_SIZE_N & (MASK_M_SIZE != 1):
+                attention_load_mask &= offs_m[:, None] < size_m
+
+            if NEED_LOAD_MASK_SIZE_N:
+                m = tl.load(
+                    attention_mask + offs_mask,
+                    eviction_policy="evict_first",
+                    mask=attention_load_mask,
+                    other=float("-inf"),
+                )
+            else:
+                m = tl.load(
+                    attention_mask + offs_mask,
+                    eviction_policy="evict_first",
+                )
             # Avoids NaN
             m = tl.where(m == float("-inf"), min_clamp_value, m)
             qk += m
