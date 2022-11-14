@@ -71,13 +71,13 @@ def attention_reference(
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 32}, num_stages=1, num_warps=4),
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 16}, num_stages=1, num_warps=4),
     ],
-    key=["size_m", "size_n", "heads", "HAS_MASK", "IS_CAUSAL"],
+    key=["size_m_cache_key", "size_n_cache_key", "heads", "HAS_MASK", "IS_CAUSAL"],
 )
 @triton.heuristics(  # order should be the same than in function args, otherwise expect strange bugs
     {
         # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
-        "NEED_LOAD_MASK_SIZE_N": lambda args: args["size_n"] % args["BLOCK_N"] != 0,
         "NEED_LOAD_MASK_SIZE_M": lambda args: args["size_m"] % args["BLOCK_M"] != 0,
+        "NEED_LOAD_MASK_SIZE_N": lambda args: args["size_n"] % args["BLOCK_N"] != 0,
         "size_m_rounded": lambda args: math.ceil(args["size_m"] / args["BLOCK_M"]) * args["BLOCK_M"],
     }
 )
@@ -86,6 +86,8 @@ def _fwd_kernel(
     heads,
     size_m,
     size_n,
+    size_m_cache_key,
+    size_n_cache_key,
     Q,
     K,
     V,
@@ -123,8 +125,8 @@ def _fwd_kernel(
     BLOCK_DHEAD: tl.constexpr,
     BLOCK_M: tl.constexpr,  # this parameter and below are managed by the autotune and need to be at the end
     BLOCK_N: tl.constexpr,
-    NEED_LOAD_MASK_SIZE_N: tl.constexpr,
     NEED_LOAD_MASK_SIZE_M: tl.constexpr,
+    NEED_LOAD_MASK_SIZE_N: tl.constexpr,
     size_m_rounded,
 ):
     """
@@ -155,6 +157,8 @@ def _fwd_kernel(
     @param heads: number of heads per batch
     @param size_m: size of M axis
     @param size_n: size of N axis
+    @param size_m_cache_key: size of M axis to cache the kernel, to limit the number of build
+    @param size_n_cache_key: size of N axis to cache the kernel, to limit the number of build
     @param Q: query matrix size (batch, heads, size_m, BLOCK_DHEAD)
     @param K: key matrix size (batch, heads, size_n, BLOCK_DHEAD)
     @param V: value matrix size (batch, heads, size_n, BLOCK_DHEAD)
@@ -182,17 +186,18 @@ def _fwd_kernel(
     @param attention_mask_head_stride: matrix mask stride for head dimension
     @param attention_mask_m_stride: matrix mask stride for rows
     @param attention_mask_k_stride: matrix mask stride for columns
-    @param NEED_LOAD_MASK_SIZE_N: use boundary check when loading K/V/Attention mask tensors
-    @param NEED_LOAD_MASK_SIZE_M: use boundary check when loading/saving from/to Q/Output tensors
     @param MASK_BATCH_SIZE: matrix mask size for batch dimension
     @param MASK_HEAD_SIZE: matrix mask size for head dimension
     @param MASK_M_SIZE: matrix mask size for rows
     @param MASK_K_SIZE: matrix mask size for columns
     @param HAS_MASK: whether the mask is applied
     @param IS_CAUSAL: whether the mask is applied
-    @param BLOCK_M: number of rows computed in a single instance for matrix Q
     @param BLOCK_DHEAD: number of columns per head
+    @param BLOCK_M: number of rows computed in a single instance for matrix Q
     @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
+    @param NEED_LOAD_MASK_SIZE_M: use boundary check when loading/saving from/to Q/Output tensors
+    @param NEED_LOAD_MASK_SIZE_N: use boundary check when loading K/V/Attention mask tensors
+    @param size_m_rounded: size of M axis rounded to the next multiple of BLOCK_M
     """
     # Index of the block on M axis (M axis is the rows of matrix K)
     m_block_idx = tl.program_id(0)
@@ -422,7 +427,7 @@ class Attention(torch.autograd.Function):
         assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
         batch, heads, size_m, dhead = q.size()
         size_n = k.size(2)
-
+        size_m_cache_key, size_n_cache_key = size_m // 32, size_n // 32
         grid = lambda args: (triton.cdiv(size_m, args["BLOCK_M"]), batch * heads)  # noqa: E731
 
         # as we don't yet know BLOCK_M value, set TMP to the largest possible shape (assuming BLOCK_M=128)
@@ -447,6 +452,8 @@ class Attention(torch.autograd.Function):
             heads,  # heads
             size_m,  # size_m
             size_n,  # size_n
+            size_m_cache_key,  # size_m_cache_key
+            size_n_cache_key,  # size_n_cache_key
             q,  # Q
             k,  # K
             v,  # V
