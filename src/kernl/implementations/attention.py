@@ -126,7 +126,7 @@ def _fwd_kernel(
                    ┌────────────┐
                │   │            │
     M Dimension│   ├────────────┤     ┌───┐
-       size_m  │   │            │     │   │ BLOCK_M
+      size_m   │   │            │     │   │ BLOCK_M
                │   ├────────────┤     └───┘
                │   │            │    BLOCK_N
                │   │            │
@@ -270,16 +270,16 @@ def _fwd_kernel(
             qk += tl.where(offs_m[:, None] >= (n_row_offset + offs_n[None, :]), 0, float("-inf"))
 
         if HAS_MASK:
-            # mask is a vector
+            # we assume mask has a vector shape
             offs_mask = offs_base_mask + (offs_n[None, :] + n_row_offset) * attention_mask_k_stride
-            if NEED_LOAD_MASK_SIZE_N:
-                attention_load_mask = (n_row_offset + offs_n)[None, :] < size_n
-            if MASK_M_SIZE != 1:  # we load a mask with a matrix shape (BLOCK_M, BLOCK_N)
+            if MASK_M_SIZE != 1:  # mask has a square shape, we load (BLOCK_M, BLOCK_N) elements
                 offs_mask += offs_m[:, None] * attention_mask_m_stride
-            if NEED_LOAD_MASK_SIZE_N & (MASK_M_SIZE != 1):
+            if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:  # squared mask, both vars should be equal
+                attention_load_mask = (n_row_offset + offs_n)[None, :] < size_n
+            if (NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N) & (MASK_M_SIZE != 1):
                 attention_load_mask &= offs_m[:, None] < size_m
 
-            if NEED_LOAD_MASK_SIZE_N:
+            if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
                 m = tl.load(
                     attention_mask + offs_mask,
                     eviction_policy="evict_first",
