@@ -70,6 +70,8 @@ def attention_reference(
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 64}, num_stages=1, num_warps=4),
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 32}, num_stages=1, num_warps=4),
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 32, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 16}, num_stages=1, num_warps=4),
     ],
     key=["size_m_cache_key", "size_n_cache_key", "heads", "HAS_MASK", "IS_CAUSAL"],
 )
@@ -213,32 +215,41 @@ def _fwd_kernel(
 
     current_batch_idx = head_idx // heads
     current_head_idx = head_idx % heads
-    # memory offsets matrices on whole Q, K, V matrices
-    # Offsets for the current block on matrix Q
+
+    # memory offsets matrices on whole Q, K, V, output matrices
+    # offsets for the current block on matrix Q
     offs_q = (
         current_batch_idx * q_batch_stride
         + current_head_idx * q_head_stride
         + (offs_m[:, None] * q_m_stride + range_offs_d[None, :] * q_k_stride)
     )
 
-    # Offsets for the first block on matrix K
+    # offsets for the first block on matrix K
     offs_k = (
         current_batch_idx * k_batch_stride
         + current_head_idx * k_head_stride
         + (range_offs_n[:, None] * k_n_stride + range_offs_d[None, :] * k_k_stride)
     )
 
-    # Offsets for the first block on matrix V
+    # offsets for the first block on matrix V
     offs_v = (
         current_batch_idx * v_batch_stride
         + current_head_idx * v_head_stride
         + (range_offs_n[:, None] * v_k_stride + range_offs_d[None, :] * v_n_stride)
     )
 
+    # offsets for the current block on matrix Output
+    offs_o = (
+        current_batch_idx * o_batch_stride
+        + current_head_idx * o_head_stride
+        + (offs_m[:, None] * o_m_stride + range_offs_d[None, :] * o_n_stride)
+    )
+
     # pointers to blocks in Q, K, V
     ptrs_q = Q + offs_q
     ptrs_k = K + offs_k
     ptrs_v = V + offs_v
+    ptrs_o = output + offs_o
 
     # Temporary pointer to memory to fix bug in triton compiler
     ptrs_t = TMP + head_idx * size_m_rounded + offs_m
@@ -378,18 +389,11 @@ def _fwd_kernel(
         d_i = d_new
         l_i = l_new
 
-    off_o = (
-        current_batch_idx * o_batch_stride
-        + current_head_idx * o_head_stride
-        + (offs_m[:, None] * o_m_stride + range_offs_d[None, :] * o_n_stride)
-    )
-
-    out_ptrs = output + off_o
     if NEED_LOAD_MASK_SIZE_M:
         out_store_mask = offs_m[:, None] < size_m
-        tl.store(out_ptrs, acc, mask=out_store_mask)
+        tl.store(ptrs_o, acc, mask=out_store_mask)
     else:
-        tl.store(out_ptrs, acc)
+        tl.store(ptrs_o, acc)
 
 
 class Attention(torch.autograd.Function):
