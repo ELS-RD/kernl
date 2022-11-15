@@ -180,9 +180,9 @@ def _fwd_kernel(
     head_idx = tl.program_id(1)
 
     # offsets
-    range_offs_m = tl.arange(0, BLOCK_M)  # First block on M dimension
-    range_offs_n = tl.arange(0, BLOCK_N)  # First block on N dimension
-    range_offs_d = tl.arange(0, BLOCK_DHEAD)  # Full head
+    range_offs_m = tl.arange(0, BLOCK_M)  # first block on M dimension
+    range_offs_n = tl.arange(0, BLOCK_N)  # first block on N dimension
+    range_offs_d = tl.arange(0, BLOCK_DHEAD)  # full head
 
     offs_m = m_block_idx * BLOCK_M + range_offs_m  # rows offsets on M axis
 
@@ -353,11 +353,10 @@ def _fwd_kernel(
         d_i = d_new
         l_i = l_new
 
-    range_offs_h = tl.arange(0, BLOCK_DHEAD)
     off_o = (
         current_batch_idx * o_batch_stride
         + current_head_idx * o_head_stride
-        + (offs_m[:, None] * o_m_stride + range_offs_h[None, :] * o_n_stride)
+        + (offs_m[:, None] * o_m_stride + range_offs_d[None, :] * o_n_stride)
     )
 
     out_ptrs = output + off_o
