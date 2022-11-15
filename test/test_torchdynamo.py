@@ -17,7 +17,6 @@ import dataclasses
 from test.models.bert import (
     get_model_baseline,
     get_model_dynamo_cuda_graphs,
-    get_model_dynamo_nvfuser_ofi,
     get_model_from_hf,
     get_model_optimized,
     get_model_optimized_causal_cuda_graphs,
@@ -44,7 +43,6 @@ class Implementation:
 
 implementations: [Implementation] = [
     Implementation("baseline", get_model_baseline, is_causal=False),
-    Implementation("dynamo_nvfuser_ofi", get_model_dynamo_nvfuser_ofi, is_causal=False),
     Implementation("dynamo_cuda_graphs", get_model_dynamo_cuda_graphs, is_causal=False),
     Implementation("dynamo_optimized", get_model_optimized, is_causal=False),
     Implementation("dynamo_optimized_cuda_graphs", get_model_optimized_cuda_graphs, is_causal=False),
@@ -68,15 +66,11 @@ def reference_fp32(request):
 )
 @pytest.mark.parametrize(
     "shape",
-    # TODO add shape 32x32 which may be unstable with T5
-    [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 33, 128, 256, 384, 512] if bs * seq_l < 10000],
+    [(bs, seq_l) for bs in [1, 8, 16, 32] for seq_l in [16, 32, 33, 128, 256, 384, 512] if bs * seq_l < 10000],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int), implementation: Implementation):
-    if "nvfuser" in implementation.name and reference_fp32.config.name_or_path != "bert-base-uncased":
-        pytest.skip("Only supported for BERT")
-
     inputs = get_input(reference_fp32, shape, is_causal=implementation.is_causal)
     with torch.inference_mode():
         expected = reference_fp32(**inputs)
