@@ -66,8 +66,7 @@ def reference_fp32(request):
 )
 @pytest.mark.parametrize(
     "shape",
-    # TODO add shape 32x32 which may be unstable with T5
-    [(bs, seq_l) for bs in [1, 8, 32] for seq_l in [16, 33, 128, 256, 384, 512] if bs * seq_l < 10000],
+    [(bs, seq_l) for bs in [1, 8, 16, 32] for seq_l in [16, 32, 33, 128, 256, 384, 512] if bs * seq_l < 10000],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
