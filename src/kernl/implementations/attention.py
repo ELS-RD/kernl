@@ -249,19 +249,19 @@ def _fwd_kernel(
         offs_base_mask = mask_batch_idx * attention_mask_batch_stride + mask_head_idx * attention_mask_head_stride
 
     # loop over k, v and update accumulator
-    # n_row_start is the row offset on dimension N of the current block
+    # block_start_index_n is the row offset on dimension N of the current block
     # It's used for both the N dimension of K and V because they are handled at the same time
-    for n_row_start in range(0, n_end, BLOCK_N):
-        n_row_start = tl.multiple_of(n_row_start, BLOCK_N)
-        n_row_offset = n_row_start + range_offs_n
+    for block_start_index_n in range(0, n_end, BLOCK_N):
+        block_start_index_n = tl.multiple_of(block_start_index_n, BLOCK_N)
+        offs_n = block_start_index_n + range_offs_n
         # We load the current block in K in SRAM
         # We do the first multiplication between the block in Q and the current block in K
         # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
         if NEED_LOAD_MASK_SIZE_N:
-            load_mask = n_row_offset[:, None] < size_n
-            k = tl.load(ptrs_k + n_row_start * k_n_stride, mask=load_mask, other=0.0)
+            load_mask = offs_n[:, None] < size_n
+            k = tl.load(ptrs_k + block_start_index_n * k_n_stride, mask=load_mask, other=0.0)
         else:
-            k = tl.load(ptrs_k + n_row_start * k_n_stride)
+            k = tl.load(ptrs_k + block_start_index_n * k_n_stride)
         qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
         # required to fix a Triton compiler bug, if not done, there is a precision issue
@@ -270,23 +270,23 @@ def _fwd_kernel(
         qk += tl.dot(q, k, trans_b=True)
         qk *= sm_scale
         if IS_CAUSAL:
-            qk += tl.where(offs_m[:, None] >= n_row_offset[None, :], 0, float("-inf"))
+            qk += tl.where(offs_m[:, None] >= offs_n[None, :], 0, float("-inf"))
 
         if HAS_MASK:
             # we assume mask has a vector shape
-            offs_mask = offs_base_mask + n_row_offset[None, :] * attention_mask_k_stride
+            offs_mask = offs_base_mask + offs_n[None, :] * attention_mask_k_stride
             if MASK_M_SIZE != 1:  # mask has a square shape, we load (BLOCK_M, BLOCK_N) elements
                 offs_mask += offs_m[:, None] * attention_mask_m_stride
 
             if NEED_LOAD_MASK_SIZE_N & MASK_M_SIZE == 1:  # mask has a vector shape need a load mask
-                attention_load_mask = n_row_offset[None, :] < size_n
+                attention_load_mask = offs_n[None, :] < size_n
             if MASK_M_SIZE != 1:  # mask has a matrix shape
                 if NEED_LOAD_MASK_SIZE_M & (not NEED_LOAD_MASK_SIZE_N):  # load mask on M axis
                     attention_load_mask = offs_m[:, None] < size_m
                 elif (not NEED_LOAD_MASK_SIZE_M) & NEED_LOAD_MASK_SIZE_N:  # load mask on N axis
-                    attention_load_mask = n_row_offset[None, :] < size_n
+                    attention_load_mask = offs_n[None, :] < size_n
                 elif NEED_LOAD_MASK_SIZE_M & NEED_LOAD_MASK_SIZE_N:  # load mask on both axis
-                    attention_load_mask = (n_row_offset[None, :] < size_n) & (offs_m[:, None] < size_m)
+                    attention_load_mask = (offs_n[None, :] < size_n) & (offs_m[:, None] < size_m)
 
             if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
                 m = tl.load(
@@ -342,10 +342,10 @@ def _fwd_kernel(
 
         # We now apply the last operation, the multiplication by a block of matrix V
         if NEED_LOAD_MASK_SIZE_N:
-            load_mask = n_row_offset[:, None] < size_n  # repeated otherwise triton segfault
-            v = tl.load(ptrs_v + n_row_start * v_k_stride, mask=load_mask, other=0.0)
+            load_mask = offs_n[:, None] < size_n  # repeated otherwise triton segfault
+            v = tl.load(ptrs_v + block_start_index_n * v_k_stride, mask=load_mask, other=0.0)
         else:
-            v = tl.load(ptrs_v + n_row_start * v_k_stride)
+            v = tl.load(ptrs_v + block_start_index_n * v_k_stride)
         qk_softmax = qk_softmax.to(Q.dtype.element_ty)
         acc += tl.dot(qk_softmax, v)
 
