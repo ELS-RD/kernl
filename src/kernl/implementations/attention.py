@@ -61,32 +61,28 @@ def attention_reference(
     return ref_out
 
 
-@triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=8),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 16, "BLOCK_N": 16}, num_stages=1, num_warps=4),
-    ],
-    key=["size_m_cache_key", "size_n_cache_key", "heads", "HAS_MASK", "IS_CAUSAL"],
-)
-@triton.heuristics(  # order should be the same than in function args, otherwise expect strange bugs
-    {
-        # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
-        "NEED_LOAD_MASK_SIZE_M": lambda args: args["size_m"] % args["BLOCK_M"] != 0,
-        "NEED_LOAD_MASK_SIZE_N": lambda args: args["size_n"] % args["BLOCK_N"] != 0,
-        "size_m_rounded": lambda args: math.ceil(args["size_m"] / args["BLOCK_M"]) * args["BLOCK_M"],
-    }
-)
+def get_block_shape(size_m: int, size_n: int) -> tuple[int, int]:
+    """
+    Naive approach to choose block shape for a given matrix dimensions.
+    Triton autotune would probably provide better results, but needs to be rewriten and is slower.
+    Several block shapes legal on CUDA do not work in this kernel.
+    Will need to retry later with MLIR backend.
+    """
+    if size_m <= 64 and size_n <= 64:
+        return 64, 64
+    elif size_m <= 64:
+        return 64, 128
+    elif size_n <= 64:
+        return 128, 64
+    else:
+        return 128, 128
+
+
 @triton.jit
 def _fwd_kernel(
     heads,
     size_m,
     size_n,
-    size_m_cache_key,
-    size_n_cache_key,
     Q,
     K,
     V,
@@ -113,12 +109,15 @@ def _fwd_kernel(
     attention_mask_batch_stride,
     attention_mask_head_stride,
     attention_mask_m_stride,
-    attention_mask_k_stride,
+    attention_mask_n_stride,
     min_clamp_value,
-    mask_batch_size,
-    mask_head_size,
-    mask_m_size,
-    mask_k_size,
+    attention_mask_batch_size,
+    attention_mask_head_size,
+    attention_mask_m_size,
+    attention_mask_n_size,
+    tmp_batch_size,
+    tmp_head_size,
+    tmp_m_size,
     HAS_MASK: tl.constexpr,
     IS_MATRIX_MASK: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
@@ -127,7 +126,6 @@ def _fwd_kernel(
     BLOCK_N: tl.constexpr,
     NEED_LOAD_MASK_SIZE_M: tl.constexpr,
     NEED_LOAD_MASK_SIZE_N: tl.constexpr,
-    size_m_rounded,
 ):
     """
     Computes attention
@@ -157,39 +155,40 @@ def _fwd_kernel(
     @param heads: number of heads per batch
     @param size_m: size of M axis
     @param size_n: size of N axis
-    @param size_m_cache_key: size of M axis to cache the kernel, to limit the number of build
-    @param size_n_cache_key: size of N axis to cache the kernel, to limit the number of build
     @param Q: query matrix size (batch, heads, size_m, BLOCK_DHEAD)
     @param K: key matrix size (batch, heads, size_n, BLOCK_DHEAD)
     @param V: value matrix size (batch, heads, size_n, BLOCK_DHEAD)
     @param sm_scale: scaling factor applied after operation QxK
     @param TMP: temporary variable to fix a compiler bug
     @param output: output matrix size (batch, heads, size_m, BLOCK_DHEAD)
-    @param q_batch_stride: matrix q stride for batch dimension
-    @param q_head_stride: matrix q stride for head dimension
-    @param q_m_stride: matrix q stride for rows, called "M dimension"
-    @param q_k_stride: matrix q stride for columns, called "K dimension"
-    @param k_batch_stride: matrix k stride for batch dimension
-    @param k_head_stride: matrix k stride for head dimension
-    @param k_n_stride: matrix k stride for rows, called "N dimension", will be columns after transpose
-    @param k_k_stride: matrix k stride for columns, called "K dimension", will be rows after transpose
-    @param v_batch_stride: matrix v stride for batch dimension
-    @param v_head_stride: matrix v stride for head dimension
-    @param v_k_stride: matrix v stride for columns
-    @param v_n_stride: matrix v stride for rows
-    @param o_batch_stride: output matrix stride for batch dimension
-    @param o_head_stride: output matrix stride for head dimension
-    @param o_m_stride: output matrix stride for rows
-    @param o_n_stride: output matrix stride for columns
+    @param q_batch_stride: matrix Q stride for batch dimension
+    @param q_head_stride: matrix Q stride for head dimension
+    @param q_m_stride: matrix Q stride for rows, called "M dimension"
+    @param q_k_stride: matrix Q stride for columns, called "K dimension"
+    @param k_batch_stride: matrix K stride for batch dimension
+    @param k_head_stride: matrix K stride for head dimension
+    @param k_n_stride: matrix K stride for rows, called "N dimension", will be columns after transpose
+    @param k_k_stride: matrix K stride for columns, called "K dimension", will be rows after transpose
+    @param v_batch_stride: matrix V stride for batch dimension
+    @param v_head_stride: matrix V stride for head dimension
+    @param v_k_stride: matrix V stride for columns
+    @param v_n_stride: matrix V stride for rows
+    @param o_batch_stride: matrix OUTPUT stride for batch dimension
+    @param o_head_stride: matrix OUTPUT stride for head dimension
+    @param o_m_stride: matrix OUTPUT stride for rows
+    @param o_n_stride: matrix OUTPUT stride for columns
     @param attention_mask: attention mask matrix broadcastable to (batch, heads, size_m, size_n)
     @param attention_mask_batch_stride: matrix mask stride for batch dimension
     @param attention_mask_head_stride: matrix mask stride for head dimension
     @param attention_mask_m_stride: matrix mask stride for rows
-    @param attention_mask_k_stride: matrix mask stride for columns
-    @param mask_batch_size: matrix mask size for batch dimension
-    @param mask_head_size: matrix mask size for head dimension
-    @param mask_m_size: matrix mask size for rows (equal to size_m)
-    @param mask_k_size: matrix mask size for columns (equal to size_n)
+    @param attention_mask_n_stride: matrix mask stride for columns
+    @param attention_mask_batch_size: matrix mask size for batch dimension
+    @param attention_mask_head_size: matrix mask size for head dimension
+    @param attention_mask_m_size: matrix mask size for rows (equal to size_m)
+    @param attention_mask_n_size: matrix mask size for columns (equal to size_n)
+    @param tmp_batch_size: matrix TMP size for batch dimension
+    @param tmp_head_size: matrix TMP size for head dimension
+    @param tmp_m_size: matrix TMP size for rows, called "M dimension"
     @param HAS_MASK: whether the mask is applied
     @param IS_CAUSAL: whether the mask is applied
     @param BLOCK_DHEAD: number of columns per head
@@ -197,7 +196,6 @@ def _fwd_kernel(
     @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
     @param NEED_LOAD_MASK_SIZE_M: use boundary check when loading/saving from/to Q/Output tensors
     @param NEED_LOAD_MASK_SIZE_N: use boundary check when loading K/V/Attention mask tensors
-    @param size_m_rounded: size of M axis rounded to the next multiple of BLOCK_M
     """
     # Index of the block on M axis (M axis is the rows of matrix K)
     m_block_idx = tl.program_id(0)
@@ -250,7 +248,7 @@ def _fwd_kernel(
     ptrs_o = output + offs_o
 
     # Temporary pointer to memory to fix bug in triton compiler
-    ptrs_t = TMP + head_idx * size_m_rounded + offs_m
+    ptrs_t = TMP + tmp_m_size * head_idx + offs_m
 
     # initialize pointer to m and d used to compute normalizer for softmax
     l_i = tl.zeros((BLOCK_M,), dtype=tl.float32) - float("inf")
@@ -273,11 +271,11 @@ def _fwd_kernel(
 
     if HAS_MASK:
         mask_batch_idx = (current_batch_idx,)
-        if mask_batch_size == 1:
+        if attention_mask_batch_size == 1:
             mask_batch_idx = 0
 
         mask_head_idx = current_head_idx
-        if mask_head_size == 1:
+        if attention_mask_head_size == 1:
             mask_head_idx = 0
 
         offs_base_mask = mask_batch_idx * attention_mask_batch_stride + mask_head_idx * attention_mask_head_stride
@@ -308,19 +306,19 @@ def _fwd_kernel(
 
         if HAS_MASK:
             # we assume mask has a vector shape
-            offs_mask = offs_base_mask + offs_n[None, :] * attention_mask_k_stride
+            offs_mask = offs_base_mask + offs_n[None, :] * attention_mask_n_stride
             if IS_MATRIX_MASK:  # mask has a matrix shape, we load (BLOCK_M, BLOCK_N) elements
                 offs_mask += offs_m[:, None] * attention_mask_m_stride
 
             if NEED_LOAD_MASK_SIZE_N & (not IS_MATRIX_MASK):  # mask has a vector shape + need a load mask
-                attention_load_mask = offs_n[None, :] < mask_k_size
+                attention_load_mask = offs_n[None, :] < attention_mask_n_size
             if IS_MATRIX_MASK:  # mask has a matrix shape
                 if NEED_LOAD_MASK_SIZE_M & (not NEED_LOAD_MASK_SIZE_N):  # load mask on M axis
-                    attention_load_mask = offs_m[:, None] < mask_m_size
+                    attention_load_mask = offs_m[:, None] < attention_mask_m_size
                 elif (not NEED_LOAD_MASK_SIZE_M) & NEED_LOAD_MASK_SIZE_N:  # load mask on N axis
-                    attention_load_mask = offs_n[None, :] < mask_k_size
+                    attention_load_mask = offs_n[None, :] < attention_mask_n_size
                 elif NEED_LOAD_MASK_SIZE_M & NEED_LOAD_MASK_SIZE_N:  # load mask on both axis
-                    attention_load_mask = (offs_n[None, :] < mask_k_size) & (offs_m[:, None] < mask_m_size)
+                    attention_load_mask = (offs_n[None, :] < attention_mask_n_size) & (offs_m[:, None] < attention_mask_m_size)
 
             if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
                 m = tl.load(
@@ -433,11 +431,14 @@ class Attention(torch.autograd.Function):
         assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
         batch, heads, size_m, dhead = q.size()
         size_n = k.size(2)
-        size_m_cache_key, size_n_cache_key = size_m // 32, size_n // 32
-        grid = lambda args: (triton.cdiv(size_m, args["BLOCK_M"]), batch * heads)  # noqa: E731
 
-        # as we don't yet know BLOCK_M value, set TMP to the largest possible shape (assuming BLOCK_M=128)
-        tmp = torch.empty((batch * heads, math.ceil(size_m / 128) * 128), device=q.device, dtype=torch.float32)
+        BLOCK_M, BLOCK_N = get_block_shape(size_m, size_n)
+        NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
+        NEED_LOAD_MASK_SIZE_N = size_n % BLOCK_N != 0
+        grid = (triton.cdiv(size_m, BLOCK_M), batch * heads)
+
+        # tmp should match size_m rounded to the next multiple of block_m
+        tmp = torch.empty((batch, heads, math.ceil(size_m / BLOCK_M) * BLOCK_M), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
         IS_MATRIX_MASK = False
@@ -460,8 +461,6 @@ class Attention(torch.autograd.Function):
             heads,  # heads
             size_m,  # size_m
             size_n,  # size_n
-            size_m_cache_key,  # size_m_cache_key
-            size_n_cache_key,  # size_n_cache_key
             q,  # Q
             k,  # K
             v,  # V
@@ -476,10 +475,18 @@ class Attention(torch.autograd.Function):
             *attention_mask.stride() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, size_m, size_k)
             torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,  # min_clamp_value
             *attention_mask.size() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, size_m, size_k)
+            *tmp.size(),  # (batch, heads, size_m)
             HAS_MASK,  # HAS_MASK
             IS_MATRIX_MASK,  # IS_MATRIX_MASK
             is_causal,  # IS_CAUSAL
             dhead,  # BLOCK_DHEAD
+
+            BLOCK_M,  # BLOCK_M
+            BLOCK_N,  # BLOCK_N
+            NEED_LOAD_MASK_SIZE_M,  # NEED_LOAD_MASK_SIZE_M
+            NEED_LOAD_MASK_SIZE_N,  # NEED_LOAD_MASK_SIZE_N
+            num_stages=1,
+            num_warps=4,
         )
         ctx.save_for_backward(q, k, v, output)
         return output
