@@ -115,11 +115,12 @@ def _fwd_kernel(
     attention_mask_m_stride,
     attention_mask_k_stride,
     min_clamp_value,
-    MASK_BATCH_SIZE: tl.constexpr,
-    MASK_HEAD_SIZE: tl.constexpr,
-    MASK_M_SIZE: tl.constexpr,
-    MASK_K_SIZE: tl.constexpr,
+    mask_batch_size,
+    mask_head_size,
+    mask_m_size,
+    mask_k_size,
     HAS_MASK: tl.constexpr,
+    IS_MATRIX_MASK: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
     BLOCK_DHEAD: tl.constexpr,
     BLOCK_M: tl.constexpr,  # this parameter and below are managed by the autotune and need to be at the end
@@ -185,10 +186,10 @@ def _fwd_kernel(
     @param attention_mask_head_stride: matrix mask stride for head dimension
     @param attention_mask_m_stride: matrix mask stride for rows
     @param attention_mask_k_stride: matrix mask stride for columns
-    @param MASK_BATCH_SIZE: matrix mask size for batch dimension
-    @param MASK_HEAD_SIZE: matrix mask size for head dimension
-    @param MASK_M_SIZE: matrix mask size for rows
-    @param MASK_K_SIZE: matrix mask size for columns
+    @param mask_batch_size: matrix mask size for batch dimension
+    @param mask_head_size: matrix mask size for head dimension
+    @param mask_m_size: matrix mask size for rows (equal to size_m)
+    @param mask_k_size: matrix mask size for columns (equal to size_n)
     @param HAS_MASK: whether the mask is applied
     @param IS_CAUSAL: whether the mask is applied
     @param BLOCK_DHEAD: number of columns per head
@@ -272,11 +273,11 @@ def _fwd_kernel(
 
     if HAS_MASK:
         mask_batch_idx = (current_batch_idx,)
-        if MASK_BATCH_SIZE == 1:
+        if mask_batch_size == 1:
             mask_batch_idx = 0
 
         mask_head_idx = current_head_idx
-        if MASK_HEAD_SIZE == 1:
+        if mask_head_size == 1:
             mask_head_idx = 0
 
         offs_base_mask = mask_batch_idx * attention_mask_batch_stride + mask_head_idx * attention_mask_head_stride
@@ -308,18 +309,18 @@ def _fwd_kernel(
         if HAS_MASK:
             # we assume mask has a vector shape
             offs_mask = offs_base_mask + offs_n[None, :] * attention_mask_k_stride
-            if MASK_M_SIZE != 1:  # mask has a square shape, we load (BLOCK_M, BLOCK_N) elements
+            if IS_MATRIX_MASK:  # mask has a matrix shape, we load (BLOCK_M, BLOCK_N) elements
                 offs_mask += offs_m[:, None] * attention_mask_m_stride
 
-            if NEED_LOAD_MASK_SIZE_N & MASK_M_SIZE == 1:  # mask has a vector shape need a load mask
-                attention_load_mask = offs_n[None, :] < size_n
-            if MASK_M_SIZE != 1:  # mask has a matrix shape
+            if NEED_LOAD_MASK_SIZE_N & (not IS_MATRIX_MASK):  # mask has a vector shape + need a load mask
+                attention_load_mask = offs_n[None, :] < mask_k_size
+            if IS_MATRIX_MASK:  # mask has a matrix shape
                 if NEED_LOAD_MASK_SIZE_M & (not NEED_LOAD_MASK_SIZE_N):  # load mask on M axis
-                    attention_load_mask = offs_m[:, None] < size_m
+                    attention_load_mask = offs_m[:, None] < mask_m_size
                 elif (not NEED_LOAD_MASK_SIZE_M) & NEED_LOAD_MASK_SIZE_N:  # load mask on N axis
-                    attention_load_mask = offs_n[None, :] < size_n
+                    attention_load_mask = offs_n[None, :] < mask_k_size
                 elif NEED_LOAD_MASK_SIZE_M & NEED_LOAD_MASK_SIZE_N:  # load mask on both axis
-                    attention_load_mask = (offs_n[None, :] < size_n) & (offs_m[:, None] < size_m)
+                    attention_load_mask = (offs_n[None, :] < mask_k_size) & (offs_m[:, None] < mask_m_size)
 
             if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
                 m = tl.load(
@@ -439,6 +440,7 @@ class Attention(torch.autograd.Function):
         tmp = torch.empty((batch * heads, math.ceil(size_m / 128) * 128), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
+        IS_MATRIX_MASK = False
         if attention_mask is not None:
             assert (
                 attention_mask.size(0) == batch or attention_mask.size(0) == 1
@@ -452,6 +454,7 @@ class Attention(torch.autograd.Function):
             assert attention_mask.size(3) == size_n, "Last size of mask must broadcast on QK^t"
 
             HAS_MASK = True
+            IS_MATRIX_MASK = attention_mask.size(2) != 1
 
         _fwd_kernel[grid](  # can't use name args because of the way autotune is implemented :-(
             heads,  # heads
@@ -466,32 +469,15 @@ class Attention(torch.autograd.Function):
             attention_mask,  # attention_mask
             tmp,  # TMP
             output,  # output
-            q.stride(0),  # q_batch_stride
-            q.stride(1),  # q_head_stride
-            q.stride(2),  # q_m_stride
-            q.stride(3),  # q_k_stride
-            k.stride(0),  # k_batch_stride
-            k.stride(1),  # k_head_stride
-            k.stride(2),  # k_n_stride
-            k.stride(3),  # k_k_stride
-            v.stride(0),  # v_batch_stride
-            v.stride(1),  # v_head_stride
-            v.stride(2),  # v_k_stride
-            v.stride(3),  # v_n_stride
-            output.stride(0),  # o_batch_stride
-            output.stride(1),  # o_head_stride
-            output.stride(2),  # o_m_stride
-            output.stride(3),  # o_n_stride
-            attention_mask.stride(0) if HAS_MASK else 0,  # attention_mask_batch_stride
-            attention_mask.stride(1) if HAS_MASK else 0,  # attention_mask_head_stride
-            attention_mask.stride(2) if HAS_MASK else 0,  # attention_mask_m_stride
-            attention_mask.stride(3) if HAS_MASK else 0,  # attention_mask_k_stride
+            *q.stride(),  # (batch, heads, size_m, size_k)
+            *k.stride(),  # # (batch, heads, size_n, size_k)
+            *v.stride(),  # (batch, heads, size_k, size_n)
+            *output.stride(),  # (batch, heads, size_m, size_n)
+            *attention_mask.stride() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, size_m, size_k)
             torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,  # min_clamp_value
-            attention_mask.size(0) if HAS_MASK else 0,  # MASK_BATCH_SIZE
-            attention_mask.size(1) if HAS_MASK else 0,  # MASK_HEAD_SIZE
-            attention_mask.size(2) if HAS_MASK else 0,  # MASK_M_SIZE
-            attention_mask.size(3) if HAS_MASK else 0,  # MASK_K_SIZE
+            *attention_mask.size() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, size_m, size_k)
             HAS_MASK,  # HAS_MASK
+            IS_MATRIX_MASK,  # IS_MATRIX_MASK
             is_causal,  # IS_CAUSAL
             dhead,  # BLOCK_DHEAD
         )
