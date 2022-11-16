@@ -22,6 +22,9 @@ from conftest import assert_all_close, set_seed
 
 from kernl.implementations.attention import attention_forward, attention_reference
 
+from src.kernl.implementations.attention_split_1 import attention_split_1_reference, attention_split_1_forward
+from src.kernl.implementations.attention_split_2 import attention_split_2_forward
+from src.kernl.implementations.cuda_graph import cuda_graphs_wrapper
 
 implementations = {
     "triton": lambda q, k, v, output, sm_scale, is_causal, attention_mask: attention_forward(
@@ -34,11 +37,11 @@ implementations = {
 
 
 def generate_broadcast_mask(
-    batch: int, heads: int, seq_length: int, dhead: int, dtype: torch.Tensor = torch.float32
+        batch: int, heads: int, seq_length: int, dhead: int, dtype: torch.Tensor = torch.float32
 ) -> torch.Tensor:
     attention_mask = (
-        torch.randint(1, seq_length, (batch,), device="cuda")[:, None]
-        > torch.arange(0, seq_length, device="cuda")[None, :]
+            torch.randint(1, seq_length, (batch,), device="cuda")[:, None]
+            > torch.arange(0, seq_length, device="cuda")[None, :]
     )
     attention_mask = attention_mask.to(dtype)
     attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
@@ -47,7 +50,7 @@ def generate_broadcast_mask(
 
 
 def generate_bias_mask(
-    batch: int, heads: int, seq_length: int, dhead: int, dtype: torch.Tensor = torch.float32
+        batch: int, heads: int, seq_length: int, dhead: int, dtype: torch.Tensor = torch.float32
 ) -> torch.Tensor:
     return torch.rand((batch, heads, seq_length, seq_length), dtype=dtype, device="cuda")
 
@@ -73,12 +76,12 @@ def generate_none_mask(*_) -> None:
 )
 @pytest.mark.parametrize("implementation", implementations.keys())
 def test_benchmark_masked(
-    benchmark,
-    shape: (int, int, int, int),
-    implementation: Callable,
-    mask_fn: Callable,
-    dtype: torch.dtype,
-    is_causal: bool,
+        benchmark,
+        shape: (int, int, int, int),
+        implementation: Callable,
+        mask_fn: Callable,
+        dtype: torch.dtype,
+        is_causal: bool,
 ):
     batch, heads, seq_length, dhead = shape
 
@@ -144,3 +147,74 @@ def test_cross_attention():
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     assert_all_close(a=output, b=expected, atol=1e-2)
+
+@set_seed()
+def test_cross_attention_split_1():
+    q = torch.rand((8, 1, 1, 64), dtype=torch.float16, device="cuda")
+    k = torch.rand((8, 1, 2048, 64), dtype=torch.float16, device="cuda")
+    v = torch.rand_like(k)
+    mask = None
+    sm_scale = 1.0
+
+    expected_blocks, expected_maximums, expected_sums = attention_split_1_reference(q, k, v, sm_scale, attention_mask=mask, is_causal=False)
+
+    blocks, maximums, sums = attention_split_1_forward(q, k, v, sm_scale=sm_scale, attention_mask=mask, is_causal=False)
+
+    assert_all_close(a=expected_maximums, b=maximums, atol=1e-2)
+    assert_all_close(a=expected_blocks, b=blocks, atol=1e-2)
+    assert_all_close(a=expected_sums, b=sums, atol=1e-2)
+
+@set_seed()
+def test_cross_attention_split_2():
+    q = torch.rand((8, 1, 1, 64), dtype=torch.float16, device="cuda")
+    k = torch.rand((8, 1, 2048, 64), dtype=torch.float16, device="cuda")
+    v = torch.rand_like(k)
+    mask = None
+    sm_scale = 1.0
+
+    expected = attention_reference(
+        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+    )
+
+    blocks, maximums, sums = attention_split_1_forward(q, k, v, sm_scale=sm_scale, attention_mask=mask, is_causal=False)
+    result = attention_split_2_forward(blocks, maximums, sums, torch.empty_like(q))
+    assert_all_close(a=expected, b=result, atol=1e-2)
+
+@set_seed()
+@pytest.mark.parametrize("implementation", ["torch", "optimized"])
+def test_benchmark_cross_attention_split(benchmark, implementation):
+
+    q = torch.rand((8, 1, 35, 64), dtype=torch.float16, device="cuda")
+    k = torch.rand((8, 1, 2048, 64), dtype=torch.float16, device="cuda")
+    v = torch.rand_like(k)
+    mask = None
+    sm_scale = 1.0
+
+    expected = attention_reference(
+        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+    )
+
+    if implementation == "torch":
+        def wrapper(q,k,v):
+            return attention_reference(
+                q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=1.0, is_causal=False, attention_mask=None
+            )
+
+        torch_implementation = cuda_graphs_wrapper(wrapper, (q, k, v))
+        result = benchmark(torch_implementation, q, k, v)[0]
+        # result = benchmark(attention_reference,
+        #     q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+        # )
+    else:
+        def fn(q, k, v, sm_scale=1.0, attention_mask=None, is_causal=False):
+            blocks, maximums, sums = attention_split_1_forward(q, k, v, sm_scale=sm_scale,
+                                                               attention_mask=attention_mask, is_causal=is_causal)
+            return attention_split_2_forward(blocks, maximums, sums, torch.empty_like(q))
+
+        optimize_implementation = cuda_graphs_wrapper(fn, (q, k, v))
+        result = benchmark(optimize_implementation, q, k, v)[0]
+        # result = benchmark(fn, q, k, v)
+
+    assert_all_close(a=expected, b=result, atol=1e-2)
+
+
