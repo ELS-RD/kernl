@@ -61,28 +61,32 @@ def attention_reference(
     return ref_out
 
 
-def get_block_shape(size_m: int, size_n: int) -> tuple[int, int]:
-    """
-    Naive approach to choose block shape for a given matrix dimensions.
-    Triton autotune would probably provide better results, but needs to be rewriten and is slower.
-    Several block shapes legal on CUDA do not work in this kernel.
-    Will need to retry later with MLIR backend.
-    """
-    if size_m <= 64 and size_n <= 64:
-        return 64, 64
-    elif size_m <= 64:
-        return 64, 128
-    elif size_n <= 64:
-        return 128, 64
-    else:
-        return 128, 128
-
-
+@triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=8),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 32, "BLOCK_N": 32}, num_stages=1, num_warps=1),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+    ],
+    key=["size_m_cache_key", "size_n_cache_key", "heads", "HAS_MASK", "IS_MATRIX_MASK", "IS_CAUSAL"],
+)
+@triton.heuristics(  # order should be the same than in function args, otherwise expect strange bugs
+    {
+        # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
+        "NEED_LOAD_MASK_SIZE_M": lambda args: args["size_m"] % args["BLOCK_M"] != 0,
+        "NEED_LOAD_MASK_SIZE_N": lambda args: args["size_n"] % args["BLOCK_N"] != 0,
+    }
+)
 @triton.jit
 def _fwd_kernel(
     heads,
     size_m,
     size_n,
+    size_m_cache_key,
+    size_n_cache_key,
     Q,
     K,
     V,
@@ -322,7 +326,7 @@ def _fwd_kernel(
                         offs_m[:, None] < attention_mask_m_size
                     )
 
-            if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
+            if (NEED_LOAD_MASK_SIZE_M & IS_MATRIX_MASK) | NEED_LOAD_MASK_SIZE_N:
                 m = tl.load(
                     attention_mask + offs_mask,
                     eviction_policy="evict_first",
@@ -434,13 +438,10 @@ class Attention(torch.autograd.Function):
         batch, heads, size_m, dhead = q.size()
         size_n = k.size(2)
 
-        BLOCK_M, BLOCK_N = get_block_shape(size_m, size_n)
-        NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
-        NEED_LOAD_MASK_SIZE_N = size_n % BLOCK_N != 0
-        grid = (triton.cdiv(size_m, BLOCK_M), batch * heads)
-
+        grid = lambda args: (triton.cdiv(size_m, args["BLOCK_M"]), batch * heads)  # noqa: E731
         # tmp should match size_m rounded to the next multiple of block_m
-        tmp = torch.empty((batch, heads, math.ceil(size_m / BLOCK_M) * BLOCK_M), device=q.device, dtype=torch.float32)
+        # if unknown because of autotune, we put 128 as a safe value
+        tmp = torch.empty((batch, heads, math.ceil(size_m / 128) * 128), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
         IS_MATRIX_MASK = False
@@ -463,6 +464,8 @@ class Attention(torch.autograd.Function):
             heads,  # heads
             size_m,  # size_m
             size_n,  # size_n
+            size_m // 32,  # size_m_cache_key
+            size_n // 32,  # size_n_cache_key
             q,  # Q
             k,  # K
             v,  # V
@@ -482,12 +485,6 @@ class Attention(torch.autograd.Function):
             IS_MATRIX_MASK,  # IS_MATRIX_MASK
             is_causal,  # IS_CAUSAL
             dhead,  # BLOCK_DHEAD
-            BLOCK_M,  # BLOCK_M
-            BLOCK_N,  # BLOCK_N
-            NEED_LOAD_MASK_SIZE_M,  # NEED_LOAD_MASK_SIZE_M
-            NEED_LOAD_MASK_SIZE_N,  # NEED_LOAD_MASK_SIZE_N
-            num_stages=1,
-            num_warps=4,
         )
         ctx.save_for_backward(q, k, v, output)
         return output
