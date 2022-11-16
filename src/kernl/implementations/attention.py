@@ -318,7 +318,9 @@ def _fwd_kernel(
                 elif (not NEED_LOAD_MASK_SIZE_M) & NEED_LOAD_MASK_SIZE_N:  # load mask on N axis
                     attention_load_mask = offs_n[None, :] < attention_mask_n_size
                 elif NEED_LOAD_MASK_SIZE_M & NEED_LOAD_MASK_SIZE_N:  # load mask on both axis
-                    attention_load_mask = (offs_n[None, :] < attention_mask_n_size) & (offs_m[:, None] < attention_mask_m_size)
+                    attention_load_mask = (offs_n[None, :] < attention_mask_n_size) & (
+                        offs_m[:, None] < attention_mask_m_size
+                    )
 
             if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
                 m = tl.load(
@@ -480,7 +482,6 @@ class Attention(torch.autograd.Function):
             IS_MATRIX_MASK,  # IS_MATRIX_MASK
             is_causal,  # IS_CAUSAL
             dhead,  # BLOCK_DHEAD
-
             BLOCK_M,  # BLOCK_M
             BLOCK_N,  # BLOCK_N
             NEED_LOAD_MASK_SIZE_M,  # NEED_LOAD_MASK_SIZE_M
