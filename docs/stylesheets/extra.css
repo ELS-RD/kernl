@@ -56,7 +56,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 
     /* shadows */
     --shadow-primary: 0 0 8px 0 rgba(0, 0, 0, 0.25);
-    --shadow-secondary: 0 0 8px 0 rgba(0, 0, 0, 0.15);
+    --shadow-secondary: 0 0 4px 0 rgba(0, 0, 0, 0.15);
 
     /*animations*/
     --hover-transform: transform .5s cubic-bezier(.075, .85, .175, 1);
@@ -420,28 +420,35 @@ div[class="md-search__scrollwrap"] {
     padding: 0 8px;
 }
 
-.knl-highlight figure {
+.knl-highlight__figure {
     flex: var(--highlight-content-flex);
-    margin: 0;
-    text-align: center;
 }
 
-.knl-highlight figure img {
-    width: 600px;
-    height: auto;
-    max-width: 100%;
-    padding: 8px;
+.knl-highlight__figure > figure {
+    margin: 0;
+    padding: var(--border-radius-md);
+    text-align: center;
     border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-secondary);
-}
-
-.knl-highlight figure img.withModal {
     transition: var(--hover-transform);
 }
 
-.knl-highlight figure img.withModal:hover {
+.knl-highlight__figure > figure:hover {
     cursor: pointer;
     transform: var(--hover-scale);
+}
+
+.knl-highlight__figure img {
+    height: auto;
+    max-width: 100%;
+}
+
+.knl-highlight__figure .efficiency {
+    width: 400px;
+}
+
+.knl-highlight__figure .performance {
+    width: 600px;
 }
 
 .knl-highlight__content {
@@ -651,14 +658,13 @@ div[class="md-search__scrollwrap"] {
         padding: 0 32px;
     }
 
-    .knl-highlight figure {
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-secondary);
-    }
-
-    .knl-highlight figure img {
-        box-shadow: none;
-    }
+    /*.knl-highlight figure {*/
+    /*    border-radius: var(--border-radius-md);*/
+    /*    box-shadow: var(--shadow-secondary);*/
+    /*}*/
+    /*.knl-highlight figure img {*/
+    /*    box-shadow: none;*/
+    /*}*/
 }
 
 @media screen and (max-width: 768px) {
