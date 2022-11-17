@@ -23,8 +23,7 @@ Each kernel is less than 200 lines of code, and is **easy to understand** and mo
 Please install it first.
 
 ```shell
-git clone https://github.com/ELS-RD/kernl && cd kernl
-pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 This project requires `Python` >= 3.9.
@@ -47,7 +46,7 @@ with torch.inference_mode(), torch.cuda.amp.autocast():
 
 For end-to-end use cases, you may want to check:
 
-* [XNLI classication with Robert](./tutorial/bert%20e2e.ipynb)
+* [XNLI classication with Roberta](./tutorial/bert%20e2e.ipynb)
 * [text generation with T5](./tutorial/t5%20e2e.ipynb)
 
 ## Test and Benchmark
