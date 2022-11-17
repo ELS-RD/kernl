@@ -26,7 +26,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 /* xl, extra-large: 1536px */
 :root {
     /* colors */
-    --color-primary: #4351E8;
+    --color-primary: #4351e8;
     --color-secondary: #F92672;
 
     --color-text-gray: #4D4D4D;
@@ -422,6 +422,7 @@ div[class="md-search__scrollwrap"] {
 
 .knl-highlight__figure {
     flex: var(--highlight-content-flex);
+    position: relative;
 }
 
 .knl-highlight__figure > figure {
@@ -433,7 +434,16 @@ div[class="md-search__scrollwrap"] {
     transition: var(--hover-transform);
 }
 
-.knl-highlight__figure > figure:hover {
+.knl-highlight__figure > figure.open-modal svg {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    top: 8px;
+    left: 8px;
+    fill: var(--color-primary);
+}
+
+.knl-highlight__figure > figure.open-modal:hover {
     cursor: pointer;
     transform: var(--hover-scale);
 }
@@ -443,11 +453,11 @@ div[class="md-search__scrollwrap"] {
     max-width: 100%;
 }
 
-.knl-highlight__figure .efficiency {
+.knl-highlight__figure img.efficiency {
     width: 400px;
 }
 
-.knl-highlight__figure .performance {
+.knl-highlight__figure img.performance {
     width: 600px;
 }
 
@@ -638,11 +648,12 @@ div[class="md-search__scrollwrap"] {
     height: 24px;
     cursor: pointer;
     border-radius: 4px;
-    background-color: lightgray;
+    stroke: var(--color-primary);
+    transition: var(--hover-transform);
 }
 
 .modal-content .close-button:hover {
-    background-color: darkgray;
+    transform: scale(1.250);
 }
 
 /* ----- ----- ----- ----- ----- */
