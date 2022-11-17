@@ -183,8 +183,7 @@ def test_cross_attention_split_2():
 @set_seed()
 @pytest.mark.parametrize("implementation", ["torch", "optimized"])
 def test_benchmark_cross_attention_split(benchmark, implementation):
-
-    q = torch.rand((8, 1, 35, 64), dtype=torch.float16, device="cuda")
+    q = torch.rand((8, 1, 1, 64), dtype=torch.float16, device="cuda")
     k = torch.rand((8, 1, 2048, 64), dtype=torch.float16, device="cuda")
     v = torch.rand_like(k)
     mask = None
@@ -195,26 +194,15 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
     )
 
     if implementation == "torch":
-        def wrapper(q,k,v):
-            return attention_reference(
-                q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=1.0, is_causal=False, attention_mask=None
-            )
-
-        torch_implementation = cuda_graphs_wrapper(wrapper, (q, k, v))
-        result = benchmark(torch_implementation, q, k, v)[0]
-        # result = benchmark(attention_reference,
-        #     q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
-        # )
+        result = benchmark(attention_reference,
+            q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+        )
     else:
         def fn(q, k, v, sm_scale=1.0, attention_mask=None, is_causal=False):
             blocks, maximums, sums = attention_split_1_forward(q, k, v, sm_scale=sm_scale,
                                                                attention_mask=attention_mask, is_causal=is_causal)
             return attention_split_2_forward(blocks, maximums, sums, torch.empty_like(q))
 
-        optimize_implementation = cuda_graphs_wrapper(fn, (q, k, v))
-        result = benchmark(optimize_implementation, q, k, v)[0]
-        # result = benchmark(fn, q, k, v)
+        result = benchmark(fn, q, k, v)
 
     assert_all_close(a=expected, b=result, atol=1e-2)
-
-
