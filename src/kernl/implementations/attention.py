@@ -61,16 +61,47 @@ def attention_reference(
     return ref_out
 
 
+# def prune(configs, named_args):
+#     pruned_configs = []
+#     size_m = named_args["size_m"]
+#     size_n = named_args["size_n"]
+#     for c in configs:
+#         kw = c.kwargs
+#         BLOCK_M, BLOCK_N = kw['BLOCK_M'], kw['BLOCK_N']
+#         if BLOCK_M > size_m and BLOCK_N > size_n:
+#             continue
+#         pruned_configs.append(c)
+#     return pruned_configs
+
+
 @triton.autotune(
     configs=[
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=8),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M": 32, "BLOCK_N": 32}, num_stages=1, num_warps=1),
         triton.Config({"BLOCK_M": 16, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 32}, num_stages=1, num_warps=1),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 64}, num_stages=1, num_warps=1),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 128}, num_stages=1, num_warps=1),
+
+        triton.Config({"BLOCK_M": 32, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 32, "BLOCK_N": 32}, num_stages=1, num_warps=1),
+        triton.Config({"BLOCK_M": 32, "BLOCK_N": 64}, num_stages=1, num_warps=1),
+        triton.Config({"BLOCK_M": 32, "BLOCK_N": 128}, num_stages=1, num_warps=1),
+
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 32}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128}, num_stages=1, num_warps=4),
+
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 16}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 32}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128}, num_stages=1, num_warps=8),
+
+        # triton.Config({"BLOCK_M": 128, "BLOCK_N": 256}, num_stages=1, num_warps=8),
+        # triton.Config({"BLOCK_M": 256, "BLOCK_N": 128}, num_stages=1, num_warps=8),
+        # triton.Config({"BLOCK_M": 256, "BLOCK_N": 256}, num_stages=1, num_warps=16),
     ],
+    # prune_configs_by={"early_config_prune": prune, "perf_model": None, "top_k": None},
     key=["size_m_cache_key", "size_n_cache_key", "heads", "HAS_MASK", "IS_MATRIX_MASK", "IS_CAUSAL"],
 )
 @triton.heuristics(  # order should be the same than in function args, otherwise expect strange bugs
@@ -264,7 +295,7 @@ def _fwd_kernel(
 
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
-    if NEED_LOAD_MASK_SIZE_M:
+    if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
         q = tl.load(ptrs_q, mask=offs_m[:, None] < size_m, other=0.0)
     else:
         q = tl.load(ptrs_q)
