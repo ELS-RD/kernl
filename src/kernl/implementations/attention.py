@@ -61,17 +61,28 @@ def attention_reference(
     return ref_out
 
 
-# def prune(configs, named_args):
-#     pruned_configs = []
-#     size_m = named_args["size_m"]
-#     size_n = named_args["size_n"]
-#     for c in configs:
-#         kw = c.kwargs
-#         BLOCK_M, BLOCK_N = kw['BLOCK_M'], kw['BLOCK_N']
-#         if BLOCK_M > size_m and BLOCK_N > size_n:
-#             continue
-#         pruned_configs.append(c)
-#     return pruned_configs
+def closest_power_of_2(n) -> (int, int):
+    """return the closest power of 2 for n, in 16-128 range"""
+    n = max(min(n, 128), 16)
+    min_range = 2 ** math.floor(math.log2(n))
+    max_range = 2 ** math.ceil(math.log2(n))
+    if not (n == min_range == max_range):
+        assert min_range <= n <= max_range
+        assert min_range * 2 == max_range
+    return min_range, max_range
+
+
+def prune(configs, named_args):
+    """remove block shapes unlikely to provide a speedup"""
+    pruned_configs = []
+    sizes_m = closest_power_of_2(named_args["size_m"])
+    sizes_n = closest_power_of_2(named_args["size_n"])
+    for c in configs:
+        if c.kwargs["BLOCK_M"] in sizes_m and c.kwargs["BLOCK_N"] in sizes_n:
+            pruned_configs.append(c)
+
+    assert len(pruned_configs) > 0
+    return pruned_configs
 
 
 @triton.autotune(
@@ -97,7 +108,7 @@ def attention_reference(
         # triton.Config({"BLOCK_M": 256, "BLOCK_N": 128}, num_stages=1, num_warps=8),
         # triton.Config({"BLOCK_M": 256, "BLOCK_N": 256}, num_stages=1, num_warps=16),
     ],
-    # prune_configs_by={"early_config_prune": prune, "perf_model": None, "top_k": None},
+    prune_configs_by={"early_config_prune": prune, "perf_model": None, "top_k": None},
     key=["size_m_cache_key", "size_n_cache_key", "heads", "HAS_MASK", "IS_MATRIX_MASK", "IS_CAUSAL"],
 )
 @triton.heuristics(  # order should be the same than in function args, otherwise expect strange bugs
