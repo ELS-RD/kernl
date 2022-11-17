@@ -62,18 +62,17 @@ def attention_reference(
 
 
 def closest_power_of_2(n) -> (int, int):
-    """return the closest power of 2 for n, in 16-128 range"""
+    """return the closests power of 2 for n, in 16-128 range"""
     n = max(min(n, 128), 16)
     min_range = 2 ** math.floor(math.log2(n))
     max_range = 2 ** math.ceil(math.log2(n))
-    if not (n == min_range == max_range):
-        assert min_range <= n <= max_range
-        assert min_range * 2 == max_range
+    assert min_range <= n <= max_range
+    assert (min_range * 2 == max_range) or (min_range == max_range)
     return min_range, max_range
 
 
 def prune(configs, named_args):
-    """remove block shapes unlikely to provide a speedup"""
+    """remove block shapes unlikely to provide optimal speedup"""
     pruned_configs = []
     sizes_m = closest_power_of_2(named_args["size_m"])
     sizes_n = closest_power_of_2(named_args["size_n"])
@@ -301,7 +300,8 @@ def _fwd_kernel(
     acc = tl.zeros((BLOCK_M, BLOCK_DHEAD), dtype=tl.float32)
 
     # load q, a block of full rows of matrix q
-    # it will stay in SRAM throughout
+    # there is a bug on size_n, it is not related to Q tensor but if a load mask is needed and BLOCK_N > size_n,
+    # output is wrong.
     if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
         q = tl.load(ptrs_q, mask=offs_m[:, None] < size_m, other=0.0)
     else:
