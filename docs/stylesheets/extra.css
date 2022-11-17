@@ -657,14 +657,6 @@ div[class="md-search__scrollwrap"] {
         flex-direction: column;
         padding: 0 32px;
     }
-
-    /*.knl-highlight figure {*/
-    /*    border-radius: var(--border-radius-md);*/
-    /*    box-shadow: var(--shadow-secondary);*/
-    /*}*/
-    /*.knl-highlight figure img {*/
-    /*    box-shadow: none;*/
-    /*}*/
 }
 
 @media screen and (max-width: 768px) {
