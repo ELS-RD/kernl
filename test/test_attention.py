@@ -188,21 +188,27 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
     v = torch.rand_like(k)
     mask = None
     sm_scale = 1.0
-
+    is_causal = False
+    p = torch.cuda.graph_pool_handle()
     expected = attention_reference(
-        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
+        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=is_causal, attention_mask=mask
     )
 
     if implementation == "torch":
-        result = benchmark(attention_reference,
-            q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
-        )
+        fn = lambda q1, k1, v1: attention_reference(q=q1, k=k1, v=v1, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=is_causal, attention_mask=mask)
+        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
+        r(q, k, v)[0]
+        _ = r(q, k, v)[0]
+        result = benchmark(r)[0]
     else:
-        def fn(q, k, v, sm_scale=1.0, attention_mask=None, is_causal=False):
+
+        def fn(q, k, v, sm_scale=1.0, attention_mask=mask, is_causal=is_causal):
             blocks, maximums, sums = attention_split_1_forward(q, k, v, sm_scale=sm_scale,
                                                                attention_mask=attention_mask, is_causal=is_causal)
             return attention_split_2_forward(blocks, maximums, sums, torch.empty_like(q))
 
-        result = benchmark(fn, q, k, v)
+        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
+        _ = r(q, k, v)[0]
+        result = benchmark(r)[0]
 
     assert_all_close(a=expected, b=result, atol=1e-2)

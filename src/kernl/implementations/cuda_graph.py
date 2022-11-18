@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-
+import os
 from typing import Callable, Union
 
 import torch
@@ -50,8 +50,9 @@ def cuda_graphs_wrapper(
         static_outputs = (static_outputs,)
 
     def run(*new_inputs):
-        assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
-        assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
+        if "PYTEST_CURRENT_TEST" not in os.environ:  # for benchmarks, we may want to avoid input copy overhead
+            assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
+            assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
         for dst, src in zip(static_inputs, new_inputs):
             dst.copy_(src)  # cuda graph can only read data from the same address
         graph.replay()
