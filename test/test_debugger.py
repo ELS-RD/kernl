@@ -382,7 +382,7 @@ def test_layernorm():
             a = tl.load(A + cols, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
             a_hat = (a - mean) * rstd
             out = a_hat * weight + bias
-            # # write-back
+            # write-back
             tl.store(Out + cols, out, mask=mask)
 
     while tl.has_next():
@@ -484,7 +484,7 @@ def test_layernorm_welford_variance():
             a = tl.load(A + cols, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
             a_hat = (a - mean) * rstd
             out = a_hat * weight + bias
-            # # write-back
+            # write-back
             tl.store(Out + cols, out, mask=mask)
 
     while tl.has_next():

@@ -20,7 +20,7 @@ import torch
 
 from conftest import assert_all_close, set_seed
 
-from kernl.implementations.attention import attention_forward, attention_reference
+from kernl.implementations.attention import attention_forward, attention_reference, closest_power_of_2
 
 
 implementations = {
@@ -59,9 +59,9 @@ def generate_none_mask(*_) -> None:
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(bs, 48, seq_l, 64) for bs in [1, 8, 32, 64] for seq_l in [16, 33, 64, 128, 256, 257, 384, 512]]
-    + [(8, 1, 1500, 64), (32, 48, 32, 64)],
-    ids=lambda x: f"shape=(batch={x[0]},heads={x[1]},seq_length={x[2]},dhead={x[3]})",
+    [(bs, 48, seq_l, 64) for bs in [1, 8, 32, 64] for seq_l in [8, 16, 32, 33, 64, 128, 256, 257, 384, 512]]
+    + [(8, 1, 1500, 64)],
+    ids=lambda x: f"shape(batch,heads,seq_len,dhead)={x[0]}x{x[1]}x{x[2]}x{x[3]}",
 )
 # fp32 not yet possible because of a bug in triton
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
@@ -144,3 +144,15 @@ def test_cross_attention():
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     assert_all_close(a=output, b=expected, atol=1e-2)
+
+
+def test_closest_power_of_2():
+    min_range = 16
+    max_range = 128
+    assert closest_power_of_2(1, min_range=min_range, max_range=max_range) == [8, 16, 32]
+    assert closest_power_of_2(20, min_range=min_range, max_range=max_range) == [16, 32]
+    assert closest_power_of_2(257, min_range=min_range, max_range=max_range) == [64, 128, 256]
+    assert closest_power_of_2(20, min_range=min_range, max_range=max_range) == [16, 32]
+    min_range = 4
+    max_range = 128
+    assert closest_power_of_2(1, min_range=min_range, max_range=max_range) == [2, 4, 8]
