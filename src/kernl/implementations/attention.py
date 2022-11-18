@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 import math
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import torch
 import triton
@@ -61,14 +61,13 @@ def attention_reference(
     return ref_out
 
 
-def closest_power_of_2(n) -> (int, int):
+def closest_power_of_2(n) -> List[int]:
     """return the closests power of 2 for n, in 16-128 range"""
     n = max(min(n, 128), 16)
-    min_range = 2 ** math.floor(math.log2(n))
-    max_range = 2 ** math.ceil(math.log2(n))
-    assert min_range <= n <= max_range
-    assert (min_range * 2 == max_range) or (min_range == max_range)
-    return min_range, max_range
+    min_range = math.floor(math.log2(n - 1))
+    max_range = math.ceil(math.log2(n + 1))
+    ranges = [2**i for i in range(min_range, max_range + 1)]
+    return ranges
 
 
 def prune(configs, named_args):
