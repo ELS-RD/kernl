@@ -20,7 +20,7 @@ import torch
 
 from conftest import assert_all_close, set_seed
 
-from kernl.implementations.attention import attention_forward, attention_reference
+from kernl.implementations.attention import attention_forward, attention_reference, closest_power_of_2
 
 
 implementations = {
@@ -144,3 +144,15 @@ def test_cross_attention():
     output = torch.empty_like(q)
     attention_forward(q, k, v, output, sm_scale, attention_mask=mask)
     assert_all_close(a=output, b=expected, atol=1e-2)
+
+
+def test_closest_power_of_2():
+    min_range = 16
+    max_range = 128
+    assert closest_power_of_2(1, min_range=min_range, max_range=max_range) == [8, 16, 32]
+    assert closest_power_of_2(20, min_range=min_range, max_range=max_range) == [16, 32]
+    assert closest_power_of_2(257, min_range=min_range, max_range=max_range) == [64, 128, 256]
+    assert closest_power_of_2(20, min_range=min_range, max_range=max_range) == [16, 32]
+    min_range = 4
+    max_range = 128
+    assert closest_power_of_2(1, min_range=min_range, max_range=max_range) == [2, 4, 8]
