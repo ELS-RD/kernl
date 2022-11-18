@@ -511,7 +511,7 @@ class Attention(torch.autograd.Function):
             tmp,  # TMP
             output,  # output
             *q.stride(),  # (batch, heads, size_m, size_k)
-            *k.stride(),  # # (batch, heads, size_n, size_k)
+            *k.stride(),  # (batch, heads, size_n, size_k)
             *v.stride(),  # (batch, heads, size_k, size_n)
             *output.stride(),  # (batch, heads, size_m, size_n)
             *attention_mask.stride() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, size_m, size_k)
