@@ -212,9 +212,12 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
     )
     output = torch.empty_like(q)
     if implementation == "torch":
-        fn = lambda q1, k1, v1: attention_reference(
-            q=q1, k=k1, v=v1, output=output, sm_scale=sm_scale, is_causal=is_causal, attention_mask=mask
-        )
+
+        def fn(q1, k1, v1):
+            attention_reference(
+                q=q1, k=k1, v=v1, output=output, sm_scale=sm_scale, is_causal=is_causal, attention_mask=mask
+            )
+
         r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
         _ = r(q, k, v)[0]
         result = benchmark(r)[0]

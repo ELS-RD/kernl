@@ -12,7 +12,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-import math
 from typing import Optional, Union
 
 import torch
@@ -61,7 +60,6 @@ def _fwd_kernel_split_1(
     heads,
     size_m,
     size_n,
-    size_m_rounded,
     Q,
     K,
     V,
@@ -388,10 +386,6 @@ class AttentionSplit1(torch.autograd.Function):
         )
 
         grid = (n_divisions, triton.cdiv(size_m, BLOCK_M), batch * heads)
-        print(grid)
-        # following 2 ops required to fix race condition in Triton compiler
-        size_m_rounded = math.ceil(size_m / BLOCK_M) * BLOCK_M
-        # tmp = torch.empty((batch * heads, size_m_rounded), device=q.device, dtype=torch.float32)
 
         maximums = torch.zeros(
             (
@@ -433,7 +427,6 @@ class AttentionSplit1(torch.autograd.Function):
             heads=heads,
             size_m=size_m,
             size_n=size_n,
-            size_m_rounded=size_m_rounded,
             Q=q,
             K=k,
             V=v,
