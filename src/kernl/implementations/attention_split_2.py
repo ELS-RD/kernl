@@ -20,38 +20,35 @@ import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
 
+
 @triton.jit
 def _fwd_kernel_split_2(
     heads_count,
     intermediates_count,
     size_m,
-
     input,
     input_batch_stride,
     input_head_stride,
     input_intermediate_stride,
     input_m_stride,
     input_n_stride,
-
     maximums,
     maximums_batch_stride,
     maximums_head_stride,
     maximums_intermediate_stride,
     maximums_m_stride,
-
     sums,
     sums_batch_stride,
     sums_head_stride,
     sums_intermediate_stride,
     sums_m_stride,
-
     output,
     output_batch_stride,
     output_head_stride,
     output_m_stride,
     output_n_stride,
     BLOCK_M: tl.constexpr,
-    BLOCK_DHEAD: tl.constexpr
+    BLOCK_DHEAD: tl.constexpr,
 ):
     m_block_idx = tl.program_id(0)
     head_idx = tl.program_id(1)
@@ -68,28 +65,28 @@ def _fwd_kernel_split_2(
     d_i = tl.zeros((BLOCK_M,), dtype=tl.float32)
     for n_intermediate_idx in range(0, intermediates_count):
         offs_input = (
-                current_batch_idx * input_batch_stride
-                + current_head_idx * input_head_stride
-                + n_intermediate_idx * input_intermediate_stride
-                + (offs_m[:, None] * input_m_stride + range_offs_d[None, :] * input_n_stride)
+            current_batch_idx * input_batch_stride
+            + current_head_idx * input_head_stride
+            + n_intermediate_idx * input_intermediate_stride
+            + (offs_m[:, None] * input_m_stride + range_offs_d[None, :] * input_n_stride)
         )
         ptrs_input = input + offs_input
         numerators = tl.load(ptrs_input, mask=offs_m[:, None] < size_m, other=0.0)
 
         offs_sums = (
-                current_batch_idx * sums_batch_stride
-                + current_head_idx * sums_head_stride
-                + n_intermediate_idx * sums_intermediate_stride
-                + offs_m * sums_m_stride
+            current_batch_idx * sums_batch_stride
+            + current_head_idx * sums_head_stride
+            + n_intermediate_idx * sums_intermediate_stride
+            + offs_m * sums_m_stride
         )
         ptrs_sums = sums + offs_sums
         d_j = tl.load(ptrs_sums, mask=offs_m < size_m, other=0.0)
 
         offs_maximums = (
-                current_batch_idx * maximums_batch_stride
-                + current_head_idx * maximums_head_stride
-                + n_intermediate_idx * maximums_intermediate_stride
-                + offs_m * maximums_m_stride
+            current_batch_idx * maximums_batch_stride
+            + current_head_idx * maximums_head_stride
+            + n_intermediate_idx * maximums_intermediate_stride
+            + offs_m * maximums_m_stride
         )
         ptrs_maximums = maximums + offs_maximums
         l_j = tl.load(ptrs_maximums, mask=offs_m < size_m, other=0.0)
@@ -110,12 +107,13 @@ def _fwd_kernel_split_2(
         l_i = l_new
 
     offs_output = (
-            current_batch_idx * output_batch_stride
-            + current_head_idx * output_head_stride
-            + (offs_m[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
+        current_batch_idx * output_batch_stride
+        + current_head_idx * output_head_stride
+        + (offs_m[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
     )
     ptrs_output = output + offs_output
     tl.store(ptrs_output, acc, mask=offs_m[:, None] < size_m)
+
 
 class AttentionSplit2(torch.autograd.Function):
     @staticmethod

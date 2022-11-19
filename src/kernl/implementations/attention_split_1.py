@@ -21,6 +21,7 @@ import triton.language as tl
 from torch.autograd.function import FunctionCtx
 from torch.cuda.amp import custom_fwd
 
+
 def attention_split_1_reference(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -54,6 +55,7 @@ def attention_split_1_reference(
 
     return blocks, maximums, sums
 
+
 @triton.jit
 def _fwd_kernel_split_1(
     heads,
@@ -85,12 +87,10 @@ def _fwd_kernel_split_1(
     sums_head_stride,
     sums_step_stride,
     sums_m_stride,
-
     maximums_batch_stride,
     maximums_head_stride,
     maximums_step_stride,
     maximums_m_stride,
-
     o_batch_stride,
     o_head_stride,
     o_step_stride,
@@ -180,8 +180,8 @@ def _fwd_kernel_split_1(
     @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
     """
     # Index of the block on M axis (M axis is the rows of matrix K)
-    m_block_idx = tl.program_id(0)
-    n_block_idx = tl.program_id(1)
+    n_block_idx = tl.program_id(0)
+    m_block_idx = tl.program_id(1)
     head_idx = tl.program_id(2)
 
     # offsets
@@ -223,9 +223,9 @@ def _fwd_kernel_split_1(
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
     if NEED_LOAD_MASK_SIZE_M:
-        q = tl.load(ptrs_q, mask=offs_m[:, None] < size_m, eviction_policy="evict_last", other=0.0)
+        q = tl.load(ptrs_q, mask=offs_m[:, None] < size_m, eviction_policy="", other=0.0)
     else:
-        q = tl.load(ptrs_q, eviction_policy="evict_last")
+        q = tl.load(ptrs_q, eviction_policy="")
 
     if HAS_MASK:
         mask_batch_idx = (current_batch_idx,)
@@ -245,9 +245,10 @@ def _fwd_kernel_split_1(
     # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
     if NEED_LOAD_MASK_SIZE_N:
         load_mask = offs_n[:, None] < size_n
-        k = tl.load(ptrs_k + block_start_index_n * k_n_stride, mask=load_mask, eviction_policy="evict_first", other=0.0)
+        k = tl.load(ptrs_k + block_start_index_n * k_n_stride, mask=load_mask, eviction_policy="", other=0.0)
     else:
-        k = tl.load(ptrs_k + block_start_index_n * k_n_stride, eviction_policy="evict_first")
+        k = tl.load(ptrs_k + block_start_index_n * k_n_stride, eviction_policy="")
+
     qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
     # required to fix a Triton compiler bug, if not done, there is a precision issue
@@ -277,14 +278,14 @@ def _fwd_kernel_split_1(
         if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
             m = tl.load(
                 attention_mask + offs_mask,
-                eviction_policy="evict_first",
+                eviction_policy="",
                 mask=attention_load_mask,
                 other=float("-inf"),
             )
         else:
             m = tl.load(
                 attention_mask + offs_mask,
-                eviction_policy="evict_first",
+                eviction_policy="",
             )
         # Avoids NaN
         m = tl.where(m == float("-inf"), min_clamp_value, m)
@@ -295,24 +296,23 @@ def _fwd_kernel_split_1(
     d_j = tl.sum(numerators, 1)
 
     offs_maximums = (
-            current_batch_idx * maximums_batch_stride
-            + current_head_idx * maximums_head_stride
-            + n_block_idx * maximums_step_stride
-            + offs_m * maximums_m_stride
+        current_batch_idx * maximums_batch_stride
+        + current_head_idx * maximums_head_stride
+        + n_block_idx * maximums_step_stride
+        + offs_m * maximums_m_stride
     )
     maximums_ptrs = maximums + offs_maximums
     tl.store(maximums_ptrs, l_j, mask=offs_m < size_m)
 
     offs_sums = (
-            current_batch_idx * sums_batch_stride
-            + current_head_idx * sums_head_stride
-            + n_block_idx * sums_step_stride
-            + offs_m * sums_m_stride
+        current_batch_idx * sums_batch_stride
+        + current_head_idx * sums_head_stride
+        + n_block_idx * sums_step_stride
+        + offs_m * sums_m_stride
     )
     sums_ptrs = sums + offs_sums
     tl.store(sums_ptrs, d_j, mask=offs_m < size_m)
 
-    # We now apply the last operation, the multiplication by a block of matrix V
     if NEED_LOAD_MASK_SIZE_N:
         load_mask = offs_n[:, None] < size_n  # repeated otherwise triton segfault
         v = tl.load(ptrs_v + block_start_index_n * v_k_stride, mask=load_mask, other=0.0, eviction_policy="evict_first")
@@ -329,6 +329,7 @@ def _fwd_kernel_split_1(
     )
 
     out_ptrs = output + off_o
+
     if NEED_LOAD_MASK_SIZE_M:
         out_store_mask = offs_m[:, None] < size_m
         tl.store(out_ptrs, result, mask=out_store_mask)
@@ -375,22 +376,43 @@ class AttentionSplit1(torch.autograd.Function):
         batch, heads, size_m, dhead = q.size()
         size_n = k.size(2)
 
-        BLOCK_M = 64
+        BLOCK_M = 16
         BLOCK_N = 128
         # load mask is needed if one dim (size_n / size_m) of tensors do not align with block size
         NEED_LOAD_MASK_SIZE_N = size_n % BLOCK_N != 0
         NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
 
         n_divisions = triton.cdiv(size_n, BLOCK_N)
-        output = torch.empty(q.size(0), q.size(1), n_divisions, q.size(2), q.size(3), dtype=torch.float16, device="cuda")
+        output = torch.empty(
+            q.size(0), q.size(1), n_divisions, q.size(2), q.size(3), dtype=torch.float16, device="cuda"
+        )
 
-        grid = (triton.cdiv(size_m, BLOCK_M), n_divisions, batch * heads)
+        grid = (n_divisions, triton.cdiv(size_m, BLOCK_M), batch * heads)
+        print(grid)
         # following 2 ops required to fix race condition in Triton compiler
         size_m_rounded = math.ceil(size_m / BLOCK_M) * BLOCK_M
         # tmp = torch.empty((batch * heads, size_m_rounded), device=q.device, dtype=torch.float32)
 
-        maximums = torch.zeros((batch, heads, n_divisions, size_m,), device=q.device, dtype=torch.float32)
-        sums = torch.zeros((batch, heads, n_divisions, size_m,), device=q.device, dtype=torch.float32)
+        maximums = torch.zeros(
+            (
+                batch,
+                heads,
+                n_divisions,
+                size_m,
+            ),
+            device=q.device,
+            dtype=torch.float32,
+        )
+        sums = torch.zeros(
+            (
+                batch,
+                heads,
+                n_divisions,
+                size_m,
+            ),
+            device=q.device,
+            dtype=torch.float32,
+        )
 
         HAS_MASK = False
         if attention_mask is not None:
@@ -433,17 +455,14 @@ class AttentionSplit1(torch.autograd.Function):
             v_head_stride=v.stride(1),
             v_k_stride=v.stride(2),
             v_n_stride=v.stride(3),
-
             sums_batch_stride=sums.stride(0),
             sums_head_stride=sums.stride(1),
             sums_step_stride=sums.stride(2),
             sums_m_stride=sums.stride(3),
-
             maximums_batch_stride=maximums.stride(0),
             maximums_head_stride=maximums.stride(1),
             maximums_step_stride=maximums.stride(2),
             maximums_m_stride=maximums.stride(3),
-
             o_batch_stride=output.stride(0),
             o_head_stride=output.stride(1),
             o_step_stride=output.stride(2),
@@ -465,8 +484,8 @@ class AttentionSplit1(torch.autograd.Function):
             BLOCK_M=BLOCK_M,
             BLOCK_N=BLOCK_N,
             BLOCK_DHEAD=dhead,
-            num_warps=4,
-            num_stages=1,
+            num_warps=1,
+            num_stages=8,
         )
         ctx.save_for_backward(q, k, v, output)
         return output, maximums, sums
