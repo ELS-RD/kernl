@@ -207,7 +207,6 @@ def attention_single_query(q, k, v, sm_scale):
     scores = torch.einsum("bhd,bhsd->bhs", q * sm_scale, k)
     attn = torch.softmax(scores, dim=-1)
     out = torch.einsum("bhs,bhsd->bhd", attn, v)
-    out = rearrange(out, "b h d -> b h 1 d")
     return out
 
 
@@ -262,6 +261,7 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
         r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
         _ = r(q, k, v)[0]
         result = benchmark(r)[0]
+        result = rearrange(result, "b h d -> b h 1 d")
     else:
         raise ValueError(f"Unknown implementation {implementation}")
 
