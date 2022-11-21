@@ -17,6 +17,7 @@ from typing import Callable
 
 import pytest
 import torch
+from einops import rearrange
 
 from conftest import assert_all_close, set_seed
 from src.kernl.implementations.attention_split_1 import attention_split_1_forward, attention_split_1_reference
@@ -197,8 +198,21 @@ def test_cross_attention_split_2():
     assert_all_close(a=expected, b=result, atol=1e-2)
 
 
+def attention_single_query(q, k, v, sm_scale):
+    """
+    q: (batch, nheads, 1, headdim)
+    k, v: (batch, nheads, seqlen, headdim)
+    """
+    q = rearrange(q, "b h 1 d -> b h d")
+    scores = torch.einsum("bhd,bhsd->bhs", q * sm_scale, k)
+    attn = torch.softmax(scores, dim=-1)
+    out = torch.einsum("bhs,bhsd->bhd", attn, v)
+    out = rearrange(out, "b h d -> b h 1 d")
+    return out
+
+
 @set_seed()
-@pytest.mark.parametrize("implementation", ["torch", "optimized", "classic"])
+@pytest.mark.parametrize("implementation", ["torch", "optimized", "classic", "tridao"])
 def test_benchmark_cross_attention_split(benchmark, implementation):
     q = torch.rand((5, 20, 1, 64), dtype=torch.float16, device="cuda")
     k = torch.rand((5, 20, 1500, 64), dtype=torch.float16, device="cuda")
@@ -214,7 +228,7 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
     if implementation == "torch":
 
         def fn(q1, k1, v1):
-            attention_reference(
+            return attention_reference(
                 q=q1, k=k1, v=v1, output=output, sm_scale=sm_scale, is_causal=is_causal, attention_mask=mask
             )
 
@@ -232,7 +246,7 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
         r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
         _ = r(q, k, v)[0]
         result = benchmark(r)[0]
-    else:
+    elif implementation == "classic":
 
         def fn(q, k, v, sm_scale=1.0, attention_mask=mask, is_causal=is_causal):
             return attention_forward(q, k, v, output, sm_scale, attention_mask=attention_mask, is_causal=is_causal)
@@ -240,4 +254,15 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
         r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
         _ = r(q, k, v)[0]
         result = benchmark(r)[0]
+    elif implementation == "tridao":
+
+        def fn(q, k, v):
+            return attention_single_query(q, k, v, sm_scale=sm_scale)
+
+        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
+        _ = r(q, k, v)[0]
+        result = benchmark(r)[0]
+    else:
+        raise ValueError(f"Unknown implementation {implementation}")
+
     assert_all_close(a=expected, b=result, atol=1e-2)
