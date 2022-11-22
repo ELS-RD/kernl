@@ -9,7 +9,7 @@ torch.manual_seed(123)
 @triton.jit
 def kernel(
     M,
-    O,
+    Out,
     matrix_stridex,
     matrix_stridey,
     out_stridex,
@@ -21,7 +21,7 @@ def kernel(
     d_head_arange = tl.arange(0, D_HEAD)
     # transpose
     matrix_ptr = M + d_head_arange[None, :] * matrix_stridey + size_m_arange[:, None] * matrix_stridex
-    out_ptr = O + d_head_arange[None, :] * out_stridex + size_m_arange[:, None] * out_stridey
+    out_ptr = Out + d_head_arange[None, :] * out_stridex + size_m_arange[:, None] * out_stridey
     matrix = tl.load(matrix_ptr)
     tl.store(out_ptr, matrix)
 
