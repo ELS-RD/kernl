@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import builtins
-import copy
 import re
 import threading
 import time
@@ -11,18 +10,18 @@ from typing import Dict
 import torch
 import triton
 from triton import cdiv
+from triton.runtime.jit import KernelInterface, get_cuda_stream
 from triton.testing import do_bench
-from triton.runtime.jit import get_cuda_stream, KernelInterface
 
 
 class Autotuner(KernelInterface):
     def __init__(self, fn, arg_names, configs, key, signature, reset_to_zero, prune_configs_by: Dict = None):
-        '''
+        """
         :param prune_configs_by: a dict of functions that are used to prune configs, fields:
             'perf_model': performance model used to predicate running time with different configs, returns running time
             'top_k': number of configs to bench
             'prune_num_stages_by'(optional): a function used to prune num_stages. It take configs:List[Config] as its input, and returns pruned configs.
-        '''
+        """
         if not configs:
             self.configs = [Config(dict(), num_warps=4, num_stages=2)]
         else:
@@ -38,13 +37,14 @@ class Autotuner(KernelInterface):
             def _hook(args):
                 for i in self.reset_idx:
                     args[i].zero_()
+
             self.hook = _hook
         self.arg_names = arg_names
         # prune configs
         if prune_configs_by:
-            perf_model, top_k = prune_configs_by['perf_model'], prune_configs_by['top_k']
-            if 'early_config_prune' in prune_configs_by:
-                early_config_prune = prune_configs_by['early_config_prune']
+            perf_model, top_k = prune_configs_by["perf_model"], prune_configs_by["top_k"]
+            if "early_config_prune" in prune_configs_by:
+                early_config_prune = prune_configs_by["early_config_prune"]
         else:
             perf_model, top_k, early_config_prune = None, None, None
         self.perf_model, self.configs_top_k = perf_model, top_k
@@ -75,7 +75,8 @@ class Autotuner(KernelInterface):
                 stream=stream,
                 **current,
             )
-            #self.fn.run(*args, num_warps=config.num_warps, num_stages=config.num_stages, **current)
+            # self.fn.run(*args, num_warps=config.num_warps, num_stages=config.num_stages, **current)
+
         return do_bench(kernel_call)
 
     def precompile(self):
@@ -88,10 +89,7 @@ class Autotuner(KernelInterface):
         """Ahead of time compile a given autotuner config."""
         compile_meta = dict()
         compile_meta["constants"] = dict()
-        config = namedtuple("instance_descriptor", [
-            "divisible_by_16", "equal_to_1"])(
-            tuple(range(4)),
-            ())
+        config = namedtuple("instance_descriptor", ["divisible_by_16", "equal_to_1"])(tuple(range(4)), ())
         compile_meta["configs"] = [config]
         for k, v in cfg.kwargs.items():
             compile_meta["constants"][self.fn.arg_names.index(k)] = v
@@ -107,11 +105,7 @@ class Autotuner(KernelInterface):
             **compile_meta,
         )
 
-        call_args = [
-            arg
-            for i, arg in enumerate(self.fn.arg_names)
-            if i not in self.fn.constexprs
-        ]
+        call_args = [arg for i, arg in enumerate(self.fn.arg_names) if i not in self.fn.constexprs]
         def_args = list(self.fn.arg_names)
         while def_args and def_args[-1] in cfg.kwargs:
             def_args.pop()
@@ -147,8 +141,7 @@ class Autotuner(KernelInterface):
                 # prune configs
                 pruned_configs = self.prune_configs(kwargs)
                 bench_start = time.time()
-                timings = {config: self.bench(*args, config=config, **kwargs)
-                           for config in pruned_configs}
+                timings = {config: self.bench(*args, config=config, **kwargs) for config in pruned_configs}
                 bench_end = time.time()
                 self.bench_time = bench_end - bench_start
                 self.cache[key] = builtins.min(timings, key=timings.get)
@@ -165,7 +158,7 @@ class Autotuner(KernelInterface):
             stream = get_cuda_stream(torch.cuda.current_device())
             result = launcher(
                 *args,
-                #grid=grid,
+                # grid=grid,
                 stream=stream,
             )
         except TypeError as e:
@@ -179,7 +172,7 @@ class Autotuner(KernelInterface):
 
         return result
 
-        #return self.fn.run(*args, num_warps=config.num_warps, num_stages=config.num_stages, **kwargs, **config.kwargs)
+        # return self.fn.run(*args, num_warps=config.num_warps, num_stages=config.num_stages, **kwargs, **config.kwargs)
 
     def prune_configs(self, kwargs):
         pruned_configs = self.configs
@@ -191,8 +184,13 @@ class Autotuner(KernelInterface):
                 top_k = int(len(self.configs) * top_k)
             if len(pruned_configs) > top_k:
                 est_timing = {
-                    config: self.perf_model(**self.nargs, **kwargs, **config.kwargs, num_stages=config.num_stages,
-                                            num_warps=config.num_warps)
+                    config: self.perf_model(
+                        **self.nargs,
+                        **kwargs,
+                        **config.kwargs,
+                        num_stages=config.num_stages,
+                        num_warps=config.num_warps,
+                    )
                     for config in pruned_configs
                 }
                 pruned_configs = sorted(est_timing.keys(), key=lambda x: est_timing[x])[:top_k]
@@ -269,10 +267,10 @@ class Config:
     def __str__(self):
         res = []
         for k, v in self.kwargs.items():
-            res.append(f'{k}: {v}')
-        res.append(f'num_warps: {self.num_warps}')
-        res.append(f'num_stages: {self.num_stages}')
-        return ', '.join(res)
+            res.append(f"{k}: {v}")
+        res.append(f"num_warps: {self.num_warps}")
+        res.append(f"num_stages: {self.num_stages}")
+        return ", ".join(res)
 
 
 def autotune(configs, key, signature, prune_configs_by=None, reset_to_zero=None):
@@ -309,6 +307,7 @@ def autotune(configs, key, signature, prune_configs_by=None, reset_to_zero=None)
     :param reset_to_zero: a list of argument names whose value will be reset to zero before evaluating any configs.
     :type reset_to_zero: list[str]
     """
+
     def decorator(fn):
         return Autotuner(fn, fn.arg_names, configs, key, signature, reset_to_zero, prune_configs_by)
 
@@ -316,7 +315,6 @@ def autotune(configs, key, signature, prune_configs_by=None, reset_to_zero=None)
 
 
 class Heuristics(KernelInterface):
-
     def __init__(self, fn, arg_names, values) -> None:
         self.fn = fn
         self.values = values
@@ -346,6 +344,7 @@ def heuristics(values):
                    each such function takes a list of positional arguments as input.
     .type values: dict[str, Callable[[list[Any]], Any]]
     """
+
     def decorator(fn):
         return Heuristics(fn, fn.arg_names, values)
 
