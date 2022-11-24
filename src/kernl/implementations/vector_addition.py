@@ -1,9 +1,17 @@
 import torch
 import triton
 import triton.language as tl
+from autotuner import autotune
 
 
-@triton.jit()
+@autotune(
+    configs=[
+        triton.Config({"BLOCK_SIZE": 128}, num_stages=3, num_warps=4),
+        triton.Config({"BLOCK_SIZE": 256}, num_stages=3, num_warps=4),
+    ],
+    key=["n_elements"],
+    signature={0: "*fp32", 1: "*fp32", 2: "*fp32", 3: "i32"},
+)
 def add_kernel(
     x_ptr,  # *Pointer* to first input vector
     y_ptr,  # *Pointer* to second input vector
@@ -45,7 +53,7 @@ def add(x: torch.Tensor, y: torch.Tensor):
     #  - each torch.tensor object is implicitly converted into a pointer to its first element.
     #  - `triton.jit`'ed functions can be index with a launch grid to obtain a callable GPU kernel
     #  - don't forget to pass meta-parameters as keywords arguments
-    add_kernel[grid](x, y, output, n_elements, BLOCK_SIZE=1024)
+    add_kernel[grid](x, y, output, n_elements)
     # We return a handle to z but, since `torch.cuda.synchronize()` hasn't been called, the kernel is still
     # running asynchronously at this point.
     return output
