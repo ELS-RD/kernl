@@ -108,7 +108,7 @@ def test_benchmark_rms_norm(benchmark, shape: int, dtype, cuda_graphs: bool, imp
 
 
 @pytest.mark.parametrize("implementation", implementations_layer_norm.keys())
-def test_stride(benchmark, implementation):
+def test_stride(implementation):
     M = N = 250
     eps = 1e-5
     factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
