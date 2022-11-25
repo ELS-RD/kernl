@@ -18,9 +18,25 @@ import torch
 from kernl.implementations.attention import attention_forward
 from kernl.utils.extended_matcher import replace_pattern
 
+from src.kernl.implementations.attention import attention_reference
+
 
 def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
-    return attention_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+    extend_head = q.dim() == 3
+    if extend_head:
+        q = q.view(q.size(0), 1, q.size(-2), q.size(-1))
+        k = k.view(k.size(0), 1, k.size(-2), k.size(-1))
+        v = v.view(v.size(0), 1, v.size(-2), v.size(-1))
+        output = output.view(output.size(0), 1, output.size(-2), output.size(-1))
+
+    if q.size(-2) == 1 and k.size(-2) > 50:
+        attention_reference(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+    else:
+        attention_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+
+    if extend_head:
+        return output.view(q.size(0), q.size(-2), q.size(-1))
+    return output
 
 
 torch.fx.wrap("attention_wrapper")
@@ -62,76 +78,18 @@ def fuse_attention_pattern_2(gm: torch.fx.GraphModule, is_causal: bool):
 
     replace_pattern(gm, pattern, replace)
 
-# TODO: We need constant matching, else it will only work for 1 model !!!
 def fuse_attention_pattern_3(gm: torch.fx.GraphModule, is_causal: bool):
     def pattern(q, k, v):
-        permute_21 = q.permute(0, 2, 1, 3)
-        mul_10 = permute_21 * 0.3535533905932738
+        transpose_46 = k.transpose(1, 2)
+        bmm_22 = torch.bmm(q, transpose_46)
+        softmax_11 = torch.nn.functional.softmax(bmm_22, dim=-1)
+        bmm_23 = torch.bmm(softmax_11, v)
 
-        permute_22 = k.permute(0, 2, 3, 1)
-        mul_11 = permute_22 * 0.3535533905932738
-
-        permute_23 = v.permute(0, 2, 1, 3)
-
-        matmul_10 = mul_10 @ mul_11
-        float_17 = matmul_10.float()
-        softmax_5 = torch.nn.functional.softmax(float_17, dim=-1)
-        to_70 = softmax_5.to(torch.float16)
-        matmul_11 = to_70 @ permute_23
-        return matmul_11
+        return bmm_23
 
     def replace(q, k, v):
-        q = q.permute(0, 2, 1, 3)
-        k = k.permute(0, 2, 1, 3)
-        v = v.permute(0, 2, 1, 3)
-
         output = torch.empty_like(q)
-        output = attention_wrapper(
-            q,
-            k,
-            v,
-            output,
-            0.125,  # scale^2 needed because of scale is applied before qk^T
-            is_causal,
-            None,
-        )
-        return output
-
-    replace_pattern(gm, pattern, replace)
-
-
-def fuse_attention_pattern_4(gm: torch.fx.GraphModule, is_causal: bool):
-    def pattern(q, k, v, mask):
-        permute = q.permute(0, 2, 1, 3)
-        mul = permute * 0.3535533905932738
-        permute_1 = k.permute(0, 2, 3, 1)
-        mul_1 = permute_1 * 0.3535533905932738
-        permute_2 = v.permute(0, 2, 1, 3)
-        matmul = mul @ mul_1
-        add = matmul + mask
-        float_1 = add.float()
-        softmax = torch.nn.functional.softmax(float_1, dim=-1)
-        to_5 = softmax.to(torch.float16)
-        matmul_1 = to_5 @ permute_2
-
-        return matmul_1
-
-    def replace(q, k, v, mask):
-        q = q.permute(0, 2, 1, 3)
-        k = k.permute(0, 2, 1, 3)
-        v = v.permute(0, 2, 1, 3)
-
-        output = torch.empty_like(q)
-        output = attention_wrapper(
-            q,
-            k,
-            v,
-            output,
-            0.125,  # scale^2 needed because of scale is applied before qk^T
-            is_causal,
-            # mask, # REPLACE HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            None
-        )
+        output = attention_wrapper(q, k, v, output, 1.0, is_causal, None)
         return output
 
     replace_pattern(gm, pattern, replace)

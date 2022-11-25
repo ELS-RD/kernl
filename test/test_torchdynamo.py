@@ -14,6 +14,8 @@
 #
 
 import dataclasses
+import gc
+
 from test.models.bert import (
     get_model_baseline,
     get_model_dynamo_cuda_graphs,
@@ -27,9 +29,8 @@ from typing import Callable
 
 import pytest
 import torch
-import whisper
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, WhisperForConditionalGeneration, WhisperProcessor
+from datasets import load_dataset
 from conftest import assert_all_close, set_seed, setup_dynamo
 
 from kernl.model_optimization import optimize_model
@@ -135,30 +136,23 @@ def test_t5():
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
 @setup_dynamo()
-@pytest.mark.parametrize("implementation", ["base", "optimized"])
-def test_whisper(implementation, benchmark):
-    model = whisper.load_model("base")
-
-    # load audio and pad/trim it to fit 30 seconds
-    audio = whisper.load_audio("tests_jfk.flac")
-    audio = whisper.pad_or_trim(audio)
-
-    # make log-Mel spectrogram and move to the same device as the model
-    mel = whisper.log_mel_spectrogram(audio).to(model.device)
-
-    # detect the spoken language
-    _, probs = model.detect_language(mel)
-    print(f"Detected language: {max(probs, key=probs.get)}")
-
-    # decode the audio
-    options = whisper.DecodingOptions()
+@pytest.mark.parametrize("implementation", ["reference", "optimized"])
+def test_whisper_hf(benchmark, implementation):
+    audio_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-medium").to("cuda")
     if implementation == "optimized":
-        optimize_model(model.encoder)
+        optimize_model(model.model.encoder)
+        optimize_model(model.model.decoder)
 
+    processor = WhisperProcessor.from_pretrained("openai/whisper-medium")
+    speech_data = audio_dataset[0]["audio"]["array"]
+
+    inputs = processor(speech_data, return_tensors="pt", sampling_rate=16_000).input_features.to("cuda")
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
-        result = benchmark(whisper.decode, model, mel, options)
-        assert (
-            result.text
-            == "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your "
-            "country."
-        )
+        predicted_ids = benchmark(model.generate, inputs, min_length=25, max_length=25, num_beams=2, do_sample=False)
+        transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True, normalize=True)[0]
+        assert transcription == "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()

@@ -57,7 +57,7 @@ def attention_reference(
         M = torch.tril(torch.ones((size_m, size_n), device="cuda"))
         p = torch.where(M == 0, float("-inf"), p)
     p = torch.nn.functional.softmax(p, dim=-1)
-    ref_out = torch.matmul(p, v, out=output)
+    ref_out = torch.matmul(p.to(v.dtype), v, out=output)
     return ref_out
 
 
