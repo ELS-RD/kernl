@@ -154,5 +154,5 @@ def test_whisper_hf(benchmark, implementation):
         assert transcription == "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
 
     del model
-    torch.cuda.empty_cache()
     gc.collect()
+    torch.cuda.empty_cache()
