@@ -105,3 +105,19 @@ def test_benchmark_rms_norm(benchmark, shape: int, dtype, cuda_graphs: bool, imp
 
     value = benchmark(fn, x)
     assert_all_close(value.float(), expected, atol=1e-1)
+
+
+@pytest.mark.parametrize("implementation", implementations_layer_norm.keys())
+def test_stride(benchmark, implementation):
+    M = N = 250
+    eps = 1e-5
+    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
+    layer_weight = torch.rand((N,), **factory_kwargs)
+    layer_bias = torch.randn_like(layer_weight)
+    x = -20 + 0.5 * torch.randn((M, N), **factory_kwargs)
+    x = x.transpose(-1, -2)
+
+    expected = torch.nn.functional.layer_norm(x, layer_weight.shape, layer_weight, layer_bias, eps)
+    fn = implementations_layer_norm[implementation](layer_weight, layer_bias, eps)
+    value = fn(x)
+    assert_all_close(value.float(), expected, atol=1e-1)
