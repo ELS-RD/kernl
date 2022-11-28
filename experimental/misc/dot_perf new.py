@@ -16,7 +16,7 @@ for block_size_n in [16, 32, 64, 128, 256]:
 
 
 @triton.autotune(
-    configs=[triton.Config({"SIZE_N": 16, "ILP": 2}, num_warps=1, num_stages=2)],
+    configs=[triton.Config({"SIZE_N": 16, "ILP": 1}, num_warps=1, num_stages=1)],
     key=[],
 )
 @triton.jit
@@ -73,7 +73,7 @@ def kernel(
             )
 
         mat = tl.load(matrix_ptr).to(tl.float32)
-        result = mat * vec
+        result = vec * mat
         result = tl.sum(result, axis=1)
         out_ptr = (
             Out
@@ -87,7 +87,7 @@ def kernel(
 
 def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool) -> torch.Tensor:
     assert vec.shape[2] == output.shape[2] == 1
-    # assert matrix.shape[3] == output.shape[3]
+    assert matrix.shape[2 if transpose_mat else 3] == output.shape[3], f"{matrix.shape[3]} != {output.shape[3]}"
     assert vec.shape[3] == matrix.shape[3 if transpose_mat else 2]
 
     grid = lambda args: (batch_size, n_head, triton.cdiv(seq_len_k, args["SIZE_N"] * args["ILP"]))
@@ -112,11 +112,12 @@ def reference_pytorch(
     return torch.matmul(input=vec, other=matrix, out=output)
 
 
-batch_size = 1
+batch_size = 5
 n_head = 20
 seq_len_k = 1024
 d_head = 64
 
+cache = torch.empty(int(256e6), dtype=torch.int8, device="cuda")
 q = torch.randn((batch_size, n_head, 1, d_head), dtype=torch.float16, device="cuda")
 k = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda")
 k_t = k.transpose(-1, -2).contiguous()
@@ -147,6 +148,7 @@ for i in range(n_repeat):
     start_event[i].record()
     reference_pytorch(vec=q, matrix=k, output=expected, transpose_mat=True)
     end_event[i].record()
+    cache.zero_()
     torch.cuda.synchronize()
 times_pytorch = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 torch.cuda.synchronize()
@@ -156,6 +158,7 @@ for i in range(n_repeat):
     start_event[i].record()
     triton_wrapper(vec=q, matrix=k, output=out, transpose_mat=True)
     end_event[i].record()
+    cache.zero_()
     torch.cuda.synchronize()
 times_triton_t = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 
@@ -164,6 +167,7 @@ for i in range(n_repeat):
     start_event[i].record()
     triton_wrapper(vec=q, matrix=k_t, output=out, transpose_mat=False)
     end_event[i].record()
+    cache.zero_()
     torch.cuda.synchronize()
 times_triton_pre_t = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 
