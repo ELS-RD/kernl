@@ -7,24 +7,6 @@ torch.manual_seed(123)
 
 
 @triton.jit
-def overhead_kernel(
-    V,
-    M,
-    Out,
-    vec_stride_x,
-    vec_stride_y,
-    matrix_stride_x,
-    matrix_stride_y,
-    out_stride_x,
-    out_stride_y,
-    SIZE_M: tl.constexpr,
-    D_HEAD: tl.constexpr,
-    ILP: tl.constexpr,
-):
-    pass
-
-
-@triton.jit
 def kernel(
     V,
     M,
@@ -110,23 +92,7 @@ for i in range(n_repeat):
     end_event[i].record()
     torch.cuda.synchronize()
 times_triton = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
-# overhead
-torch.cuda.synchronize()
-for i in range(n_repeat):
-    start_event[i].record()
-    overhead_kernel[grid](
-        vec,
-        matrix,
-        out,
-        *vec.stride(),
-        *matrix.stride(),
-        *out.stride(),
-        size_n,
-        d_head,
-        ILP,
-    )
-    end_event[i].record()
-times_overhead = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
+
 expected = vec @ matrix.t()
 assert torch.allclose(out, expected, atol=1e-4), f"{out}\n{expected}"
 print(f"{'tl.sum(a * b, 1)':<20}{times_triton.item() :.9f}")
