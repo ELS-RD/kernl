@@ -37,7 +37,6 @@ def kernel(
     out_seqlen_stride,
     out_d_head_stride,
     D_HEAD: tl.constexpr,
-    TRANSPOSE_MAT: tl.constexpr,
     ILP: tl.constexpr,
     SIZE_N: tl.constexpr,
 ):
@@ -54,24 +53,13 @@ def kernel(
     vec = tl.load(vec_ptr).to(tl.float32)
 
     for start in range(ILP):
-        # transpose matrix
-        if TRANSPOSE_MAT:
-            matrix_ptr = (
-                    Matrix
-                    + batch_idx * matrix_batch_stride
-                    + n_head_idx * matrix_n_head_stride
-                    + d_head_arange[None, :] * matrix_d_head_stride
-                    + ((start + n_block_idx * ILP) * SIZE_N + size_n_arange)[:, None] * matrix_seqlen_stride
-            )
-        else:
-            matrix_ptr = (
-                Matrix
-                + batch_idx * matrix_batch_stride
-                + n_head_idx * matrix_n_head_stride
-                + d_head_arange[None, :] * matrix_seqlen_stride
-                + (start + n_block_idx * ILP) * SIZE_N
-                + size_n_arange[:, None] * matrix_d_head_stride
-            )
+        matrix_ptr = (
+            Matrix
+            + batch_idx * matrix_batch_stride
+            + n_head_idx * matrix_n_head_stride
+            + d_head_arange[None, :] * matrix_seqlen_stride
+            + ((start + n_block_idx * ILP) * SIZE_N + size_n_arange)[:, None] * matrix_d_head_stride
+        )
 
         mat = tl.load(matrix_ptr).to(tl.float32)
         result = vec * mat
@@ -80,23 +68,23 @@ def kernel(
             Out
             + batch_idx * out_batch_stride
             + n_head_idx * out_n_head_stride
-            + (start + n_block_idx * ILP) * SIZE_N
-            + size_n_arange * out_d_head_stride
+            + ((start + n_block_idx * ILP) * SIZE_N + size_n_arange) * out_d_head_stride
         )
         tl.store(out_ptr, result)
 
 
 def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool) -> torch.Tensor:
-    # if not transpose_mat:
-    #     matrix = matrix.transpose(-1, -2).contiguous().transpose(-1, -2)
+    matrix_stride = list(matrix.stride())
+    if transpose_mat:
+        # to transpose matrix we just need to swap strides!
+        matrix_stride[-1], matrix_stride[-2] = matrix_stride[-2], matrix_stride[-1]
     mat_seq_len = matrix.shape[2 if transpose_mat else 3]
     mat_d_head = matrix.shape[3 if transpose_mat else 2]
     assert vec.shape[2] == output.shape[2] == 1
     assert mat_seq_len == output.shape[3]
     assert vec.shape[3] == mat_d_head
-    # print("mat_d_head", mat_d_head)
     grid = lambda args: (
-        triton.cdiv(matrix.shape[2 if transpose_mat else 3], args["SIZE_N"] * args["ILP"]),
+        triton.cdiv(mat_seq_len, args["SIZE_N"] * args["ILP"]),
         batch_size,
         n_head,
     )
@@ -105,10 +93,9 @@ def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor
         matrix,
         output,
         *vec.stride(),
-        *matrix.stride(),
+        *matrix_stride,
         *output.stride(),
         mat_d_head,
-        transpose_mat,
     )
     return output
 
@@ -157,15 +144,15 @@ for i in range(n_repeat):
     cache.zero_()
 
 times_pytorch_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
-torch.cuda.synchronize()
 
 # run Triton transpose
 for i in range(n_repeat):
+    torch.cuda.synchronize()
     start_event[i].record()
     triton_wrapper(vec=q, matrix=k, output=out, transpose_mat=True)
     end_event[i].record()
     cache.zero_()
-    torch.cuda.synchronize()
+
 times_triton_t_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 
 # run Triton pre-transpose
@@ -206,6 +193,7 @@ times_pytorch_qktv = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zi
 for i in range(n_repeat):
     torch.cuda.synchronize()
     start_event[i].record()
+    # v_new = v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2) and add size_n is 64
     triton_wrapper(vec=qkt, matrix=v, output=out_qktv, transpose_mat=False)
     end_event[i].record()
     cache.zero_()
@@ -213,7 +201,7 @@ for i in range(n_repeat):
 times_triton_t_qktv = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 
 assert torch.allclose(out, expected, atol=1e-1), f"{out}\n{expected}"
-assert torch.allclose(out, out_t, atol=1e-1), f"{out}\n{out_t}"
+assert torch.allclose(out, out_t, atol=1e-3), f"{out}\n{out_t}"
 assert torch.allclose(out_qktv, expected_qktv, atol=1e-1), f"{out_qktv}\n{expected_qktv}"
 print(f"{'tl.sum(q * k^t, 1)':<20}{times_triton_t_qkt.item() :.9f}")
 print(f"{'tl.sum(q * k, 1)':<20}{times_triton_pre_t_qkt.item() :.9f}")
