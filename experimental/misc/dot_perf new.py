@@ -5,7 +5,18 @@ import triton.language as tl
 
 torch.manual_seed(123)
 
+configs = []
+for block_size_n in [16, 32, 64, 128, 256]:
+    for ilp in [1, 2, 4, 8]:
+        for num_warps in [1, 2, 4, 8]:
+            for num_stages in [1, 2, 4, 8]:
+                configs.append(triton.Config({"SIZE_N": block_size_n, "ILP": ilp}, num_warps=num_warps, num_stages=num_stages))
 
+
+@triton.autotune(
+    configs=[triton.Config({"SIZE_N": 16, "ILP": 2}, num_warps=1, num_stages=2)],
+    key=[],
+)
 @triton.jit
 def kernel(
     Vec,
@@ -23,10 +34,10 @@ def kernel(
     out_n_head_stride,
     out_seqlen_stride,
     out_d_head_stride,
-    SIZE_N: tl.constexpr,
     D_HEAD: tl.constexpr,
-    ILP: tl.constexpr,
     TRANSPOSE_MAT: tl.constexpr,
+    ILP: tl.constexpr,
+    SIZE_N: tl.constexpr,
 ):
     batch_idx = tl.program_id(0)
     n_head_idx = tl.program_id(1)
@@ -73,8 +84,9 @@ def kernel(
 
 
 def triton_wrapper(
-    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, ilp: int, block_size_n: int, transpose_mat: bool
-) -> torch.Tensor:
+    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool) -> torch.Tensor:
+    grid = lambda args: (batch_size, n_head, triton.cdiv(seq_len_k, args["SIZE_N"] * args["ILP"]))
+    # grid = (batch_size, n_head, triton.cdiv(seq_len_k, size_n * ILP))
     kernel[grid](
         vec,
         matrix,
@@ -82,9 +94,7 @@ def triton_wrapper(
         *vec.stride(),
         *matrix.stride(),
         *output.stride(),
-        block_size_n,
         d_head,
-        ilp,
         transpose_mat,
     )
     return output
@@ -94,8 +104,7 @@ def reference_pytorch(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Ten
     return torch.matmul(input=vec, other=matrix.transpose(-1, -2), out=output)
 
 
-size_n = 16
-batch_size = 5
+batch_size = 1
 n_head = 20
 seq_len_k = 1024
 d_head = 64
@@ -108,9 +117,8 @@ out_t = torch.zeros_like(out)
 expected = torch.zeros_like(out)
 
 n_repeat = 1000
-ILP = 2
-grid = (batch_size, n_head, triton.cdiv(seq_len_k, size_n * ILP))
-print(grid)
+
+
 print("CUDA times")
 
 start_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
@@ -118,8 +126,8 @@ end_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 
 # warmup
 for _ in range(n_repeat):
-    triton_wrapper(vec=q, matrix=k, output=out, ilp=ILP, block_size_n=size_n, transpose_mat=True)
-    triton_wrapper(vec=q, matrix=k_t, output=out_t, ilp=ILP, block_size_n=size_n, transpose_mat=False)
+    triton_wrapper(vec=q, matrix=k, output=out, transpose_mat=True)
+    triton_wrapper(vec=q, matrix=k_t, output=out_t, transpose_mat=False)
     reference_pytorch(vec=q, matrix=k, output=expected)
 torch.cuda.synchronize()
 
@@ -135,7 +143,7 @@ torch.cuda.synchronize()
 # run Triton transpose
 for i in range(n_repeat):
     start_event[i].record()
-    triton_wrapper(vec=q, matrix=k, output=out, ilp=ILP, block_size_n=size_n, transpose_mat=True)
+    triton_wrapper(vec=q, matrix=k, output=out, transpose_mat=True)
     end_event[i].record()
     torch.cuda.synchronize()
 times_triton_t = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
@@ -143,7 +151,7 @@ times_triton_t = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(st
 # run Triton pre-transpose
 for i in range(n_repeat):
     start_event[i].record()
-    triton_wrapper(vec=q, matrix=k_t, output=out, ilp=ILP, block_size_n=size_n, transpose_mat=False)
+    triton_wrapper(vec=q, matrix=k_t, output=out, transpose_mat=False)
     end_event[i].record()
     torch.cuda.synchronize()
 times_triton_pre_t = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
@@ -153,3 +161,5 @@ assert torch.allclose(out, out_t, atol=1e-1), f"{out}\n{out_t}"
 print(f"{'tl.sum(q * k^t, 1)':<20}{times_triton_t.item() :.9f}")
 print(f"{'tl.sum(q * k, 1)':<20}{times_triton_pre_t.item() :.9f}")
 print(f"{'q @ k.t()':<20}{times_pytorch.item() :.9f}")
+
+# note: for the per-transposed, if size n >= n head, timings are similar to not transposed version.
