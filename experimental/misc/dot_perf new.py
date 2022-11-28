@@ -16,7 +16,7 @@ for block_size_n in [16, 32, 64, 128, 256]:
 
 
 @triton.autotune(
-    configs=[triton.Config({"SIZE_N": 64, "ILP": 1}, num_warps=1, num_stages=1)],
+    configs=[triton.Config({"SIZE_N": 16, "ILP": 1}, num_warps=1, num_stages=1)],
     key=[],
 )
 @triton.jit
@@ -57,12 +57,11 @@ def kernel(
         # transpose matrix
         if TRANSPOSE_MAT:
             matrix_ptr = (
-                Matrix
-                + batch_idx * matrix_batch_stride
-                + n_head_idx * matrix_n_head_stride
-                + d_head_arange[None, :] * matrix_d_head_stride
-                + (start + n_block_idx * ILP) * SIZE_N
-                + size_n_arange[:, None] * matrix_seqlen_stride
+                    Matrix
+                    + batch_idx * matrix_batch_stride
+                    + n_head_idx * matrix_n_head_stride
+                    + d_head_arange[None, :] * matrix_d_head_stride
+                    + ((start + n_block_idx * ILP) * SIZE_N + size_n_arange)[:, None] * matrix_seqlen_stride
             )
         else:
             matrix_ptr = (
@@ -173,7 +172,7 @@ times_triton_t_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zi
 for i in range(n_repeat):
     torch.cuda.synchronize()
     start_event[i].record()
-    triton_wrapper(vec=q, matrix=k_t, output=out, transpose_mat=False)
+    triton_wrapper(vec=q, matrix=k_t, output=out_t, transpose_mat=False)
     end_event[i].record()
     cache.zero_()
 times_triton_pre_t_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
