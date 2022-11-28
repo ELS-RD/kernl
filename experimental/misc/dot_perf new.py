@@ -10,7 +10,9 @@ for block_size_n in [16, 32, 64, 128, 256]:
     for ilp in [1, 2, 4, 8]:
         for num_warps in [1, 2, 4, 8]:
             for num_stages in [1, 2, 4, 8]:
-                configs.append(triton.Config({"SIZE_N": block_size_n, "ILP": ilp}, num_warps=num_warps, num_stages=num_stages))
+                configs.append(
+                    triton.Config({"SIZE_N": block_size_n, "ILP": ilp}, num_warps=num_warps, num_stages=num_stages)
+                )
 
 
 @triton.autotune(
@@ -49,7 +51,7 @@ def kernel(
     vec_ptr = (
         Vec + batch_idx * vec_batch_stride + n_head_idx * vec_n_head_stride + vec_d_head_stride * d_head_arange[None, :]
     )
-    vec = tl.load(vec_ptr)
+    vec = tl.load(vec_ptr).to(tl.float32)
 
     for start in range(ILP):
         # transpose matrix
@@ -70,8 +72,8 @@ def kernel(
                 + ((start + n_block_idx * ILP) * SIZE_N + size_n_arange)[:, None] * matrix_d_head_stride
             )
 
-        mat = tl.load(matrix_ptr)
-        result = mat.to(tl.float32) * vec.to(tl.float32)
+        mat = tl.load(matrix_ptr).to(tl.float32)
+        result = mat * vec
         result = tl.sum(result, axis=1)
         out_ptr = (
             Out
@@ -83,10 +85,12 @@ def kernel(
         tl.store(out_ptr, result)
 
 
-def triton_wrapper(
-    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool) -> torch.Tensor:
+def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool) -> torch.Tensor:
+    assert vec.shape[2] == output.shape[2] == 1
+    # assert matrix.shape[3] == output.shape[3]
+    assert vec.shape[3] == matrix.shape[3 if transpose_mat else 2]
+
     grid = lambda args: (batch_size, n_head, triton.cdiv(seq_len_k, args["SIZE_N"] * args["ILP"]))
-    # grid = (batch_size, n_head, triton.cdiv(seq_len_k, size_n * ILP))
     kernel[grid](
         vec,
         matrix,
@@ -100,8 +104,12 @@ def triton_wrapper(
     return output
 
 
-def reference_pytorch(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor) -> torch.Tensor:
-    return torch.matmul(input=vec, other=matrix.transpose(-1, -2), out=output)
+def reference_pytorch(
+    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool
+) -> torch.Tensor:
+    if transpose_mat:
+        matrix = matrix.transpose(-1, -2)
+    return torch.matmul(input=vec, other=matrix, out=output)
 
 
 batch_size = 1
@@ -116,11 +124,14 @@ out = torch.zeros((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, devic
 out_t = torch.zeros_like(out)
 expected = torch.zeros_like(out)
 
-n_repeat = 1000
 
+# triton_wrapper(vec=q, matrix=k, output=out, transpose_mat=False)
+# reference_pytorch(vec=q, matrix=k, output=expected, transpose_mat=False)
+# print(out)
+# print(expected)
 
 print("CUDA times")
-
+n_repeat = 1000
 start_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 end_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 
@@ -128,13 +139,13 @@ end_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 for _ in range(n_repeat):
     triton_wrapper(vec=q, matrix=k, output=out, transpose_mat=True)
     triton_wrapper(vec=q, matrix=k_t, output=out_t, transpose_mat=False)
-    reference_pytorch(vec=q, matrix=k, output=expected)
+    reference_pytorch(vec=q, matrix=k, output=expected, transpose_mat=True)
 torch.cuda.synchronize()
 
 # run PyTorch
 for i in range(n_repeat):
     start_event[i].record()
-    reference_pytorch(vec=q, matrix=k, output=expected)
+    reference_pytorch(vec=q, matrix=k, output=expected, transpose_mat=True)
     end_event[i].record()
     torch.cuda.synchronize()
 times_pytorch = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
