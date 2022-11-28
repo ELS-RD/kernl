@@ -38,6 +38,11 @@ def cuda_graphs_wrapper(
         # and 1 for warmup
         for _ in range(2):
             model(*inputs)
+            o = model(*inputs)
+            loss = o.sum()
+            loss.backward()
+        # do = torch.randn_like(o)
+        # o.backward(do, retain_graph=True)
     stream.synchronize()
     torch.cuda.current_stream().wait_stream(stream)
     torch.cuda.synchronize()
