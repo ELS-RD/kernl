@@ -16,7 +16,7 @@ for block_size_n in [16, 32, 64, 128, 256]:
 
 
 @triton.autotune(
-    configs=[triton.Config({"SIZE_N": 16, "ILP": 1}, num_warps=1, num_stages=1)],
+    configs=[triton.Config({"SIZE_N": 64, "ILP": 1}, num_warps=1, num_stages=1)],
     key=[],
 )
 @triton.jit
@@ -41,9 +41,9 @@ def kernel(
     ILP: tl.constexpr,
     SIZE_N: tl.constexpr,
 ):
-    batch_idx = tl.program_id(0)
-    n_head_idx = tl.program_id(1)
-    n_block_idx = tl.program_id(2)
+    n_block_idx = tl.program_id(0)
+    batch_idx = tl.program_id(1)
+    n_head_idx = tl.program_id(2)
 
     size_n_arange = tl.arange(0, SIZE_N)
     d_head_arange = tl.arange(0, D_HEAD)
@@ -61,7 +61,8 @@ def kernel(
                 + batch_idx * matrix_batch_stride
                 + n_head_idx * matrix_n_head_stride
                 + d_head_arange[None, :] * matrix_d_head_stride
-                + ((start + n_block_idx * ILP) * SIZE_N + size_n_arange)[:, None] * matrix_seqlen_stride
+                + (start + n_block_idx * ILP) * SIZE_N
+                + size_n_arange[:, None] * matrix_seqlen_stride
             )
         else:
             matrix_ptr = (
@@ -69,7 +70,8 @@ def kernel(
                 + batch_idx * matrix_batch_stride
                 + n_head_idx * matrix_n_head_stride
                 + d_head_arange[None, :] * matrix_seqlen_stride
-                + ((start + n_block_idx * ILP) * SIZE_N + size_n_arange)[:, None] * matrix_d_head_stride
+                + (start + n_block_idx * ILP) * SIZE_N
+                + size_n_arange[:, None] * matrix_d_head_stride
             )
 
         mat = tl.load(matrix_ptr).to(tl.float32)
@@ -79,23 +81,25 @@ def kernel(
             Out
             + batch_idx * out_batch_stride
             + n_head_idx * out_n_head_stride
-            + size_n_arange * out_d_head_stride
             + (start + n_block_idx * ILP) * SIZE_N
+            + size_n_arange * out_d_head_stride
         )
         tl.store(out_ptr, result)
 
 
 def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool) -> torch.Tensor:
+    # if not transpose_mat:
+    #     matrix = matrix.transpose(-1, -2).contiguous().transpose(-1, -2)
     mat_seq_len = matrix.shape[2 if transpose_mat else 3]
     mat_d_head = matrix.shape[3 if transpose_mat else 2]
     assert vec.shape[2] == output.shape[2] == 1
     assert mat_seq_len == output.shape[3]
     assert vec.shape[3] == mat_d_head
-
+    # print("mat_d_head", mat_d_head)
     grid = lambda args: (
+        triton.cdiv(matrix.shape[2 if transpose_mat else 3], args["SIZE_N"] * args["ILP"]),
         batch_size,
         n_head,
-        triton.cdiv(matrix.shape[2 if transpose_mat else 3], args["SIZE_N"] * args["ILP"]),
     )
     kernel[grid](
         vec,
@@ -174,6 +178,10 @@ for i in range(n_repeat):
     cache.zero_()
 times_triton_pre_t_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 
+batch_size = 5
+n_head = 20
+seq_len_k = 1024
+d_head = 64
 
 qkt = torch.randn((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, device="cuda")
 v = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda")
