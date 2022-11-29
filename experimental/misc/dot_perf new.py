@@ -40,6 +40,7 @@ def kernel(
     out_rows_stride,
     out_cols_stride,
     VEC_N_COLS: tl.constexpr,
+    VEC_SOFTMAX: tl.constexpr,
     SIZE_N: tl.constexpr,
 ):
     n_block_idx = tl.program_id(0)
@@ -54,7 +55,11 @@ def kernel(
     )
 
     vec = tl.load(vec_ptr, mask=vec_n_cols[None, :] < VEC_N_COLS, other=0.0).to(tl.float32)
-
+    if VEC_SOFTMAX:
+        vec_max = tl.max(vec, axis=1)
+        vec = vec - vec_max[:, None]
+        vec = tl.exp(vec)
+        vec = vec / tl.sum(vec, axis=1)[:, None]
     matrix_ptr = (
         Matrix
         + batch_idx * matrix_batch_stride
@@ -75,7 +80,7 @@ def kernel(
     tl.store(out_ptr, result, eviction_policy="evict_first")
 
 
-def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool) -> torch.Tensor:
+def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool, softmax_vec: bool) -> torch.Tensor:
     matrix_stride = list(matrix.stride())
     if transpose_mat:
         # to transpose matrix we just need to swap strides!
@@ -98,21 +103,24 @@ def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor
         *matrix_stride,
         *output.stride(),
         vec_n_cols,
+        softmax_vec,
     )
     return output
 
 
 def reference_pytorch(
-    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool
+    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool, softmax_vec: bool
 ) -> torch.Tensor:
     if transpose_mat:
         matrix = matrix.transpose(-1, -2)
+    if softmax_vec:
+        vec = torch.nn.functional.softmax(vec, dim=-1, dtype=torch.float32).half()
     return torch.matmul(input=vec, other=matrix, out=output)
 
 
 batch_size = 5
 n_head = 20
-seq_len_k = 2048
+seq_len_k = 1024
 d_head = 64
 
 
@@ -123,7 +131,8 @@ out_qkt = torch.zeros((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, d
 expected_qkt = torch.zeros_like(out_qkt)
 
 qkt = torch.randn((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, device="cuda")
-v = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda")
+
+v = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda").permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2)
 out_qktv = torch.zeros((batch_size, n_head, 1, d_head), dtype=torch.float16, device="cuda")
 expected_qktv = torch.zeros_like(out_qktv)
 
@@ -134,17 +143,17 @@ end_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 
 # warmup
 for _ in range(n_repeat):
-    triton_wrapper(vec=q, matrix=k, output=out_qkt, transpose_mat=True)
-    reference_pytorch(vec=q, matrix=k, output=expected_qkt, transpose_mat=True)
-    triton_wrapper(vec=qkt, matrix=v, output=out_qktv, transpose_mat=False)
-    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, transpose_mat=False)
+    triton_wrapper(vec=q, matrix=k, output=out_qkt, transpose_mat=True, softmax_vec=False)
+    reference_pytorch(vec=q, matrix=k, output=expected_qkt, transpose_mat=True, softmax_vec=False)
+    triton_wrapper(vec=qkt, matrix=v, output=out_qktv, transpose_mat=False, softmax_vec=True)
+    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, transpose_mat=False, softmax_vec=True)
 torch.cuda.synchronize()
 
 # run PyTorch QK^t
 for i in range(n_repeat):
     torch.cuda.synchronize()
     start_event[i].record()
-    reference_pytorch(vec=q, matrix=k, output=expected_qkt, transpose_mat=True)
+    reference_pytorch(vec=q, matrix=k, output=expected_qkt, transpose_mat=True, softmax_vec=False)
     end_event[i].record()
     cache.zero_()
 
@@ -154,7 +163,7 @@ times_pytorch_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip
 for i in range(n_repeat):
     torch.cuda.synchronize()
     start_event[i].record()
-    triton_wrapper(vec=q, matrix=k, output=out_qkt, transpose_mat=True)
+    triton_wrapper(vec=q, matrix=k, output=out_qkt, transpose_mat=True, softmax_vec=False)
     end_event[i].record()
     cache.zero_()
 
@@ -164,7 +173,7 @@ times_triton_t_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zi
 for i in range(n_repeat):
     torch.cuda.synchronize()
     start_event[i].record()
-    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, transpose_mat=False)
+    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, transpose_mat=False, softmax_vec=True)
     end_event[i].record()
     cache.zero_()
 
@@ -174,8 +183,7 @@ times_pytorch_qktv = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zi
 for i in range(n_repeat):
     torch.cuda.synchronize()
     start_event[i].record()
-    # v_new = v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2) and add size_n is 64
-    triton_wrapper(vec=qkt, matrix=v, output=out_qktv, transpose_mat=False)
+    triton_wrapper(vec=qkt, matrix=v, output=out_qktv, transpose_mat=False, softmax_vec=True)
     end_event[i].record()
     cache.zero_()
 
