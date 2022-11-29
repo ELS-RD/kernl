@@ -54,12 +54,7 @@ def kernel(
     print("result mul", result)
     result = tl.sum(result, axis=0)
     print("result sum", result)
-    out_ptr = (
-        Out
-        + batch_idx * out_batch_stride
-        + n_head_idx * out_n_head_stride
-        + d_head_arange * out_d_head_stride
-    )
+    out_ptr = Out + batch_idx * out_batch_stride + n_head_idx * out_n_head_stride + d_head_arange * out_d_head_stride
     tl.atomic_add(out_ptr, result)
 
 
