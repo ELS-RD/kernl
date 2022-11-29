@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import builtins
 import inspect
+import random
 import re
+import string
 import textwrap
 import threading
 from collections import namedtuple
@@ -12,41 +14,34 @@ from typing import Dict
 import torch
 import triton
 from torch._inductor.compile_fx import clone_preserve_strides
-from triton import MockTensor
 from triton.runtime.jit import KernelInterface, get_cuda_stream
 from triton.testing import do_bench
 
 
 class Autotuner(KernelInterface):
-    def __init__(self, fn, configs, key, signature, reset_to_zero, prune_configs_by: Dict = None):
-        """
-        :param prune_configs_by: a dict of functions that are used to prune configs, fields:
-            'perf_model': performance model used to predicate running time with different configs, returns running time
-            'top_k': number of configs to bench
-            'prune_num_stages_by'(optional): a function used to prune num_stages. It take configs:List[Config] as its input, and returns pruned configs.
-        """
+    def __init__(self, fn, arg_names, configs, key, signature, reset_to_zero, prune_configs_by: Dict = None):
         if not configs:
             self.configs = [Config(dict(), num_warps=4, num_stages=2)]
         else:
             self.configs = configs
-        arg_names_signature = inspect.signature(fn)
-        arg_names = [v.name for v in arg_names_signature.parameters.values()]
-        self.signature = signature
+        #fn_signature = inspect.signature(fn)
+        #self.arg_names = [v.name for v in fn_signature.parameters.values()]
         self.arg_names = arg_names
-        self.key_idx = [arg_names.index(k) for k in key]
+        self.signature = signature
+        self.key_idx = [self.arg_names.index(k) for k in key]
         self.cache = dict()
+        self.save_cache_hook = None
         self.launchers = list()
         # hook to reset all required tensor to zeros before relaunching a kernel
         self.hook = lambda args: 0
         if reset_to_zero is not None:
-            self.reset_idx = [arg_names.index(k) for k in reset_to_zero]
+            self.reset_idx = [self.arg_names.index(k) for k in reset_to_zero]
 
             def _hook(args):
                 for i in self.reset_idx:
                     args[i].zero_()
 
             self.hook = _hook
-        self.arg_names = arg_names
         # prune configs
         if prune_configs_by:
             perf_model, top_k = prune_configs_by["perf_model"], prune_configs_by["top_k"]
@@ -60,12 +55,23 @@ class Autotuner(KernelInterface):
         self.src = textwrap.dedent(inspect.getsource(fn))
         self.src = self.src[self.src.find("def") :]
         self.fn = fn
-        self.fn.cache_key = "add_kernel_test"
+        cache_key = ''.join(random.sample(string.ascii_lowercase, 8))
+        self.fn.cache_key = f"{self.fn.__name__}_{cache_key}"
+        self.fn.src = self.src
         self.fn.parse = self.parse
-        self.__annotations__ = self.fn.__annotations__
+        self.constexprs = [self.arg_names.index(ann) for ann in self.fn.__annotations__.keys()]
 
     def warmup(self, *args, **kwargs):
-        return self.run(*map(MockTensor.wrap_dtype, args), **kwargs, warmup=True)
+        self.nargs = dict(zip(self.arg_names, args))
+        for config in self.prune_configs(kwargs):
+            self.fn.warmup(
+                *args,
+                num_warps=config.num_warps,
+                num_stages=config.num_stages,
+                **kwargs,
+                **config.kwargs,
+            )
+        self.nargs = None
 
     # we do not parse `src` in the constructor because
     # the user might want to monkey-patch self.src dynamically.
@@ -77,7 +83,7 @@ class Autotuner(KernelInterface):
         assert isinstance(tree.body[0], ast.FunctionDef)
         return tree
 
-    def bench(self, launcher, *args, grid, **meta):
+    def bench(self, launcher, *args, grid, **kwargs):
         stream = get_cuda_stream(torch.cuda.current_device())
 
         def kernel_call():
@@ -87,8 +93,8 @@ class Autotuner(KernelInterface):
                 *args,
                 grid=grid,
                 stream=stream,
+                **kwargs
             )
-            # self.fn.run(*args, num_warps=config.num_warps, num_stages=config.num_stages, **current)
 
         return do_bench(kernel_call)
 
@@ -118,8 +124,7 @@ class Autotuner(KernelInterface):
             **compile_meta,
         )
 
-        constexprs = [self.arg_names.index(ann) for ann in self.__annotations__.keys()]
-        call_args = [arg for i, arg in enumerate(self.arg_names) if i not in constexprs]
+        call_args = [arg for i, arg in enumerate(self.arg_names) if i not in self.constexprs]
         def_args = list(self.arg_names)
         while def_args and def_args[-1] in cfg.kwargs:
             def_args.pop()
@@ -133,10 +138,18 @@ class Autotuner(KernelInterface):
         }
         exec(
             f"""
-            def launcher({', '.join(def_args)}, grid, stream):
+            def launcher({', '.join(def_args)}, grid, stream, **kwargs):
                 #set_device(current_device())  # TODO(jansel): is this needed?
-                grid_0 = grid(grid_meta)[0]
-                bin.c_wrapper(grid_0, 1, 1, bin.num_warps, bin.shared,
+                if callable(grid):
+                    grid = grid(grid_meta)
+                grid_size = len(grid)
+                grid_0 = grid[0]
+                grid_1 = grid[1] if grid_size > 1 else 1
+                grid_2 = grid[2] if grid_size > 2 else 1
+                
+                if stream is None and not warmup:
+                    stream = get_cuda_stream(device)
+                bin.c_wrapper(grid_0, grid_1, grid_2, bin.num_warps, bin.shared,
                               stream, bin.cu_function, {', '.join(call_args)})
             """.lstrip(),
             scope,
@@ -146,28 +159,43 @@ class Autotuner(KernelInterface):
         launcher.config = cfg
         return launcher
 
-    def run(self, *args, grid, **kwargs):
-        self.nargs = dict(zip(self.arg_names, args))
-        if len(self.launchers) == 0:
-            self.precompile()
-        if len(self.configs) > 1:
-            key = tuple([args[i] for i in self.key_idx])
-            if key not in self.cache:
-                cloned_args = [clone_preserve_strides(arg) if isinstance(arg, torch.Tensor) else arg for arg in args]
-                timings = {
-                    launcher: self.bench(launcher, grid=grid, *cloned_args, **kwargs) for launcher in self.launchers
-                }
-                self.launchers = [builtins.min(timings, key=timings.get)]
-                self.cache[key] = self.launchers[0]
-                self.hook(args)
-                self.configs_timings = timings
-            config = self.cache[key]
-        else:
-            config = self.configs[0]
-        self.best_config = config
+    def clone_preserve_strides(x):
+        needed_size = (
+                sum((shape - 1) * stride for shape, stride in zip(x.size(), x.stride())) + 1
+        )
+        buffer = torch.as_strided(x, (needed_size,), (1,)).clone()
+        return torch.as_strided(buffer, x.size(), x.stride())
+
+    def autotune_to_one_config(self, *args, **kwargs):
+        """Do the actual autotuning"""
+        # clone the input args to avoid autotune contaminating them if
+        # the kernel does in-place stores
+        cloned_args = [
+            clone_preserve_strides(arg) if isinstance(arg, torch.Tensor) else arg
+            for arg in args
+        ]
+        timings = {
+            launcher: self.bench(launcher, *cloned_args, **kwargs)
+            for launcher in self.launchers
+        }
+        self.launchers = [builtins.min(timings, key=timings.get)]
+        if self.save_cache_hook:
+            self.save_cache_hook(self.launchers[0].config)
+
+    def run(self, *args, grid):
+        stream = get_cuda_stream(torch.cuda.current_device())
+        if len(self.launchers) != 1:
+            if len(self.launchers) == 0:
+                self.precompile()
+            if len(self.launchers) > 1:
+                self.autotune_to_one_config(*args, grid=grid)
+
+        (launcher,) = self.launchers
+        if launcher.config.pre_hook is not None:
+            launcher.config.pre_hook(
+                {**zip(self.arg_names, args), **launcher.config.kwargs}
+            )
         try:
-            (launcher,) = self.launchers
-            stream = get_cuda_stream(torch.cuda.current_device())
             result = launcher(
                 *args,
                 grid=grid,
@@ -183,8 +211,6 @@ class Autotuner(KernelInterface):
                 raise e
 
         return result
-
-        # return self.fn.run(*args, num_warps=config.num_warps, num_stages=config.num_stages, **kwargs, **config.kwargs)
 
     def prune_configs(self, kwargs):
         pruned_configs = self.configs
@@ -241,7 +267,7 @@ class Config:
         return ", ".join(res)
 
 
-def autotune(configs, key, signature, prune_configs_by=None, reset_to_zero=None):
+def autotune(configs, arg_names, key, signature, prune_configs_by=None, reset_to_zero=None):
     """
     Decorator for auto-tuning a :code:`triton.jit`'d function.
 
@@ -277,7 +303,7 @@ def autotune(configs, key, signature, prune_configs_by=None, reset_to_zero=None)
     """
 
     def decorator(fn):
-        return Autotuner(fn, configs, key, signature, reset_to_zero, prune_configs_by)
+        return Autotuner(fn, arg_names, configs, key, signature, reset_to_zero, prune_configs_by)
 
     return decorator
 
@@ -294,7 +320,7 @@ class Heuristics(KernelInterface):
         return self.fn.run(*args, **kwargs)
 
 
-def heuristics(values):
+def heuristics(values, arg_names):
     """
     Decorator for specifying how the values of certain meta-parameters may be computed.
     This is useful for cases where auto-tuning is prohibitevely expensive, or just not applicable.
@@ -314,6 +340,6 @@ def heuristics(values):
     """
 
     def decorator(fn):
-        return Heuristics(fn, fn.arg_names, values)
+        return Heuristics(fn, arg_names, values)
 
     return decorator

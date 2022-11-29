@@ -11,6 +11,7 @@ from autotuner import autotune
     ],
     key=["n_elements"],
     signature={0: "*fp32", 1: "*fp32", 2: "*fp32", 3: "i32"},
+    arg_names=["x_ptr", "y_ptr", "output_ptr", "n_elements", "BLOCK_SIZE"]
 )
 def add_kernel(
     x_ptr,  # *Pointer* to first input vector
