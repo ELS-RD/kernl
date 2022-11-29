@@ -11,7 +11,8 @@ repo_url: https://github.com/ELS-RD/kernl
 edit_uri: ""
 
 # Copyright
-copyright: Copyright &copy; 2022-2023 Lefebvre Sarrut
+copyright: Copyright &copy; 2022-2023 Lefebvre Sarrut –
+  <a href="#__consent">Change cookie settings</a>
 
 # Configuration
 theme:
@@ -80,7 +81,21 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/ELS-RD/kernl
       name: Kernl on Github
-  generator: false
+  generator: false              # Disable the "Made with Material for MkDocs" footer
+  analytics:
+    provider: google
+    property: G-QC1WFMZK6C
+  consent:
+    title: Cookie consent on kernl.ai
+    description: >-
+      We use cookies to recognize your repeated visits and preferences, as well
+      as to measure the effectiveness of our documentation and whether users
+      find what they're searching for. With your consent, you're helping us to
+      make our documentation better.
+    actions:
+      - accept
+      - reject
+      - manage
 
 # Extensions
 markdown_extensions:
