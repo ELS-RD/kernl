@@ -4,6 +4,8 @@ import torch
 import triton
 import triton.language as tl
 
+from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+
 
 torch.manual_seed(123)
 
@@ -166,12 +168,28 @@ n_repeat = 1000
 start_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 end_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 
+
+def triton_fn():
+    triton_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True)
+    triton_wrapper(vec=qkt, matrix=v_triton, output=out_qktv, softmax_vec=True, transpose_mat=False)
+
+
+def ref_fn():
+    reference_pytorch(vec=q, matrix=k, output=expected_qkt, softmax_vec=False, transpose_mat=True)
+    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, softmax_vec=True, transpose_mat=False)
+
+
+triton_cg = cuda_graphs_wrapper(triton_fn, [])
+ref_cg = cuda_graphs_wrapper(ref_fn, [])
+nothing_cg = cuda_graphs_wrapper(lambda: None, [])
+
+
 # warmup
 for _ in range(n_repeat):
-    triton_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True)
-    reference_pytorch(vec=q, matrix=k, output=expected_qkt, softmax_vec=False, transpose_mat=True)
-    triton_wrapper(vec=qkt, matrix=v_triton, output=out_qktv, softmax_vec=True, transpose_mat=False)
-    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, softmax_vec=True, transpose_mat=False)
+    triton_cg()
+    ref_cg()
+    nothing_cg()
+
 torch.cuda.synchronize()
 
 # run PyTorch QK^t
@@ -179,7 +197,7 @@ for i in range(n_repeat):
     cache.zero_()
     torch.cuda.synchronize()
     start_event[i].record()
-    reference_pytorch(vec=q, matrix=k, output=expected_qkt, softmax_vec=False, transpose_mat=True)
+    ref_cg()
     end_event[i].record()
 
 times_pytorch_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
@@ -189,7 +207,7 @@ for i in range(n_repeat):
     cache.zero_()
     torch.cuda.synchronize()
     start_event[i].record()
-    triton_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True)
+    triton_cg()
     end_event[i].record()
 
 times_triton_t_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
@@ -199,24 +217,17 @@ for i in range(n_repeat):
     cache.zero_()
     torch.cuda.synchronize()
     start_event[i].record()
-    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, softmax_vec=True, transpose_mat=False)
+    nothing_cg()
     end_event[i].record()
 
-times_pytorch_qktv = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
+times_overhead = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 
-# run Triton QK^tV
-for i in range(n_repeat):
-    cache.zero_()
-    torch.cuda.synchronize()
-    start_event[i].record()
-    triton_wrapper(vec=qkt, matrix=v_triton, output=out_qktv, softmax_vec=True, transpose_mat=False)
-    end_event[i].record()
 
-times_triton_t_qktv = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
-
+assert torch.sum(out_qkt) != 0
+assert torch.sum(out_qktv) != 0
 assert torch.allclose(out_qkt, out_qkt, atol=1e-1), f"{out_qktv}\n{expected_qktv}"
 assert torch.allclose(out_qktv, expected_qktv, atol=1e-1), f"{out_qktv}\n{expected_qktv}"
-print(f"{'tl.sum(q * k^t, 1)':<20}{times_triton_t_qkt.item() :.9f}")
-print(f"{'q @ k.t()':<20}{times_pytorch_qkt.item() :.9f}")
-print(f"{'tl.sum(qkt * v, 1)':<20}{times_triton_t_qktv.item() :.9f}")
-print(f"{'qkt @ v':<20}{times_pytorch_qktv.item() :.9f}")
+print(f"{'tl.sum(q * k^t, 1)':<20}{times_triton_t_qkt.item() :.3f}")
+print(f"{'q @ k.t()':<20}{times_pytorch_qkt.item() :.3f}")
+print(f"{'overhead cuda graph':<20}{times_overhead.item() :.3f}")
+print(f"ratio {(times_pytorch_qkt - times_overhead).item() / (times_triton_t_qkt - times_overhead).item():.3f}")
