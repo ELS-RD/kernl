@@ -2,21 +2,14 @@ import torch
 import triton
 import triton.language as tl
 
+# TODO masks on vec and matrix
 
-torch.manual_seed(5)
-
-configs = []
-for block_size_n in [16, 32, 64, 128, 256]:
-    for ilp in [1, 2, 4, 8]:
-        for num_warps in [1, 2, 4, 8]:
-            for num_stages in [1, 2, 4, 8]:
-                configs.append(
-                    triton.Config({"SIZE_N": block_size_n, "ILP": ilp}, num_warps=num_warps, num_stages=num_stages)
-                )
+torch.manual_seed(123)
 
 
 @triton.autotune(
     configs=[
+        triton.Config({"SIZE_N": 32}, num_warps=1, num_stages=1),
         triton.Config({"SIZE_N": 16}, num_warps=1, num_stages=1),
         triton.Config({"SIZE_N": 8}, num_warps=1, num_stages=1),
     ],
@@ -82,9 +75,13 @@ def kernel(
 
 def triton_wrapper(vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, transpose_mat: bool, softmax_vec: bool) -> torch.Tensor:
     matrix_stride = list(matrix.stride())
+    is_row_major = matrix_stride[-1] == 1
     if transpose_mat:
         # to transpose matrix we just need to swap strides!
         matrix_stride[-1], matrix_stride[-2] = matrix_stride[-2], matrix_stride[-1]
+    elif is_row_major:
+        # change layout to col major
+        matrix.set_(source=matrix.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
     mat_seq_len = matrix.shape[2 if transpose_mat else 3]
     vec_n_cols = vec.shape[3]
     assert vec.shape[2] == output.shape[2] == 1
@@ -113,14 +110,16 @@ def reference_pytorch(
 ) -> torch.Tensor:
     if transpose_mat:
         matrix = matrix.transpose(-1, -2)
+
     if softmax_vec:
+        vec = vec * 1.0
         vec = torch.nn.functional.softmax(vec, dim=-1, dtype=torch.float32).half()
     return torch.matmul(input=vec, other=matrix, out=output)
 
 
 batch_size = 5
 n_head = 20
-seq_len_k = 1024
+seq_len_k = 2048
 d_head = 64
 
 
@@ -131,8 +130,7 @@ out_qkt = torch.zeros((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, d
 expected_qkt = torch.zeros_like(out_qkt)
 
 qkt = torch.randn((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, device="cuda")
-
-v = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda").permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2)
+v = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda")
 out_qktv = torch.zeros((batch_size, n_head, 1, d_head), dtype=torch.float16, device="cuda")
 expected_qktv = torch.zeros_like(out_qktv)
 
