@@ -1,7 +1,23 @@
-# Welcome to kernl.ai
+# Welcome to Kernl.ai
 
-The documentation is currently being drafted.
+To install Kernl library, you just have to pip install it:
 
-## Tutorials
+``` { .bash }
+python3 -m pip install install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+```
 
- - [How to support a new model](support-new-model.md)
+Then, in your progam, you have to import the optimization function and apply it to your model:
+
+``` { .py }
+from transformers import AutoModel
+from kernl.model_optimization import optimize_model
+
+model = AutoModel.from_pretrained(model_name).eval().cuda()
+optimize_model(model)
+```
+
+That's it, you have your model with Kernl's optimizations !
+
+Beware, Kernl works on Ampere GPU and with python `3.9.*` for now.
+
+Look at the [repository README](https://github.com/ELS-RD/kernl#readme) for more informations.

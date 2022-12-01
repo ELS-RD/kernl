@@ -145,9 +145,9 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Get Started:
-      - Get started: get-started/start.md
-  - How it works:
-      - Page 1: how-it-works/page.md
+      - Try Kernel: get-started/start.md
+  - Tutorial:
+      - How to support a new model: tutorial/support-new-model.md
   - Code Reference:
       - Page 1: reference/page.md
   - Contribution guide:
