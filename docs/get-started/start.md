@@ -18,6 +18,6 @@ optimize_model(model)
 
 That's it, you have your model with Kernl's optimizations !
 
-Beware, Kernl works on Ampere GPU and with python `3.9.*` for now.
+Beware, Kernl works only on Ampere GPU and with python `3.9.*` for now.
 
 Look at the [repository README](https://github.com/ELS-RD/kernl#readme) for more informations.

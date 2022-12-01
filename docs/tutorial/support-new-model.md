@@ -89,7 +89,7 @@ def forward(self, x):
     return clamp
 ```
 
-More visually, we can draw the FX Graph to better see the computation. In this representation, edges represent the link between a node and the nodes in its arguments (we're discarding `args` and `kwargs` thate are note previously defined nodes):
+More visually, we can draw the FX Graph to better see the computation. In this representation, edges represent the link between a node and the nodes in its arguments (we're discarding `args` and `kwargs` that are note previously defined nodes):
 
 <figure markdown>
   ![FX Graph](fx_graph.drawio.svg){ lazyload=true }
@@ -214,7 +214,7 @@ linear  Linear(in_features=1, out_features=1, bias=True)
 relu    ReLU()
 ```
 
-Unlike the matching pattern, we must be a bit cautious of the node names in the replacement pattern. If we wan't to reuse the nodes matched in the graph, we have to use the same node names as in the pattern. Otherway it'll create a new node in the graph. In our example, the `linear` and the `v` node are kept from the node matched in the original graph but the `relu` node is added to the graph.
+Unlike the matching pattern, we must be a bit cautious of the node names in the replacement pattern. If we want to reuse the nodes matched in the graph, we have to use the same node names as in the pattern. Otherway it'll create a new node in the graph. In our example, the `linear` and the `v` node are kept from the node matched in the original graph but the `relu` node is added to the graph.
 
 Finally, we can apply the replacement and look a the resulting FX Graph:
 
@@ -469,7 +469,7 @@ def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     return gm
 ```
 
-Below is the resulting output, we only shows the beggining of the graph until the first attention layer.
+Below is the resulting output, we only show the beginning of the graph until the first attention layer.
 
 ???+ example "Part of the FX Graph of BERT model"
 
@@ -657,7 +657,7 @@ def replace_attention(gm: torch.fx.GraphModule):
 
 ```
 
-And use it in the torchdynamo backend.
+And use it in the TorchDynamo backend.
 
 ``` { .py hl_lines="4"}
 def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
