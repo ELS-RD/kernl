@@ -42,6 +42,7 @@ def mul_vec_mat(
     out_n_head_stride,
     out_rows_stride,
     out_cols_stride,
+    SCALER: tl.constexpr,
     VEC_COLS: tl.constexpr,
     VEC_SOFTMAX: tl.constexpr,
     SIZE_N: tl.constexpr,
@@ -61,6 +62,8 @@ def mul_vec_mat(
     )
     vec_mask = vec_arange[None, :] < vec_cols
     vec = tl.load(pointer=vec_ptr, mask=vec_mask, other=0.0).to(tl.float32)
+    if SCALER != 1:
+        vec = vec * SCALER
 
     if VEC_SOFTMAX:
         vec_max = tl.max(vec, axis=1)
@@ -93,7 +96,7 @@ def mul_vec_mat(
 
 
 def triton_wrapper(
-    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, softmax_vec: bool, transpose_mat: bool
+    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, scaler: float, softmax_vec: bool, transpose_mat: bool
 ) -> torch.Tensor:
     matrix_stride = list(matrix.stride())
     vec_cols = vec.shape[3]
@@ -128,6 +131,7 @@ def triton_wrapper(
         *vec.stride(),
         *matrix_stride,
         *output.stride(),
+        scaler,
         vec_cols_pow_2,
         softmax_vec,
     )
@@ -135,15 +139,17 @@ def triton_wrapper(
 
 
 def reference_pytorch(
-    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, softmax_vec: bool, transpose_mat: bool
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    output_qkt: torch.Tensor,
+    output_qktv: torch.Tensor,
+    scaler: float,
 ) -> torch.Tensor:
-    if transpose_mat:
-        matrix = matrix.transpose(-1, -2)
-
-    if softmax_vec:
-        vec = vec * 1.0
-        vec = torch.nn.functional.softmax(vec, dim=-1, dtype=torch.float32).half()
-    return torch.matmul(input=vec, other=matrix, out=output)
+    output_qkt = torch.matmul(input=q, other=k.transpose(-1, -2), out=output_qkt)
+    p = torch.nn.functional.softmax(output_qkt * scaler, dim=-1, dtype=torch.float32).half()
+    output_qktv = torch.matmul(input=p, other=v, out=output_qktv)
+    return output_qktv
 
 
 batch_size = 5
@@ -170,13 +176,12 @@ end_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
 
 
 def triton_fn():
-    triton_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True)
-    triton_wrapper(vec=qkt, matrix=v_triton, output=out_qktv, softmax_vec=True, transpose_mat=False)
+    triton_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True, scaler=1.0)
+    triton_wrapper(vec=out_qkt, matrix=v_triton, output=out_qktv, softmax_vec=True, transpose_mat=False, scaler=0.3)
 
 
 def ref_fn():
-    reference_pytorch(vec=q, matrix=k, output=expected_qkt, softmax_vec=False, transpose_mat=True)
-    reference_pytorch(vec=qkt, matrix=v, output=expected_qktv, softmax_vec=True, transpose_mat=False)
+    reference_pytorch(q=q, k=k, v=v, output_qkt=expected_qkt, output_qktv=expected_qktv, scaler=0.3)
 
 
 triton_cg = cuda_graphs_wrapper(triton_fn, [])
@@ -225,9 +230,9 @@ times_overhead = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(st
 
 assert torch.sum(out_qkt) != 0
 assert torch.sum(out_qktv) != 0
-assert torch.allclose(out_qkt, out_qkt, atol=1e-1), f"{out_qktv}\n{expected_qktv}"
+assert torch.allclose(out_qkt, expected_qkt, atol=1e-1), f"{out_qkt}\n{expected_qkt}"
 assert torch.allclose(out_qktv, expected_qktv, atol=1e-1), f"{out_qktv}\n{expected_qktv}"
-print(f"{'tl.sum(q * k^t, 1)':<20}{times_triton_t_qkt.item() :.3f}")
-print(f"{'q @ k.t()':<20}{times_pytorch_qkt.item() :.3f}")
-print(f"{'overhead cuda graph':<20}{times_overhead.item() :.3f}")
+print(f"{'Triton':<25}{times_triton_t_qkt.item() :.3f}")
+print(f"{'PyTorch':<25}{times_pytorch_qkt.item() :.3f}")
+print(f"{'overhead CUDA graphs':<25}{times_overhead.item() :.3f}")
 print(f"ratio {(times_pytorch_qkt - times_overhead).item() / (times_triton_t_qkt - times_overhead).item():.3f}")
