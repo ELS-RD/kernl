@@ -872,7 +872,7 @@
             maintainAspectRatio: false,
             onResize: (chart, size) => {
                 console.log(size)
-                if (size && size.width < 540) {
+                if (size && size.width < 530) {
                     chart.options.plugins.legend.position = "bottom";
                 }
                 else {
@@ -900,6 +900,9 @@
                         padding: {top: 24},
                         text: 'Inference engines',
                         font: {...font, weight: 'bold'}
+                    },
+                    labels: {
+                        boxWidth: 20
                     },
                     font
                 },
