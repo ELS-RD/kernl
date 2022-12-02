@@ -855,53 +855,44 @@
             }
         ];
 
+        const font = {
+            family: 'Poppins',
+        }
+
         const scaleTitle = {
             display: true,
-            padding: 16,
-            color: '#4351e8',
-            font: {
-                family: 'Poppins',
-                size: 14,
-                lineHeight: 1.5
-            }
+            font
         }
+
         const labels = ['(1, 16)', '(1, 128)', '(1, 256)', '(1, 384)', '(1, 512)']
+
         const options = {
             animation: false,
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 title: {
                     display: true,
-                    padding: 16,
+                    padding: {top: 16, bottom: 16},
                     text: ['Speed up over Hugging Face baseline', '(Bert base, AMP fp16)'],
                     color: '#4351e8',
-                    font: {
-                        family: 'Poppins',
-                        size: 16,
-                        style: 'normal',
-                        lineHeight: 1.5
-                    },
+                    font: { ...font, weight: 'bold' }
                 },
                 subtitle: {
                     display: true,
                     text: 'batch size = 1',
-                    font: {
-                        family: 'Poppins',
-                    },
+                    font
                 },
                 legend: {
                     display: true,
                     position: 'right',
                     title: {
                         display: true,
+                        padding: {top: 24},
                         text: 'Inference engines',
-                        font: {
-                            family: 'Poppins',
-                        }
+                        font: {...font, weight: 'bold'}
                     },
-                    font: {
-                        family: 'Poppins',
-                    },
+                    font
                 },
                 tooltip: {
                     enabled: true,
