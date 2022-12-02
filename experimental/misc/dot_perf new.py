@@ -5,7 +5,7 @@ import triton
 import triton.language as tl
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
-
+import nvtx
 
 torch.manual_seed(123)
 
@@ -169,6 +169,19 @@ v_triton = torch.clone(v)
 out_qktv = torch.zeros((batch_size, n_head, 1, d_head), dtype=torch.float16, device="cuda")
 expected_qktv = torch.zeros_like(out_qktv)
 
+# triton_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True, scaler=1.0)
+# triton_wrapper(vec=out_qkt, matrix=v_triton, output=out_qktv, softmax_vec=True, transpose_mat=False, scaler=0.3)
+#
+# pytorch_nvtx = nvtx.start_range(message="PyTorch", color="blue")
+# reference_pytorch(q=q, k=k, v=v, output_qkt=expected_qkt, output_qktv=expected_qktv, scaler=0.3)
+# nvtx.end_range(pytorch_nvtx)
+# torch.cuda.synchronize()
+#
+# triton_nvtx = nvtx.start_range(message="Triton", color="yellow")
+# triton_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True, scaler=1.0)
+# triton_wrapper(vec=out_qkt, matrix=v_triton, output=out_qktv, softmax_vec=True, transpose_mat=False, scaler=0.3)
+# nvtx.end_range(triton_nvtx)
+
 print("CUDA times")
 n_repeat = 1000
 start_event = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
@@ -186,14 +199,14 @@ def ref_fn():
 
 triton_cg = cuda_graphs_wrapper(triton_fn, [])
 ref_cg = cuda_graphs_wrapper(ref_fn, [])
-nothing_cg = cuda_graphs_wrapper(lambda: None, [])
+overhead_cg = cuda_graphs_wrapper(lambda: None, [])
 
 
 # warmup
 for _ in range(n_repeat):
     triton_cg()
     ref_cg()
-    nothing_cg()
+    overhead_cg()
 
 torch.cuda.synchronize()
 
@@ -217,16 +230,16 @@ for i in range(n_repeat):
 
 times_triton_t_qkt = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
 
-# run PyTorch QK^tV
+
+# run ovehead
 for i in range(n_repeat):
     cache.zero_()
     torch.cuda.synchronize()
     start_event[i].record()
-    nothing_cg()
+    overhead_cg()
     end_event[i].record()
 
 times_overhead = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
-
 
 assert torch.sum(out_qkt) != 0
 assert torch.sum(out_qktv) != 0
