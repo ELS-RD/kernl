@@ -870,13 +870,22 @@
             animation: false,
             responsive: true,
             maintainAspectRatio: false,
+            onResize: (chart, size) => {
+                console.log(size)
+                if (size && size.width < 540) {
+                    chart.options.plugins.legend.position = "bottom";
+                }
+                else {
+                    chart.options.plugins.legend.position = "right";
+                }
+            },
             plugins: {
                 title: {
                     display: true,
                     padding: {top: 16, bottom: 16},
                     text: ['Speed up over Hugging Face baseline', '(Bert base, AMP fp16)'],
                     color: '#4351e8',
-                    font: { ...font, weight: 'bold' }
+                    font: {...font, weight: 'bold'}
                 },
                 subtitle: {
                     display: true,
