@@ -160,8 +160,8 @@ d_head = 64
 cache = torch.empty(int(256e6), dtype=torch.int8, device="cuda")
 q = torch.randn((batch_size, n_head, 1, d_head), dtype=torch.float16, device="cuda")
 k = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda")
-out_qkt = torch.zeros((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, device="cuda")
-expected_qkt = torch.zeros_like(out_qkt)
+out_qkt = torch.zeros((batch_size, n_head, 1, seq_len_k), dtype=torch.float32, device="cuda")
+expected_qkt = torch.zeros_like(out_qkt, dtype=torch.float16)
 
 qkt = torch.randn((batch_size, n_head, 1, seq_len_k), dtype=torch.float16, device="cuda")
 v = torch.randn((batch_size, n_head, seq_len_k, d_head), dtype=torch.float16, device="cuda")
@@ -243,7 +243,7 @@ times_overhead = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(st
 
 assert torch.sum(out_qkt) != 0
 assert torch.sum(out_qktv) != 0
-assert torch.allclose(out_qkt, expected_qkt, atol=1e-1), f"{out_qkt}\n{expected_qkt}"
+assert torch.allclose(out_qkt.float(), expected_qkt.float(), atol=1e-1), f"{out_qkt}\n{expected_qkt}"
 assert torch.allclose(out_qktv, expected_qktv, atol=1e-1), f"{out_qktv}\n{expected_qktv}"
 print(f"{'Triton':<25}{times_triton_t_qkt.item() :.3f}")
 print(f"{'PyTorch':<25}{times_pytorch_qkt.item() :.3f}")
