@@ -48,8 +48,8 @@ def mul_vec_mat(
     SIZE_N: tl.constexpr,
 ):
     n_block_idx = tl.program_id(0)
-    batch_idx = tl.program_id(1)
-    n_head_idx = tl.program_id(2)
+    batch_idx = tl.program_id(2)
+    n_head_idx = tl.program_id(1)
 
     size_n_arange = tl.arange(0, SIZE_N)
     vec_arange = tl.arange(0, VEC_COLS)
@@ -116,7 +116,7 @@ def triton_wrapper(
     assert vec_cols == mat_rows
 
     def grid(args) -> Tuple[int, int, int]:
-        return (triton.cdiv(mat_cols, args["SIZE_N"]), batch_size, n_head)
+        return (triton.cdiv(mat_cols, args["SIZE_N"]), n_head, batch_size)
 
     vec_cols_pow_2 = triton.next_power_of_2(vec_cols)
 
