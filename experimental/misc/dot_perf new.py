@@ -110,6 +110,7 @@ def triton_wrapper(
         if matrix_stride[-1] == 1:  # is row major
             # change layout to col major
             matrix.set_(source=matrix.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
+            matrix_stride = list(matrix.stride())
 
     assert vec.shape[2] == output.shape[2] == 1
     assert mat_cols == out_cols
