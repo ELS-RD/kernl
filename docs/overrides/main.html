@@ -871,7 +871,6 @@
             responsive: true,
             maintainAspectRatio: false,
             onResize: (chart, size) => {
-                console.log(size)
                 if (size && size.width < 530) {
                     chart.options.plugins.legend.position = "bottom";
                 }
