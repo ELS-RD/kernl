@@ -17,11 +17,9 @@ from typing import Callable
 
 import pytest
 import torch
-from einops import rearrange
 
 from conftest import assert_all_close, set_seed
-from src.kernl.implementations.attention_split_1 import attention_split_1_forward, attention_split_1_reference
-from src.kernl.implementations.attention_split_2 import attention_split_2_forward
+from src.kernl.implementations.attention_skin import skinny_attention_forward
 from src.kernl.implementations.cuda_graph import cuda_graphs_wrapper
 
 from kernl.implementations.attention import attention_forward, attention_reference, closest_power_of_2
@@ -163,55 +161,7 @@ def test_closest_power_of_2():
 
 
 @set_seed()
-def test_cross_attention_split_1():
-    q = torch.rand((8, 1, 1, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((8, 1, 2048, 64), dtype=torch.float16, device="cuda")
-    v = torch.rand_like(k)
-    mask = None
-    sm_scale = 1.0
-
-    expected_blocks, expected_maximums, expected_sums = attention_split_1_reference(
-        q, k, v, sm_scale, attention_mask=mask, is_causal=False
-    )
-
-    blocks, maximums, sums = attention_split_1_forward(q, k, v, sm_scale=sm_scale, attention_mask=mask, is_causal=False)
-
-    assert_all_close(a=expected_maximums, b=maximums, atol=1e-2)
-    assert_all_close(a=expected_blocks, b=blocks, atol=1e-2)
-    assert_all_close(a=expected_sums, b=sums, atol=1e-2)
-
-
-@set_seed()
-def test_cross_attention_split_2():
-    q = torch.rand((8, 1, 1, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((8, 1, 2048, 64), dtype=torch.float16, device="cuda")
-    v = torch.rand_like(k)
-    mask = None
-    sm_scale = 1.0
-
-    expected = attention_reference(
-        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=mask
-    )
-
-    blocks, maximums, sums = attention_split_1_forward(q, k, v, sm_scale=sm_scale, attention_mask=mask, is_causal=False)
-    result = attention_split_2_forward(blocks, maximums, sums, torch.empty_like(q))
-    assert_all_close(a=expected, b=result, atol=1e-2)
-
-
-def attention_single_query(q, k, v, sm_scale):
-    """
-    q: (batch, nheads, 1, headdim)
-    k, v: (batch, nheads, seqlen, headdim)
-    """
-    q = rearrange(q, "b h 1 d -> b h d")
-    scores = torch.einsum("bhd,bhsd->bhs", q * sm_scale, k)
-    attn = torch.softmax(scores, dim=-1)
-    out = torch.einsum("bhs,bhsd->bhd", attn, v)
-    return out
-
-
-@set_seed()
-@pytest.mark.parametrize("implementation", ["torch", "optimized", "classic", "tridao"])
+@pytest.mark.parametrize("implementation", ["torch", "optimized", "classic"])
 def test_benchmark_cross_attention_split(benchmark, implementation):
     q = torch.rand((5, 20, 1, 64), dtype=torch.float16, device="cuda")
     k = torch.rand((5, 20, 1500, 64), dtype=torch.float16, device="cuda")
@@ -237,10 +187,9 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
     elif implementation == "optimized":
 
         def fn(q, k, v, sm_scale=1.0, attention_mask=mask, is_causal=is_causal):
-            blocks, maximums, sums = attention_split_1_forward(
-                q, k, v, sm_scale=sm_scale, attention_mask=attention_mask, is_causal=is_causal
+            return skinny_attention_forward(
+                q, k, v, output, sm_scale=sm_scale, attention_mask=attention_mask, is_causal=is_causal
             )
-            return attention_split_2_forward(blocks, maximums, sums, output)
 
         r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
         _ = r(q, k, v)[0]
@@ -253,15 +202,6 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
         r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
         _ = r(q, k, v)[0]
         result = benchmark(r)[0]
-    elif implementation == "tridao":
-
-        def fn(q, k, v):
-            return attention_single_query(q, k, v, sm_scale=sm_scale)
-
-        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
-        _ = r(q, k, v)[0]
-        result = benchmark(r)[0]
-        result = rearrange(result, "b h d -> b h 1 d")
     else:
         raise ValueError(f"Unknown implementation {implementation}")
 

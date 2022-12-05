@@ -56,7 +56,7 @@ def attention_split_1_reference(
 
 
 @triton.jit
-def _fwd_kernel_split_1(
+def _fwd_part_1(
     heads,
     size_m,
     size_n,
@@ -65,7 +65,6 @@ def _fwd_kernel_split_1(
     V,
     sm_scale,
     attention_mask,
-    # TMP,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
     output,
     maximums,
     sums,
@@ -111,72 +110,6 @@ def _fwd_kernel_split_1(
     BLOCK_DHEAD: tl.constexpr,
     BLOCK_N: tl.constexpr,
 ):
-    """
-    Computes attention
-
-    Q•K^T Naming conventions. V multiply not represented here.
-
-                                    N Dimension
-                                       size_n
-                                   ───────────────
-                                  ┌───┬───┬───────┐
-                                  │   │   │       │
-                                  │   │   │       │
-                     K Dimension  │   │   │       │
-                                  │   │   │       │
-                                  │   │   │       │
-                                  │   │   │       │
-                    BLOCK_DHEAD   └───┴───┴───────┘
-                   ┌────────────┐
-               │   │            │
-    M Dimension│   ├────────────┤     ┌───┐
-      size_m   │   │            │     │   │ BLOCK_M
-               │   ├────────────┤     └───┘
-               │   │            │    BLOCK_N
-               │   │            │
-                   └────────────┘
-
-    @param heads: number of heads per batch
-    @param size_m: size of M axis
-    @param size_n: size of N axis
-    @param Q: query matrix size (batch, heads, size_m, BLOCK_DHEAD)
-    @param K: key matrix size (batch, heads, size_n, BLOCK_DHEAD)
-    @param V: value matrix size (batch, heads, size_n, BLOCK_DHEAD)
-    @param sm_scale: scaling factor applied after operation QxK
-    @param output: output matrix size (batch, heads, size_m, BLOCK_DHEAD)
-    @param q_batch_stride: matrix q stride for batch dimension
-    @param q_head_stride: matrix q stride for head dimension
-    @param q_m_stride: matrix q stride for rows, called "M dimension"
-    @param q_k_stride: matrix q stride for columns, called "K dimension"
-    @param k_batch_stride: matrix k stride for batch dimension
-    @param k_head_stride: matrix k stride for head dimension
-    @param k_n_stride: matrix k stride for rows, called "N dimension", will be columns after transpose
-    @param k_k_stride: matrix k stride for columns, called "K dimension", will be rows after transpose
-    @param v_batch_stride: matrix v stride for batch dimension
-    @param v_head_stride: matrix v stride for head dimension
-    @param v_k_stride: matrix v stride for columns
-    @param v_n_stride: matrix v stride for rows
-    @param o_batch_stride: output matrix stride for batch dimension
-    @param o_head_stride: output matrix stride for head dimension
-    @param o_m_stride: output matrix stride for rows
-    @param o_n_stride: output matrix stride for columns
-    @param attention_mask: attention mask matrix broadcastable to (batch, heads, size_m, size_n)
-    @param attention_mask_batch_stride: matrix mask stride for batch dimension
-    @param attention_mask_head_stride: matrix mask stride for head dimension
-    @param attention_mask_m_stride: matrix mask stride for rows
-    @param attention_mask_k_stride: matrix mask stride for columns
-    @param NEED_LOAD_MASK_SIZE_N: use boundary check when loading K/V/Attention mask tensors
-    @param NEED_LOAD_MASK_SIZE_M: use boundary check when loading/saving from/to Q/Output tensors
-    @param MASK_BATCH_SIZE: matrix mask size for batch dimension
-    @param MASK_HEAD_SIZE: matrix mask size for head dimension
-    @param MASK_M_SIZE: matrix mask size for rows
-    @param MASK_K_SIZE: matrix mask size for columns
-    @param HAS_MASK: whether the mask is applied
-    @param IS_CAUSAL: whether the mask is applied
-    @param BLOCK_M: number of rows computed in a single instance for matrix Q
-    @param BLOCK_DHEAD: number of columns per head
-    @param BLOCK_N:  number of rows computed at each loop in the main loop for matrix K and V
-    """
     # Index of the block on M axis (M axis is the rows of matrix K)
     n_block_idx = tl.program_id(0)
     m_block_idx = tl.program_id(1)
@@ -335,7 +268,101 @@ def _fwd_kernel_split_1(
         tl.store(out_ptrs, result)
 
 
-class AttentionSplit1(torch.autograd.Function):
+@triton.jit
+def _fwd_part_2(
+    heads_count,
+    intermediates_count,
+    size_m,
+    inputs,
+    input_batch_stride,
+    input_head_stride,
+    input_intermediate_stride,
+    input_m_stride,
+    input_n_stride,
+    maximums,
+    maximums_batch_stride,
+    maximums_head_stride,
+    maximums_intermediate_stride,
+    maximums_m_stride,
+    sums,
+    sums_batch_stride,
+    sums_head_stride,
+    sums_intermediate_stride,
+    sums_m_stride,
+    output,
+    output_batch_stride,
+    output_head_stride,
+    output_m_stride,
+    output_n_stride,
+    BLOCK_M: tl.constexpr,
+    BLOCK_DHEAD: tl.constexpr,
+):
+    m_block_idx = tl.program_id(0)
+    head_idx = tl.program_id(1)
+    current_batch_idx = head_idx // heads_count
+    current_head_idx = head_idx % heads_count
+
+    range_offs_m = tl.arange(0, BLOCK_M)
+    range_offs_d = tl.arange(0, BLOCK_DHEAD)
+
+    offs_m = m_block_idx * BLOCK_M + range_offs_m
+
+    acc = tl.zeros((BLOCK_M, BLOCK_DHEAD), dtype=tl.float32)
+    l_i = tl.zeros((BLOCK_M,), dtype=tl.float32) - float("inf")
+    d_i = tl.zeros((BLOCK_M,), dtype=tl.float32)
+    for n_intermediate_idx in range(0, intermediates_count):
+        offs_inputs = (
+            current_batch_idx * input_batch_stride
+            + current_head_idx * input_head_stride
+            + n_intermediate_idx * input_intermediate_stride
+            + (offs_m[:, None] * input_m_stride + range_offs_d[None, :] * input_n_stride)
+        )
+        ptrs_inputs = inputs + offs_inputs
+        numerators = tl.load(ptrs_inputs, mask=offs_m[:, None] < size_m, other=0.0)
+
+        offs_sums = (
+            current_batch_idx * sums_batch_stride
+            + current_head_idx * sums_head_stride
+            + n_intermediate_idx * sums_intermediate_stride
+            + offs_m * sums_m_stride
+        )
+        ptrs_sums = sums + offs_sums
+        d_j = tl.load(ptrs_sums, mask=offs_m < size_m, other=0.0)
+
+        offs_maximums = (
+            current_batch_idx * maximums_batch_stride
+            + current_head_idx * maximums_head_stride
+            + n_intermediate_idx * maximums_intermediate_stride
+            + offs_m * maximums_m_stride
+        )
+        ptrs_maximums = maximums + offs_maximums
+        l_j = tl.load(ptrs_maximums, mask=offs_m < size_m, other=0.0)
+
+        l_new = tl.maximum(l_i, l_j)
+        alpha = tl.exp(l_i - l_new)
+        beta = tl.exp(l_j - l_new)
+        d_new = alpha * d_i + beta * d_j
+
+        p_scale = beta / d_new
+
+        acc_scale = d_i / d_new * alpha
+        acc *= acc_scale[:, None]
+
+        acc += numerators * p_scale[:, None]
+
+        d_i = d_new
+        l_i = l_new
+
+    offs_output = (
+        current_batch_idx * output_batch_stride
+        + current_head_idx * output_head_stride
+        + (offs_m[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
+    )
+    ptrs_output = output + offs_output
+    tl.store(ptrs_output, acc, mask=offs_m[:, None] < size_m)
+
+
+class SkinnyAttention(torch.autograd.Function):
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
     def forward(
@@ -343,6 +370,7 @@ class AttentionSplit1(torch.autograd.Function):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
+        output: torch.Tensor,
         sm_scale: float,
         is_causal: bool,
         attention_mask: Optional[torch.Tensor] = None,
@@ -381,7 +409,7 @@ class AttentionSplit1(torch.autograd.Function):
         NEED_LOAD_MASK_SIZE_M = size_m % BLOCK_M != 0
 
         n_divisions = triton.cdiv(size_n, BLOCK_N)
-        output = torch.empty(
+        splitted_qkt = torch.empty(
             q.size(0), q.size(1), n_divisions, q.size(2), q.size(3), dtype=torch.float16, device="cuda"
         )
 
@@ -423,7 +451,7 @@ class AttentionSplit1(torch.autograd.Function):
 
             HAS_MASK = True
 
-        _fwd_kernel_split_1[grid](
+        _fwd_part_1[grid](
             heads=heads,
             size_m=size_m,
             size_n=size_n,
@@ -433,7 +461,7 @@ class AttentionSplit1(torch.autograd.Function):
             sm_scale=sm_scale,
             attention_mask=attention_mask,
             # TMP=tmp,
-            output=output,
+            output=splitted_qkt,
             maximums=maximums,
             sums=sums,
             q_batch_stride=q.stride(0),
@@ -456,11 +484,11 @@ class AttentionSplit1(torch.autograd.Function):
             maximums_head_stride=maximums.stride(1),
             maximums_step_stride=maximums.stride(2),
             maximums_m_stride=maximums.stride(3),
-            o_batch_stride=output.stride(0),
-            o_head_stride=output.stride(1),
-            o_step_stride=output.stride(2),
-            o_m_stride=output.stride(3),
-            o_n_stride=output.stride(4),
+            o_batch_stride=splitted_qkt.stride(0),
+            o_head_stride=splitted_qkt.stride(1),
+            o_step_stride=splitted_qkt.stride(2),
+            o_m_stride=splitted_qkt.stride(3),
+            o_n_stride=splitted_qkt.stride(4),
             attention_mask_batch_stride=attention_mask.stride(0) if HAS_MASK else 0,
             attention_mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
             attention_mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
@@ -480,16 +508,38 @@ class AttentionSplit1(torch.autograd.Function):
             num_warps=1,
             num_stages=8,
         )
-        ctx.save_for_backward(q, k, v, output)
-        return output, maximums, sums
+
+        batch, heads, steps, size_m, dhead = splitted_qkt.size()
+        # Attention hardcode
+        BLOCK_M = 16
+        grid_part2 = (triton.cdiv(size_m, BLOCK_M), batch * heads)
+        _fwd_part_2[grid_part2](
+            heads,
+            steps,
+            size_m,
+            splitted_qkt,
+            *splitted_qkt.stride(),
+            maximums,
+            *maximums.stride(),
+            sums,
+            *sums.stride(),
+            output,
+            *output.stride(),
+            BLOCK_M=BLOCK_M,
+            BLOCK_DHEAD=dhead,
+            num_warps=4,
+            num_stages=1,
+        )
+        return output
 
 
-def attention_split_1_forward(
+def skinny_attention_forward(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
+    output: torch.Tensor,
     sm_scale: float,
     is_causal: bool = False,
     attention_mask: Optional[torch.Tensor] = None,
 ):
-    return AttentionSplit1.apply(q, k, v, sm_scale, is_causal, attention_mask)
+    return SkinnyAttention.apply(q, k, v, output, sm_scale, is_causal, attention_mask)
