@@ -52,6 +52,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
     --accessible-line-height: 150%;
 
     /* border */
+    --border-radius-sm: 4px;
     --border-radius-md: 8px;
 
     /* shadows */
@@ -426,27 +427,38 @@ div[class="md-search__scrollwrap"] {
 }
 
 .knl-highlight__figure > figure {
+    position: relative;
     margin: 0;
     padding: var(--border-radius-md);
     text-align: center;
     border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-secondary);
-    transition: var(--hover-transform);
 }
 
-.knl-highlight__figure > figure.open-modal svg {
+.knl-highlight__figure > figure .button__close {
     position: absolute;
+    margin: 0;
+    padding: 0;
     width: 24px;
     height: 24px;
     top: 8px;
     left: 8px;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    z-index: 1;
+    transition: var(--hover-transform);
+}
+
+.knl-highlight__figure > figure .button__close:hover {
+    transform: var(--hover-scale);
+}
+
+.knl-highlight__figure > figure .button__close svg {
     fill: var(--color-primary);
 }
 
-.knl-highlight__figure > figure.open-modal:hover {
-    cursor: pointer;
-    transform: var(--hover-scale);
-}
+
 
 .knl-highlight__figure img.efficiency {
     width: 400px;
@@ -458,6 +470,7 @@ div[class="md-search__scrollwrap"] {
     position: relative;
     margin: auto;
     height: 400px;
+    z-index: 0;
 }
 
 .knl-highlight__content {
