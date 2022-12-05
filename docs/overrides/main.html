@@ -872,10 +872,9 @@
             maintainAspectRatio: false,
             onResize: (chart, size) => {
                 if (size && size.width < 530) {
-                    chart.options.plugins.legend.position = "bottom";
-                }
-                else {
-                    chart.options.plugins.legend.position = "right";
+                    chart.options.plugins.legend.position = 'bottom';
+                } else {
+                    chart.options.plugins.legend.position = 'right';
                 }
             },
             plugins: {
