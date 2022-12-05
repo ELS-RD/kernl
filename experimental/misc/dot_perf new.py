@@ -5,7 +5,7 @@ import triton
 import triton.language as tl
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
-import nvtx
+
 
 torch.manual_seed(123)
 
@@ -43,47 +43,42 @@ def mul_vec_mat(
     out_rows_stride,
     out_cols_stride,
     SCALER: tl.constexpr,
-    VEC_COLS: tl.constexpr,
     VEC_SOFTMAX: tl.constexpr,
+    VEC_COLS: tl.constexpr,
     SIZE_N: tl.constexpr,
 ):
     n_block_idx = tl.program_id(0)
-    batch_idx = tl.program_id(2)
     n_head_idx = tl.program_id(1)
+    batch_idx = tl.program_id(2)
 
     size_n_arange = tl.arange(0, SIZE_N)
     vec_arange = tl.arange(0, VEC_COLS)
 
-    vec_ptr = (
-        vec_tensor
-        + batch_idx * vec_batch_stride
-        + n_head_idx * vec_n_head_stride
-        + vec_cols_stride * vec_arange[None, :]
+    vec_ptr = vec_tensor + (
+        batch_idx * vec_batch_stride + n_head_idx * vec_n_head_stride + vec_cols_stride * vec_arange[:, None]
     )
-    vec_mask = vec_arange[None, :] < vec_cols
+    vec_mask = vec_arange[:, None] < vec_cols
     vec = tl.load(pointer=vec_ptr, mask=vec_mask, other=0.0).to(tl.float32)
+
     if SCALER != 1:
         vec = vec * SCALER
 
     if VEC_SOFTMAX:
-        vec_max = tl.max(vec, axis=1)
-        vec = vec - vec_max[None, :]
+        vec_max = tl.max(vec, axis=0)
+        vec = vec - vec_max[:, None]
         vec = tl.exp(vec)
-        vec = vec / tl.sum(vec, axis=1)[None, :]
+        vec = vec / tl.sum(vec, axis=0)[:, None]
 
     matrix_ptr = matrix_tensor + (
         batch_idx * matrix_batch_stride
         + n_head_idx * matrix_n_head_stride
-        + vec_arange[None, :] * matrix_rows_stride  # cols
-        + (n_block_idx * SIZE_N + size_n_arange)[:, None] * matrix_cols_stride  # rows
+        + vec_arange[:, None] * matrix_rows_stride  # cols
+        + (n_block_idx * SIZE_N + size_n_arange)[None, :] * matrix_cols_stride  # rows
     )
-
-    matrix_mask = (vec_arange[None, :] < mat_rows) & ((n_block_idx * SIZE_N + size_n_arange)[:, None] < mat_cols)
-
+    matrix_mask = (vec_arange[:, None] < mat_rows) & ((n_block_idx * SIZE_N + size_n_arange)[None, :] < mat_cols)
     mat = tl.load(pointer=matrix_ptr, mask=matrix_mask, other=0.0).to(tl.float32)
-
     result = vec * mat
-    result = tl.sum(input=result, axis=1)
+    result = tl.sum(input=result, axis=0)
 
     out_ptr = out_tensor + (
         batch_idx * out_batch_stride
@@ -91,33 +86,36 @@ def mul_vec_mat(
         + (n_block_idx * SIZE_N + size_n_arange) * out_cols_stride
     )
     out_mask = (n_block_idx * SIZE_N + size_n_arange) < out_cols
-
-    tl.store(pointer=out_ptr, value=result, eviction_policy="evict_first", mask=out_mask)
+    tl.store(pointer=out_ptr, value=result, mask=out_mask, eviction_policy="evict_first")
 
 
 def triton_wrapper(
-    vec: torch.Tensor, matrix: torch.Tensor, output: torch.Tensor, scaler: float, softmax_vec: bool, transpose_mat: bool
+    vec: torch.Tensor,
+    matrix: torch.Tensor,
+    output: torch.Tensor,
+    scaler: float,
+    softmax_vec: bool,
+    transpose_mat: bool,
 ) -> torch.Tensor:
+    vec_cols = vec.shape[-1]
+    out_cols = output.shape[-1]
+
+    batch, heads, mat_rows, mat_cols = matrix.shape
     matrix_stride = list(matrix.stride())
-    vec_cols = vec.shape[3]
-    out_cols = output.shape[3]
     if transpose_mat:
-        _, _, mat_cols, mat_rows = matrix.shape
-        # to transpose matrix we just need to swap strides!
         matrix_stride[-1], matrix_stride[-2] = matrix_stride[-2], matrix_stride[-1]
+        mat_rows, mat_cols = mat_cols, mat_rows
     else:
-        _, _, mat_rows, mat_cols = matrix.shape
         if matrix_stride[-1] == 1:  # is row major
             # change layout to col major
             matrix.set_(source=matrix.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
             matrix_stride = list(matrix.stride())
-
-    assert vec.shape[2] == output.shape[2] == 1
+    assert vec.shape[-2] == output.shape[-2] == 1
     assert mat_cols == out_cols
     assert vec_cols == mat_rows
 
     def grid(args) -> Tuple[int, int, int]:
-        return (triton.cdiv(mat_cols, args["SIZE_N"]), n_head, batch_size)
+        return triton.cdiv(mat_cols, args["SIZE_N"]), heads, batch
 
     vec_cols_pow_2 = triton.next_power_of_2(vec_cols)
 
@@ -133,8 +131,8 @@ def triton_wrapper(
         *matrix_stride,
         *output.stride(),
         scaler,
-        vec_cols_pow_2,
         softmax_vec,
+        vec_cols_pow_2,
     )
     return output
 
@@ -148,7 +146,7 @@ def reference_pytorch(
     scaler: float,
 ) -> torch.Tensor:
     output_qkt = torch.matmul(input=q, other=k.transpose(-1, -2), out=output_qkt)
-    p = torch.nn.functional.softmax(output_qkt * scaler, dim=-1, dtype=torch.float32).half()
+    p = torch.nn.functional.softmax(output_qkt * scaler, dim=-1)
     output_qktv = torch.matmul(input=p, other=v, out=output_qktv)
     return output_qktv
 
