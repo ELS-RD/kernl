@@ -30,6 +30,7 @@ class MemoryMap:
     def _get_registered_storage(self, pointer: torch.Tensor):
         max_pointer = torch.max(pointer).item()
         min_pointer = torch.min(pointer).item()
+
         registered_storage = next(
             filter(
                 lambda registered: min_pointer >= registered.ptr and max_pointer < registered.end_ptr, self.storages
@@ -52,15 +53,21 @@ class MemoryMap:
         mask: torch.Tensor = None,
         other=0.0,
     ):
+        assert pointer.is_cuda
         assert 0 < pointer.dim() < 3
         assert pointer.dtype == torch.int64
 
         if mask is None:
             mask = torch.ones_like(pointer).bool()
+        assert mask.is_cuda
         assert 0 < mask.dim() < 3
         assert mask.dtype == torch.bool
 
-        registered_storage = self._get_registered_storage(pointer)
+        if torch.all(~mask):
+            # Todo: The type is wrong here, we can't determine the correct type
+            return torch.full_like(pointer, fill_value=other, dtype=torch.float16, device="cuda")
+
+        registered_storage = self._get_registered_storage(pointer[mask])
         access_tensor = registered_storage.access_tensor
 
         index_tensor = pointer - registered_storage.ptr
@@ -79,7 +86,10 @@ class MemoryMap:
         assert 0 < mask.dim() < 3
         assert mask.dtype == torch.bool
 
-        registered_storage = self._get_registered_storage(pointer)
+        if torch.all(~mask):
+            return
+
+        registered_storage = self._get_registered_storage(pointer[mask])
         access_tensor = registered_storage.access_tensor
 
         index_tensor = pointer - registered_storage.ptr

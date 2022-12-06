@@ -9,6 +9,10 @@ from kernl.debugger.core import ExecutionContext
 from kernl.debugger.memory_map import MemoryMap
 from kernl.debugger.tl_lang import TritonLangProxy, WrappedTensor
 
+from kernl.debugger.tl_lang import _primitive_to_tensor
+
+from kernl.debugger.tl_lang import debugger_constexpr
+
 
 class GridSelector:
     def __init__(self, func):
@@ -91,9 +95,9 @@ class DebuggerFunction:
             if torch.is_tensor(arg):
                 ptr = memory.add_tensor(arg)
                 return WrappedTensor(torch.tensor([ptr], dtype=torch.int64, device="cuda"))
-            # if self._is_constexpr(name):
-            #     return debugger_constexpr(arg)
-            return arg
+            if self._is_constexpr(name):
+                return debugger_constexpr(arg)
+            return WrappedTensor(_primitive_to_tensor(arg))
 
         new_args = tuple(map(convert_arg, zip(self.func.__code__.co_varnames, args)))
         new_kwargs = {k: convert_arg((k, v)) for k, v in kwargs.items()}
@@ -129,14 +133,25 @@ class AutotuneRunner:
         self.grid = grid
 
     def __call__(self, *args, **kwargs):
-        # Todo: Run first with input tensor, and others with cloned tensors to avoid modifying output many times
-        assert len(self.autotune_params["configs"]) == 1, "Currently only supporting one config in autotune"
+        assert len(self.autotune_params["configs"]) >= 1
 
-        for config in self.autotune_params["configs"]:
+        for config in self.autotune_params["configs"][1:]:
+            def convert_arg(v):
+                if torch.is_tensor(v):
+                    return torch.clone(v)
+                return v
+            new_args = tuple(map(convert_arg, args))
+            new_kwargs = {k: convert_arg((k, v)) for k, v in kwargs.items()}
             if self.grid:
-                self.func[self.grid](*args, **kwargs, **config.kwargs)
+                self.func[self.grid](*new_args, **new_kwargs, **config.kwargs)
             else:
-                self.func(*args, **kwargs, **config.kwargs)
+                self.func(*new_args, **new_kwargs, **config.kwargs)
+
+        main_config = self.autotune_params["configs"][0]
+        if self.grid:
+            self.func[self.grid](*args, **kwargs, **main_config.kwargs)
+        else:
+            self.func(*args, **kwargs, **main_config.kwargs)
 
 
 def triton_debug_autotune(**kwars):

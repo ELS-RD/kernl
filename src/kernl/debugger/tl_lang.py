@@ -21,10 +21,10 @@ def _primitive_to_tensor(x):
         return x
     elif isinstance(x, WrappedTensor):
         return x
-    # elif isinstance(x, debugger_constexpr):
-    #     if x.value is None:
-    #         return None
-    #     return _primitive_to_tensor(x.value)
+    elif isinstance(x, debugger_constexpr):
+        if x.value is None:
+            return None
+        return _primitive_to_tensor(x.value)
     elif x is None:
         return None
     assert False, f"cannot convert {x} to tensor"
@@ -48,8 +48,8 @@ def _tensor_operation(func):
         def unwrap_tensor(v):
             if isinstance(v, WrappedTensor):
                 return v.tensor
-            # if isinstance(v, debugger_constexpr):
-            #     return v.value
+            if isinstance(v, debugger_constexpr):
+                return v.value
             return v
 
         new_args = tuple(map(unwrap_tensor, args))
@@ -61,56 +61,56 @@ def _tensor_operation(func):
     return wrapper
 
 
-# class debugger_constexpr:
-#     def __init__(self, value):
-#         if isinstance(value, debugger_constexpr):
-#             self.value = value.value
-#         else:
-#             self.value = value
-#
-#     # def __repr__(self) -> str:
-#     #     return f"constexpr[{self.value}]"
-#
-#     def __bool__(self):
-#         return bool(self.value)
-#
-#     def __ge__(self, other):
-#         other = other.value if isinstance(other, debugger_constexpr) else other
-#         return self.value >= other
-#
-#     def __gt__(self, other):
-#         other = other.value if isinstance(other, debugger_constexpr) else other
-#         return self.value > other
-#
-#     def __le__(self, other):
-#         other = other.value if isinstance(other, debugger_constexpr) else other
-#         return self.value <= other
-#
-#     def __lt__(self, other):
-#         other = other.value if isinstance(other, debugger_constexpr) else other
-#         return self.value < other
-#
-#     def __eq__(self, other):
-#         other = other.value if isinstance(other, debugger_constexpr) else other
-#         return self.value == other
-#
-#     def to(self, dtype, bitcast=False, _builder=None):
-#         raise NotImplemented()
-# if dtype in [float8, float16, bfloat16]:
-#     raise ValueError("floating point constexpr must be float64")
-# if dtype.is_int():
-#     ret_ty = int
-# elif dtype.is_bool():
-#     ret_ty = bool
-# elif dtype.is_floating():
-#     ret_ty = float
-# return constexpr(ret_ty(self.value))
+class debugger_constexpr:
+    def __init__(self, value):
+        if isinstance(value, debugger_constexpr):
+            self.value = value.value
+        else:
+            self.value = value
+
+    def __index__(self) -> int:
+        return self.value
+
+    def __bool__(self):
+        return bool(self.value)
+
+    def __ge__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value >= other
+
+    def __gt__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value > other
+
+    def __le__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value <= other
+
+    def __lt__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value < other
+
+    def __eq__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value == other
+
+    def to(self, dtype, bitcast=False, _builder=None):
+        if dtype in [torch.int64]:
+            ret_ty = int
+        elif dtype == torch.bool:
+            ret_ty = bool
+        elif dtype in [torch.float64]:
+            ret_ty = float
+        else:
+            raise ValueError("dtype not supported in debugger")
+        return debugger_constexpr(ret_ty(self.value))
 
 
 class WrappedTensor:
     def __init__(self, tensor):
         self.tensor = tensor
-
+    def __index__(self) -> int:
+        return self.tensor.item()
     def __str__(self) -> str:
         return "wrapped_" + str(self.tensor)
 
@@ -285,6 +285,10 @@ class WrappedTensor:
         #     return semantic.bitcast(self, dtype, )
         # return semantic.cast(self, dtype, )
 
+def _constexpr_to_value(v):
+    if isinstance(v, debugger_constexpr):
+        return v.value
+    return v
 
 class TritonLangProxy:
     _memory_map: MemoryMap
@@ -342,6 +346,12 @@ class TritonLangProxy:
 
     @_tensor_operation
     def zeros(self, shape, dtype):
+        for i, d in enumerate(shape):
+            if not isinstance(d, debugger_constexpr):
+                raise TypeError(f"Shape element {i} must have type `constexpr`")
+            if not isinstance(d.value, int):
+                raise TypeError(f"Shape element {i} must have type `constexpr[int]`, got `constexpr[{type(d.value)}]")
+        shape = [x.value for x in shape]
         return torch.zeros(size=shape, dtype=dtype, device="cuda")
 
     @_tensor_operation

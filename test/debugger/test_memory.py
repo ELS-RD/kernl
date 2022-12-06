@@ -135,10 +135,10 @@ def test_load_vect_mask():
     memory = MemoryMap()
     ptr = memory.add_tensor(t)
 
-    without_mask = memory.load(ptr + torch.arange(100))
+    without_mask = memory.load(ptr + torch.arange(100, device="cuda"))
     assert torch.equal(without_mask, t)
 
-    with_mask = memory.load(ptr + torch.arange(100), mask=mask, other=other)
+    with_mask = memory.load(ptr + torch.arange(100, device="cuda"), mask=mask, other=other)
     assert torch.equal(with_mask, expected)
 
 
