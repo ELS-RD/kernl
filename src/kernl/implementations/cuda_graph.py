@@ -28,7 +28,7 @@ def cuda_graphs_wrapper(
     From torchdynamo
     """
     assert isinstance(inputs, (list, tuple)), f"inputs is of type {type(inputs)} instead of list"
-    static_inputs = [torch.zeros_like(x) for x in inputs]
+
     # required warmup, not just for perf but for correctness
     torch.cuda.synchronize()
     stream = torch.cuda.Stream()
@@ -41,6 +41,8 @@ def cuda_graphs_wrapper(
     stream.synchronize()
     torch.cuda.current_stream().wait_stream(stream)
     torch.cuda.synchronize()
+    # copy inputs after executing the warmup in case it mutates them at the first iteration
+    static_inputs = [torch.zeros_like(x) for x in inputs]
 
     # record
     graph = torch.cuda.CUDAGraph()

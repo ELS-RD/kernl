@@ -161,68 +161,38 @@ def test_closest_power_of_2():
     assert closest_power_of_2(1, min_range=min_range, max_range=max_range) == [2, 4, 8]
 
 
+implementations_skinny_cross_attention = {
+    "torch": lambda output, sm_scale: lambda q, k, v: attention_reference(
+        q=q, k=k, v=v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+    "split-k-parallel": lambda output, sm_scale: lambda q, k, v: skinny_attention_forward(
+        q, k, v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+    "flash-attention": lambda output, sm_scale: lambda q, k, v: attention_forward(
+        q, k, v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+    "vec-mat-mul": lambda output, sm_scale: lambda q, k, v: attention_vec_mat_mul_forward(
+        q=q, k=k, v=v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+}
+
+
 @set_seed()
-@pytest.mark.parametrize("implementation", ["torch", "split-k", "vec-mat-mul", "classic"])
-def test_benchmark_cross_attention_split(benchmark, implementation):
+@pytest.mark.parametrize("implementation", implementations_skinny_cross_attention.keys())
+def test_benchmark_skinny_cross_attention(benchmark, implementation):
     q = torch.rand((5, 20, 1, 64), dtype=torch.float16, device="cuda")
     k = torch.rand((5, 20, 1500, 64), dtype=torch.float16, device="cuda")
     v = torch.rand_like(k)
-    mask = None
     sm_scale = 0.3
-    is_causal = False
+
     p = torch.cuda.graph_pool_handle()
     expected = attention_reference(
-        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=is_causal, attention_mask=mask
+        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=None
     )
     output = torch.empty_like(q)
-    if implementation == "torch":
-
-        def fn(q, k, v):
-            return attention_reference(
-                q=q, k=k, v=v, output=output, sm_scale=sm_scale, is_causal=is_causal, attention_mask=mask
-            )
-
-        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
-        _ = r(q, k, v)[0]
-        result = benchmark(r)[0]
-    elif implementation == "split-k":
-
-        def fn(q, k, v):
-            return skinny_attention_forward(
-                q, k, v, output=output, sm_scale=sm_scale, attention_mask=mask, is_causal=is_causal
-            )
-
-        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
-        _ = r(q, k, v)[0]
-        result = benchmark(r)[0]
-    elif implementation == "vec-mat-mul":
-        if is_causal or mask is not None:
-            pytest.skip("causal or masked attention not supported")
-
-        if v.stride()[-1] == 1:  # is row major
-            # change layout to col major
-            v.set_(source=v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
-
-        def fn(q, k, v):
-            return attention_vec_mat_mul_forward(
-                q=q, k=k, v=v, output=output, sm_scale=sm_scale, attention_mask=mask, is_causal=is_causal
-            )
-
-        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
-        _ = r(q, k, v)[0]
-        result = benchmark(r)[0]
-
-    elif implementation == "classic":
-
-        def fn(q, k, v):
-            return attention_forward(
-                q, k, v, output=output, sm_scale=sm_scale, attention_mask=mask, is_causal=is_causal
-            )
-
-        r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
-        _ = r(q, k, v)[0]
-        result = benchmark(r)[0]
-    else:
-        raise ValueError(f"Unknown implementation {implementation}")
+    fn = implementations_skinny_cross_attention[implementation](output, sm_scale)
+    r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
+    _ = r(q, k, v)[0]
+    result = benchmark(r)[0]
 
     assert_all_close(a=expected, b=result, atol=1e-2)

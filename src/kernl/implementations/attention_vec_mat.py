@@ -167,5 +167,7 @@ def attention_vec_mat_mul_forward(
 ):
     assert is_causal is False, "causal mask is not supported"
     assert attention_mask is None, "attention_mask is not supported"
-
+    if v.stride()[-1] == 1:  # is row major
+        # change layout to col major
+        v.set_(source=v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
     return AttentionVecMat.apply(q, k, v, output, sm_scale)
