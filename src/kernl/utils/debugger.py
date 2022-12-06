@@ -32,7 +32,8 @@ class TritonDebugger:
 
         Args:
             grid: execution grid, should match what you would provide to Cuda
-            shuffle: suffle execution order like in parallel execution. Helps to avoid mistakes like relying on some order which is not possible in parallel execution.
+            shuffle: suffle execution order like in parallel execution. Helps to avoid mistakes like relying
+                on some order which is not possible in parallel execution.
         """
         self.grid_positions = list(product(*(range(axis) for axis in grid)))
         if shuffle:
