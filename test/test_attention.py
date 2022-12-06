@@ -23,7 +23,7 @@ from src.kernl.implementations.attention_skinny import skinny_attention_forward
 from src.kernl.implementations.cuda_graph import cuda_graphs_wrapper
 
 from kernl.implementations.attention import attention_forward, attention_reference, closest_power_of_2
-from kernl.implementations.attention_vec_mat import attention_vec_mat_mul_forward
+from kernl.implementations.attention_vec_mat import attention_vec_mat_forward
 
 
 implementations = {
@@ -171,7 +171,7 @@ implementations_skinny_cross_attention = {
     "flash-attention": lambda output, sm_scale: lambda q, k, v: attention_forward(
         q, k, v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
     ),
-    "vec-mat-mul": lambda output, sm_scale: lambda q, k, v: attention_vec_mat_mul_forward(
+    "vec-mat-mul": lambda output, sm_scale: lambda q, k, v: attention_vec_mat_forward(
         q=q, k=k, v=v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
     ),
 }

@@ -18,7 +18,7 @@ from torch.cuda.amp import custom_fwd
     key=["vec_cols", "mat_rows", "mat_cols", "out_cols"],
 )
 @triton.jit
-def mul_vec_mat(
+def vec_mat(
     vec_cols: tl.constexpr,
     mat_rows: tl.constexpr,
     mat_cols: tl.constexpr,
@@ -85,7 +85,7 @@ def mul_vec_mat(
     tl.store(pointer=out_ptr, value=result, mask=out_mask, eviction_policy="evict_first")
 
 
-def mul_vec_mat_wrapper(
+def vec_mat_wrapper(
     vec: torch.Tensor,
     matrix: torch.Tensor,
     output: torch.Tensor,
@@ -111,7 +111,7 @@ def mul_vec_mat_wrapper(
 
     vec_cols_pow_2 = triton.next_power_of_2(vec_cols)
 
-    mul_vec_mat[grid](
+    vec_mat[grid](
         vec_cols,
         mat_rows,
         mat_cols,
@@ -146,17 +146,12 @@ class AttentionVecMat(torch.autograd.Function):
         out_qkt = torch.zeros((batch_size, n_head, 1, seq_len_k), dtype=torch.float32, device="cuda")
         out_qktv = torch.zeros((batch_size, n_head, 1, d_head), dtype=torch.float16, device="cuda")
 
-        # if v.stride()[-1] == 1:  # is row major
-        #     print("change to col major")
-        #     # change layout to col major
-        #     v.set_(source=v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
-
-        mul_vec_mat_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True, scaler=1.0)
-        mul_vec_mat_wrapper(vec=out_qkt, matrix=v, output=out_qktv, softmax_vec=True, transpose_mat=False, scaler=0.3)
+        vec_mat_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True, scaler=1.0)
+        vec_mat_wrapper(vec=out_qkt, matrix=v, output=out_qktv, softmax_vec=True, transpose_mat=False, scaler=0.3)
         return out_qktv
 
 
-def attention_vec_mat_mul_forward(
+def attention_vec_mat_forward(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
