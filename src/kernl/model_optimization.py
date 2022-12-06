@@ -34,20 +34,26 @@ def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
 
 
 def optimize_model(original_model: PreTrainedModel) -> None:
-    """
-    Optimizes a given model by replacing forward method by a call to optimized code.
+    """Optimizes a given model by replacing forward method by a call to optimized code.
     It is done in two steps:
+
     *  first step is to convert the given model to fx graph.
     *  second step is to replace patterns found in the graph by fast to run kernels.
 
-    Example:
-    model = AutoModel.from_pretrained(...).eval().cuda()
+    Examples:
 
-    optimize_model(model)
-    inputs = ...
-    model(**inputs)
+        ``` { .py }
+        import tensorflow as tf
 
-    @param original_model: model to optimize
+        model = AutoModel.from_pretrained(...).eval().cuda()
+
+        optimize_model(model)
+        inputs = ...
+        model(**inputs)
+        ```
+
+    Args:
+        original_model: model to optimize
     """
     assert torch.cuda.is_available(), "CUDA capacity is required to use Kernl"
     major, _ = torch.cuda.get_device_capability()
