@@ -5,7 +5,7 @@
 {{ super() }}
 <script src="./javascripts/chart.4.0.1.js"></script>
 <script>
-    (async function () {
+    (function () {
         const data = [
             {
                 'engine': 'Inductor',
@@ -864,8 +864,6 @@
             font
         }
 
-        const labels = ['(1, 16)', '(1, 128)', '(1, 256)', '(1, 384)', '(1, 512)']
-
         const options = {
             animation: false,
             responsive: true,
@@ -928,93 +926,110 @@
                 yAxisKey: 'speed',
             },
         }
+        const optionsBatch1 = {
+            ...options,
+            plugins: {...options.plugins, subtitle: {...options.plugins.subtitle, text: 'batch size = 1'}}
+        };
+        const optionsBatch8 = {
+            ...options,
+            plugins: {...options.plugins, subtitle: {...options.plugins.subtitle, text: 'batch size = 8'}}
+        };
 
-        const dataFilter = d => d.batch === 1 && !(d.sequence === 32 || d.sequence === 64)
-        const dataSort = (a, b) => a.sequence - b.sequence
-        const batch1BaseLine = data.filter(d => d.engine === 'Baseline' && dataFilter(d)).sort(dataSort);
-        const averageBatch1Baseline = batch1BaseLine.reduce((acc, {speed}) => acc + speed, 0) / batch1BaseLine.length;
-        const dataMap = d => {
-            return {sequence: d.sequence, speed: averageBatch1Baseline / d.speed}
+        const getLabels = batch => [`(${batch}, 16)`, `(${batch}, 128)`, `(${batch}, 256)`, `(${batch}, 384)`, `(${batch}, 512)`]
+
+        const filterBySequence = (d) => !(d.sequence === 32 || d.sequence === 64)
+        const filterByBaseline = (d) => d.engine === 'Baseline'
+        const sortBySequence = (a, b) => a.sequence - b.sequence
+
+        const batch1BaseLine = data.filter(d => filterByBaseline(d) && filterBySequence(d) && d.batch === 1).sort(sortBySequence);
+        const batch8BaseLine = data.filter(d => filterByBaseline(d) && filterBySequence(d) && d.batch === 8).sort(sortBySequence);
+        const avgBatch1BaseLine = batch1BaseLine.reduce((acc, {speed}) => acc + speed, 0) / batch1BaseLine.length;
+        const avgBatch8BaseLine = batch8BaseLine.reduce((acc, {speed}) => acc + speed, 0) / batch1BaseLine.length;
+
+        const avgBatch1 = d => {
+            return {sequence: d.sequence, speed: (avgBatch1BaseLine / d.speed).toFixed(2)}
+        }
+        const avgBatch8 = d => {
+            return {sequence: d.sequence, speed: (avgBatch8BaseLine / d.speed).toFixed(2)}
         }
 
+        const datasets = [
+            {
+                label: 'ONNX Runtime',
+            },
+            {
+                label: 'AITemplate',
+            },
+            {
+                label: 'TensorRT',
+            },
+            {
+                label: 'Inductor',
+            },
+            {
+                label: 'DeepSpeed',
+            },
+            {
+                label: 'Cuda graphs',
+            },
+            {
+                label: 'Nvfuser',
+            },
+            {
+                label: 'Kernl',
+                borderWidth: 2,
+            },
+            {
+                type: 'line',
+                label: 'Baseline',
+            },
+        ]
+
+        const batch1Datasets = datasets.map(v => {
+            return {
+                ...v,
+                label: v.label.startsWith('Kernl') ? v.label + ' ❤' : v.label,
+                data: data
+                    .filter(d => d.engine === v.label && filterBySequence(d) && d.batch === 1)
+                    .sort(sortBySequence)
+                    .map(avgBatch1),
+            }
+        })
+
+        const batch8Datasets = datasets.map(v => {
+            return {
+                ...v,
+                label: v.label.startsWith('Kernl') ? v.label + ' ❤' : v.label,
+                data: data
+                    .filter(d => d.engine === v.label && filterBySequence(d) && d.batch === 8)
+                    .sort(sortBySequence)
+                    .map(avgBatch8),
+            }
+        })
+
         new Chart(
-            document.getElementById('performance-chart'),
+            document.getElementById('performance-chart-1'),
             {
                 type: 'bar',
-                options,
+                options: optionsBatch1,
                 data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'ONNX Runtime',
-                            data: data
-                                .filter(d => d.engine === 'Inductor' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                        {
-                            label: 'AITemplate',
-                            data: data
-                                .filter(d => d.engine === 'AITemplate' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                        {
-                            label: 'TensorRT',
-                            data: data
-                                .filter(d => d.engine === 'TensorRT' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                        {
-                            label: 'Inductor',
-                            data: data
-                                .filter(d => d.engine === 'Inductor' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                        {
-                            label: 'DeepSpeed',
-                            data: data
-                                .filter(d => d.engine === 'DeepSpeed' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                        {
-                            label: 'Cuda graphs',
-                            data: data
-                                .filter(d => d.engine === 'Cuda graphs' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                        {
-                            label: 'Nvfuser',
-                            data: data
-                                .filter(d => d.engine === 'Nvfuser' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                        {
-                            label: 'Kernl ❤',
-                            data: data
-                                .filter(d => d.engine === 'Kernl' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                            borderWidth: 2,
-                        },
-                        {
-                            type: 'line',
-                            label: 'Baseline',
-                            data: data
-                                .filter(d => d.engine === 'Baseline' && dataFilter(d))
-                                .sort(dataSort)
-                                .map(dataMap),
-                        },
-                    ]
+                    labels: getLabels(1),
+                    datasets: batch1Datasets,
                 }
             }
         );
 
+        new Chart(
+            document.getElementById('performance-chart-8'),
+            {
+                type: 'bar',
+                options: optionsBatch8,
+                data: {
+                    labels: getLabels(8),
+                    datasets: batch8Datasets,
+                }
+            }
+        );
 
     })();
 </script>
