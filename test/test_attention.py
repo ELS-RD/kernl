@@ -168,7 +168,7 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
     k = torch.rand((5, 20, 1500, 64), dtype=torch.float16, device="cuda")
     v = torch.rand_like(k)
     mask = None
-    sm_scale = 1.0
+    sm_scale = 0.3
     is_causal = False
     p = torch.cuda.graph_pool_handle()
     expected = attention_reference(
@@ -189,7 +189,7 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
 
         def fn(q, k, v):
             return skinny_attention_forward(
-                q, k, v, output, sm_scale=sm_scale, attention_mask=mask, is_causal=is_causal
+                q, k, v, output=output, sm_scale=sm_scale, attention_mask=mask, is_causal=is_causal
             )
 
         r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
@@ -225,4 +225,4 @@ def test_benchmark_cross_attention_split(benchmark, implementation):
     else:
         raise ValueError(f"Unknown implementation {implementation}")
 
-    assert_all_close(a=expected, b=result, atol=1e-1)
+    assert_all_close(a=expected, b=result, atol=1e-2)
