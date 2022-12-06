@@ -8,6 +8,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 @font-face {
     font-family: "Fredoka";
     src: url("../assets/fonts/Fredoka-VariableFont_wdth,wght.ttf") format("truetype");
+    font-display: swap;
 }
 
 :root > * {
@@ -25,7 +26,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 /* xl, extra-large: 1536px */
 :root {
     /* colors */
-    --color-primary: #4351E8;
+    --color-primary: #4351e8;
     --color-secondary: #F92672;
 
     --color-text-gray: #4D4D4D;
@@ -42,6 +43,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 
     /* spaces */
     --section-padding-y: 56px;
+    --highlight-content-flex: 1 0 48%;
 
     /* fonts */
     --font-fredoka-semibold: 600;
@@ -54,6 +56,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 
     /* shadows */
     --shadow-primary: 0 0 8px 0 rgba(0, 0, 0, 0.25);
+    --shadow-secondary: 0 0 4px 0 rgba(0, 0, 0, 0.15);
 
     /*animations*/
     --hover-transform: transform .5s cubic-bezier(.075, .85, .175, 1);
@@ -175,6 +178,15 @@ div[class="md-search__scrollwrap"] {
 
 .button__primary--contained svg {
     fill: white;
+}
+
+.button__primary--outlined {
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+}
+
+.button__primary--outlined svg {
+    fill: var(--color-primary);
 }
 
 .button__secondary--outlined {
@@ -346,6 +358,7 @@ div[class="md-search__scrollwrap"] {
 
 .knl-why__content {
     align-items: center;
+    padding: 0 clamp(8px, 5vw, 104px);
 }
 
 .knl-why__content > p {
@@ -395,7 +408,110 @@ div[class="md-search__scrollwrap"] {
 
 /* ----- ----- ----- ----- ----- */
 .knl-highlights {
-    height: 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 64px;
+    padding: 96px 0;
+}
+
+.knl-highlight {
+    display: flex;
+    gap: 32px;
+    padding: 0 8px;
+}
+
+.knl-highlight__figure {
+    flex: var(--highlight-content-flex);
+    position: relative;
+}
+
+.knl-highlight__figure > figure {
+    margin: 0;
+    padding: var(--border-radius-md);
+    text-align: center;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-secondary);
+    transition: var(--hover-transform);
+}
+
+.knl-highlight__figure > figure.open-modal svg {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    top: 8px;
+    left: 8px;
+    fill: var(--color-primary);
+}
+
+.knl-highlight__figure > figure.open-modal:hover {
+    cursor: pointer;
+    transform: var(--hover-scale);
+}
+
+.knl-highlight__figure img {
+    height: auto;
+    max-width: 100%;
+}
+
+.knl-highlight__figure img.efficiency {
+    width: 400px;
+}
+
+.knl-highlight__figure img.performance {
+    width: 600px;
+}
+
+.knl-highlight__content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    flex: var(--highlight-content-flex);
+}
+
+.knl-highlight__content > header {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.knl-highlight__content > header > svg {
+    flex-shrink: 0;
+}
+
+.knl-highlight__content > header > h3 {
+    margin: 0;
+    font-family: "Fredoka", sans-serif;
+    font-size: clamp(20px, 3vw, 32px);
+    font-weight: normal;
+    line-height: var(--accessible-line-height);
+}
+
+.knl-highlight__content > header > h3 em {
+    color: var(--color-primary);
+    font-weight: var(--font-fredoka-semibold);
+}
+
+.knl-highlight__description {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    font-family: "Poppins", sans-serif;
+    font-size: clamp(14px, 2vw, 16px);
+    line-height: var(--accessible-line-height);
+    color: var(--color-text-gray);
+}
+
+.knl-highlight__description em {
+    font-weight: bold;
+}
+
+.knl-highlight__description p,
+.knl-highlight__description ul {
+    margin: 0;
+}
+
+.knl-highlight__content footer {
+    display: flex;
 }
 
 /* ----- ----- ----- ----- ----- */
@@ -480,10 +596,79 @@ div[class="md-search__scrollwrap"] {
 }
 
 /* ----- ----- ----- ----- ----- */
+/* modal */
+/* ----- ----- ----- ----- ----- */
+.modal {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(1.1);
+    transition: visibility 0s linear 0.25s, opacity 0.25s 0s, transform 0.25s;
+    z-index: 10000;
+}
+
+.show-modal {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1.0);
+    transition: visibility 0s linear 0s, opacity 0.25s 0s, transform 0.25s;
+}
+
+.modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 97%;
+    max-width: 1024px;
+    height: auto;
+    max-height: 97%;
+    padding: 8px;
+    text-align: center;
+    border-radius: 8px;
+    background-color: white;
+    z-index: 10001;
+}
+
+.modal-content img {
+    width: 100%;
+    height: auto;
+}
+
+.modal-content .close-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    border-radius: 4px;
+    stroke: var(--color-primary);
+    transition: var(--hover-transform);
+}
+
+.modal-content .close-button:hover {
+    transform: scale(1.250);
+}
+
+/* ----- ----- ----- ----- ----- */
 /* media queries */
 /* ----- ----- ----- ----- ----- */
-/*@media screen and (max-width: 992px) {*/
-/*}*/
+@media screen and (max-width: 992px) {
+    .knl-highlights {
+        padding: 64px 0;
+    }
+
+    .knl-highlight {
+        flex-direction: column;
+        padding: 0 32px;
+    }
+}
 
 @media screen and (max-width: 768px) {
     .knl-what,
@@ -491,6 +676,10 @@ div[class="md-search__scrollwrap"] {
     .knl-oss,
     .knl-contribute {
         padding: 56px 0;
+    }
+
+    .knl-highlight {
+        padding: 0 16px;
     }
 }
 
@@ -522,5 +711,13 @@ div[class="md-search__scrollwrap"] {
     .knl-oss,
     .knl-contribute {
         padding: 40px 0;
+    }
+}
+
+/* fix the image display in the modal for small screens in landscape mode */
+@media (orientation: landscape) and (max-height: 575px) {
+    .modal-content img {
+        width: auto;
+        max-height: 94vh;
     }
 }
