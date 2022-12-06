@@ -1,4 +1,5 @@
 import dataclasses
+
 import torch
 
 
@@ -30,8 +31,11 @@ class MemoryMap:
         max_pointer = torch.max(pointer).item()
         min_pointer = torch.min(pointer).item()
         registered_storage = next(
-            filter(lambda registered: min_pointer >= registered.ptr and max_pointer < registered.end_ptr,
-                   self.storages), None)
+            filter(
+                lambda registered: min_pointer >= registered.ptr and max_pointer < registered.end_ptr, self.storages
+            ),
+            None,
+        )
         if registered_storage is None:
             raise Exception("Storage not found or pointers spanning multiple tensors")
         registered_storage.ensure_immutable()
@@ -42,11 +46,12 @@ class MemoryMap:
         self.storages.append(RegisteredStorage(storage, storage.size(), storage.data_ptr()))
         return t.data_ptr()
 
-    def load(self,
-             pointer: torch.Tensor,
-             mask: torch.Tensor = None,
-             other=0.0,
-             ):
+    def load(
+        self,
+        pointer: torch.Tensor,
+        mask: torch.Tensor = None,
+        other=0.0,
+    ):
         assert 0 < pointer.dim() < 3
         assert pointer.dtype == torch.int64
 
@@ -58,16 +63,13 @@ class MemoryMap:
         registered_storage = self._get_registered_storage(pointer)
         access_tensor = registered_storage.access_tensor
 
-        index_tensor = (pointer - registered_storage.ptr)
+        index_tensor = pointer - registered_storage.ptr
 
         block = torch.full_like(pointer, fill_value=other, dtype=access_tensor.dtype, device="cuda")
         block[mask] = access_tensor[index_tensor][mask]
         return block
 
-    def store(self,
-              pointer: torch.Tensor,
-              value: torch.Tensor,
-              mask=None):
+    def store(self, pointer: torch.Tensor, value: torch.Tensor, mask=None):
 
         assert 0 < pointer.dim() < 3
         assert pointer.dtype == torch.int64
@@ -80,5 +82,5 @@ class MemoryMap:
         registered_storage = self._get_registered_storage(pointer)
         access_tensor = registered_storage.access_tensor
 
-        index_tensor = (pointer - registered_storage.ptr)
+        index_tensor = pointer - registered_storage.ptr
         access_tensor[index_tensor[mask]] = value[mask]

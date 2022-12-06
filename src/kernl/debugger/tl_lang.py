@@ -1,8 +1,290 @@
 import torch
 
+from kernl.debugger.core import ExecutionContext
 from kernl.debugger.memory_map import MemoryMap
 
-from kernl.debugger.core import ExecutionContext
+
+def _primitive_to_tensor(x):
+    tensor_args = {"device": "cuda"}
+    if isinstance(x, bool):
+        return torch.tensor([x], dtype=torch.bool, **tensor_args)
+    elif isinstance(x, int):
+        if -(2**31) <= x < 2**31:
+            return torch.tensor([x], dtype=torch.int32, **tensor_args)
+        elif -(2**63) <= x < 2**63:
+            return torch.tensor([x], dtype=torch.int64, **tensor_args)
+        else:
+            raise RuntimeError(f"Nonrepresentable integer {x}.")
+    elif isinstance(x, float):
+        return torch.tensor([x], dtype=torch.float32, **tensor_args)
+    elif torch.is_tensor(x):
+        return x
+    elif isinstance(x, WrappedTensor):
+        return x
+    # elif isinstance(x, debugger_constexpr):
+    #     if x.value is None:
+    #         return None
+    #     return _primitive_to_tensor(x.value)
+    elif x is None:
+        return None
+    assert False, f"cannot convert {x} to tensor"
+
+
+def _infer_tensor(func):
+    def wrapper(*args):
+        new_args = tuple(map(lambda v: _primitive_to_tensor(v), args))
+        new_args = tuple(map(lambda v: WrappedTensor(v) if torch.is_tensor(v) else v, new_args))
+
+        return func(*new_args)
+
+    return wrapper
+
+
+def _tensor_operation(func):
+    def wrapper(*args, **kwargs):
+        for arg in args:
+            assert not torch.is_tensor(arg)
+
+        def unwrap_tensor(v):
+            if isinstance(v, WrappedTensor):
+                return v.tensor
+            # if isinstance(v, debugger_constexpr):
+            #     return v.value
+            return v
+
+        new_args = tuple(map(unwrap_tensor, args))
+        new_kwargs = {k: unwrap_tensor(v) for k, v in kwargs.items()}
+
+        result = func(args[0], *new_args[1:], **new_kwargs)
+        return WrappedTensor(result) if torch.is_tensor(result) else result
+
+    return wrapper
+
+
+# class debugger_constexpr:
+#     def __init__(self, value):
+#         if isinstance(value, debugger_constexpr):
+#             self.value = value.value
+#         else:
+#             self.value = value
+#
+#     # def __repr__(self) -> str:
+#     #     return f"constexpr[{self.value}]"
+#
+#     def __bool__(self):
+#         return bool(self.value)
+#
+#     def __ge__(self, other):
+#         other = other.value if isinstance(other, debugger_constexpr) else other
+#         return self.value >= other
+#
+#     def __gt__(self, other):
+#         other = other.value if isinstance(other, debugger_constexpr) else other
+#         return self.value > other
+#
+#     def __le__(self, other):
+#         other = other.value if isinstance(other, debugger_constexpr) else other
+#         return self.value <= other
+#
+#     def __lt__(self, other):
+#         other = other.value if isinstance(other, debugger_constexpr) else other
+#         return self.value < other
+#
+#     def __eq__(self, other):
+#         other = other.value if isinstance(other, debugger_constexpr) else other
+#         return self.value == other
+#
+#     def to(self, dtype, bitcast=False, _builder=None):
+#         raise NotImplemented()
+# if dtype in [float8, float16, bfloat16]:
+#     raise ValueError("floating point constexpr must be float64")
+# if dtype.is_int():
+#     ret_ty = int
+# elif dtype.is_bool():
+#     ret_ty = bool
+# elif dtype.is_floating():
+#     ret_ty = float
+# return constexpr(ret_ty(self.value))
+
+
+class WrappedTensor:
+    def __init__(self, tensor):
+        self.tensor = tensor
+
+    def __str__(self) -> str:
+        return "wrapped_" + str(self.tensor)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __add__(self, other):
+        return torch.add(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __sub__(self, other):
+        return torch.sub(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rsub__(self, other):
+        return torch.sub(other, self.tensor)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __mul__(self, other):
+        return torch.mul(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __truediv__(self, other):
+        return torch.div(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rtruediv__(self, other):
+        return torch.div(other, self.tensor)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __floordiv__(self, other):
+        return torch.floor_divide(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rfloordiv__(self, other):
+        return torch.floor_divide(other, self.tensor)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __mod__(self, other):
+        return torch.remainder(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rmod__(self, other):
+        return torch.remainder(other, self.tensor)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __neg__(self):
+        return -self.tensor
+
+    @_infer_tensor
+    @_tensor_operation
+    def __invert__(self):
+        return ~self.tensor
+
+    @_infer_tensor
+    @_tensor_operation
+    def __and__(self, other):
+        return torch.bitwise_and(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __or__(self, other):
+        return torch.bitwise_or(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __xor__(self, other):
+        return torch.bitwise_xor(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __lshift__(self, other):
+        return torch.bitwise_left_shift(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rshift__(self, other):
+        return torch.bitwise_right_shift(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __gt__(self, other):
+        return self.tensor > other
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rgt__(self, other):
+        return other > self.tensor
+
+    @_infer_tensor
+    @_tensor_operation
+    def __ge__(self, other):
+        return self.tensor >= other
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rge__(self, other):
+        return other >= self.tensor
+
+    @_infer_tensor
+    @_tensor_operation
+    def __lt__(self, other):
+        return self.tensor < other
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rlt__(self, other):
+        return other < self.tensor
+
+    @_infer_tensor
+    @_tensor_operation
+    def __le__(self, other):
+        return self.tensor <= other
+
+    @_infer_tensor
+    @_tensor_operation
+    def __rle__(self, other):
+        return other <= self.tensor
+
+    @_infer_tensor
+    @_tensor_operation
+    def __eq__(self, other):
+        return torch.equal(self.tensor, other)
+
+    @_infer_tensor
+    @_tensor_operation
+    def __ne__(self, other):
+        return not torch.equal(self.tensor, other)
+
+    @_tensor_operation
+    def __getitem__(self, slices):
+        return self.tensor.__getitem__(slices)
+        # if isinstance(slices, slice):
+        #     slices = [slices]
+        # src_shape = self.shape
+        # dst_shape = []
+        # curr = 0
+        # for sl in slices:
+        #     if isinstance(sl, constexpr) and sl.value is None:
+        #         dst_shape.append(1)
+        #     elif sl == slice(None, None, None):
+        #         dst_shape.append(src_shape[curr].value)
+        #         curr += 1
+        # ret = torch.reshape(self.tensor, dst_shape, )
+        # return ret
+
+    @_tensor_operation
+    def to(self, dtype, bitcast=False):
+        return self.tensor.to(dtype)
+        # if isinstance(bitcast, constexpr):
+        #     bitcast = bitcast.value
+        # if bitcast:
+        #     return semantic.bitcast(self, dtype, )
+        # return semantic.cast(self, dtype, )
+
 
 class TritonLangProxy:
     _memory_map: MemoryMap
@@ -13,6 +295,7 @@ class TritonLangProxy:
         self._context = context
 
     # Types
+    # Removed void, int1, float8, uint16, uint32, uint64, pi32_t
 
     int8 = torch.int8
     int16 = torch.int16
@@ -23,82 +306,65 @@ class TritonLangProxy:
     float32 = torch.float32
     float64 = torch.float64
     float16 = torch.float16
-
-    @property
-    def void(self):
-        raise NotImplemented()
-
-    @property
-    def int1(self):
-        raise NotImplemented()
-
-    @property
-    def float8(self):
-        raise NotImplemented()
-
-    @property
-    def uint16(self):
-        raise NotImplemented()
-
-    @property
-    def uint32(self):
-        raise NotImplemented()
-
-    @property
-    def uint64(self):
-        raise NotImplemented()
-
-    @property
-    def pi32_t(self):
-        raise NotImplemented()
+    # constexpr = debugger_constexpr
 
     # Program functions
 
-    def load(self,
-             pointer: torch.Tensor,
-             mask: torch.Tensor = None,
-             other=0.0,
-             cache_modifier='',
-             eviction_policy='',
-             volatile=False
-             ):
+    @_tensor_operation
+    def load(
+        self,
+        pointer: torch.Tensor,
+        mask: torch.Tensor = None,
+        other=0.0,
+        cache_modifier="",
+        eviction_policy="",
+        volatile=False,
+    ):
         return self._memory_map.load(pointer, mask, other)
 
-    def store(self,
-              pointer: torch.Tensor,
-              value: torch.Tensor,
-              mask=None):
+    @_tensor_operation
+    def store(self, pointer: torch.Tensor, value: torch.Tensor, mask=None):
         return self._memory_map.store(pointer, value, mask)
 
+    @_tensor_operation
     def program_id(self, axis):
         assert axis < len(self._context.program_id)
         return torch.tensor([self._context.program_id[axis]], dtype=torch.int32, device="cuda")
 
+    @_tensor_operation
     def num_programs(self, axis):
         assert axis < len(self._context.program_size)
         return torch.tensor([self._context.program_size[axis]], dtype=torch.int32, device="cuda")
 
+    @_tensor_operation
     def arange(self, start, end):
         return torch.arange(start=start, end=end, dtype=torch.int32, device="cuda")
 
+    @_tensor_operation
     def zeros(self, shape, dtype):
         return torch.zeros(size=shape, dtype=dtype, device="cuda")
 
+    @_tensor_operation
     def dequantize(self, input, scale, shift, nbit, dst_ty=float16):
         raise NotImplemented()
 
+    @_tensor_operation
     def broadcast(self, input, other):
         raise NotImplemented()
 
+    @_tensor_operation
     def broadcast_to(self, input, shape):
         raise NotImplemented()
 
+    @_tensor_operation
     def cat(self, input, shape):
         raise NotImplemented()
 
+    @_tensor_operation
     def reshape(self, input, shape):
         raise NotImplemented()
 
+    @_tensor_operation
     def dot(self, input, other, trans_a=False, trans_b=False, allow_tf32=True):
         assert input.dtype == other.dtype
         if trans_a:
@@ -107,116 +373,152 @@ class TritonLangProxy:
             other = other.T
         return torch.matmul(input=input, other=other)
 
+    @_tensor_operation
     def atomic_cas(self, pointer, cmp, val):
         raise NotImplemented()
 
+    @_tensor_operation
     def atomic_xchg(self, pointer, val, mask=None):
         raise NotImplemented()
 
+    @_tensor_operation
     def atomic_add(self, pointer, val, mask=None):
         raise NotImplemented()
 
+    @_tensor_operation
     def atomic_max(self, pointer, val, mask=None):
         raise NotImplemented()
 
+    @_tensor_operation
     def atomic_min(self, pointer, val, mask=None):
         raise NotImplemented()
 
+    @_tensor_operation
     def atomic_and(self, pointer, val, mask=None):
         raise NotImplemented()
 
+    @_tensor_operation
     def atomic_or(self, pointer, val, mask=None):
         raise NotImplemented()
 
+    @_tensor_operation
     def atomic_xor(self, pointer, val, mask=None):
         raise NotImplemented()
 
+    @_tensor_operation
     def where(self, condition, x, y):
         return torch.where(condition, x, y)
 
+    @_tensor_operation
     def umulhi(self, x, y):
         raise NotImplemented()
 
+    @_tensor_operation
     def fdiv(self, x, y, ieee_rounding=False):
         raise NotImplemented()
 
+    @_tensor_operation
     def exp(self, x):
         return torch.exp(x)
 
+    @_tensor_operation
     def log(self, x):
         return torch.log(x)
 
+    @_tensor_operation
     def cos(self, x):
         return torch.cos(x)
 
+    @_tensor_operation
     def sin(self, x):
         return torch.sin(x)
 
+    @_tensor_operation
     def sqrt(self, x):
         return torch.sqrt(x)
 
+    @_tensor_operation
     def globaltimer(self):
         raise NotImplemented()
 
+    @_tensor_operation
     def clock(self):
         raise NotImplemented()
 
+    @_tensor_operation
     def debug_barrier(self):
         raise NotImplemented()
 
+    @_tensor_operation
     def multiple_of(self, input, values):
         return input
 
+    @_tensor_operation
     def max_contiguous(self, input, values):
         return input
 
+    @_tensor_operation
     def abs(self, x):
         return torch.abs(x)
 
+    @_tensor_operation
     def cdiv(self, x, div):
         return (x + div - 1) // div
 
+    @_tensor_operation
     def minimum(self, x, y):
         return torch.minimum(x, y)
 
+    @_tensor_operation
     def maximum(self, x, y):
         return torch.maximum(x, y)
 
+    @_tensor_operation
     def sigmoid(self, x):
         raise NotImplemented()
 
+    @_tensor_operation
     def softmax(self, x, ieee_rounding=False):
         raise NotImplemented()
 
+    @_tensor_operation
     def ravel(self, x):
         raise NotImplemented()
 
+    @_tensor_operation
     def swizzle2d(self, i, j, size_i, size_j, size_g):
         raise NotImplemented()
 
+    @_tensor_operation
     def zeros_like(self, input):
         raise NotImplemented()
 
+    @_tensor_operation
     def max(self, input, axis=None):
         if axis is None:
             return torch.max(input)
         return torch.max(input, dim=axis).values
 
+    @_tensor_operation
     def argmax(self, input, axis):
         raise NotImplemented()
 
+    @_tensor_operation
     def min(self, input, axis=None):
         if axis is None:
             return torch.min(input)
         return torch.min(input, dim=axis).values
 
+    @_tensor_operation
     def argmin(self, input, axis):
         raise NotImplemented()
 
+    @_tensor_operation
     def sum(self, input, axis=None):
         if axis is None:
             return torch.sum(input)
         return torch.sum(input, dim=axis)
 
+    @_tensor_operation
     def xor_sum(self, input, axis):
         raise NotImplemented()
