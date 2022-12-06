@@ -31,3 +31,23 @@ function windowOnClick(event) {
 }
 
 window.addEventListener('click', windowOnClick);
+
+// ----- ----- ----- ----- -----
+// slider management on landing page
+const sliderContents = document.querySelectorAll('.slider canvas');
+
+let currentSlide = 0;
+
+function nextSlide() {
+    goToSlide(currentSlide + 1);
+}
+
+function previousSlide() {
+    goToSlide(currentSlide - 1);
+}
+
+function goToSlide(n) {
+    sliderContents[currentSlide].className = 'slide';
+    currentSlide = (n + sliderContents.length) % sliderContents.length;
+    sliderContents[currentSlide].className = 'slide showing';
+}
