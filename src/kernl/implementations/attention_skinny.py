@@ -460,7 +460,6 @@ class SkinnyAttention(torch.autograd.Function):
             V=v,
             sm_scale=sm_scale,
             attention_mask=attention_mask,
-            # TMP=tmp,
             output=splitted_qkt,
             maximums=maximums,
             sums=sums,
