@@ -144,10 +144,11 @@ markdown_extensions:
 # Page tree
 nav:
   - Home: index.md
-  - Get Started:
-      - Try Kernel: get-started/start.md
-  - Tutorial:
-      - How to support a new model: tutorial/support-new-model.md
+  - How to:
+      - Get Started: how-to-guides/get-started.md
+      - How to support a new model: how-to-guides/support-new-model.md
+  - Tutorials:
+      - Page 1: tutorials/page.md
   - Code Reference:
       - Page 1: reference/page.md
   - Contribution guide:

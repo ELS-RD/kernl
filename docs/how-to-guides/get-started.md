@@ -1,4 +1,4 @@
-# Welcome to Kernl.ai
+# Get started
 
 To install Kernl library, you just have to pip install it:
 
