@@ -178,16 +178,24 @@ implementations_skinny_cross_attention = {
 
 
 @set_seed()
+@pytest.mark.parametrize("shape", [(1, 6, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)])
 @pytest.mark.parametrize("implementation", implementations_skinny_cross_attention.keys())
-def test_benchmark_skinny_cross_attention(benchmark, implementation):
-    q = torch.rand((5, 20, 1, 64), dtype=torch.float16, device="cuda")
-    k = torch.rand((5, 20, 1500, 64), dtype=torch.float16, device="cuda")
+def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
+    batch, head, seqlen, dhead = shape
+    q = torch.rand((batch, head, 1, dhead), dtype=torch.float16, device="cuda")
+    k = torch.rand((batch, head, seqlen, dhead), dtype=torch.float16, device="cuda")
     v = torch.rand_like(k)
     sm_scale = 0.3
 
     p = torch.cuda.graph_pool_handle()
     expected = attention_reference(
-        q=q, k=k, v=v, output=torch.empty_like(q), sm_scale=sm_scale, is_causal=False, attention_mask=None
+        q=q.float(),
+        k=k.float(),
+        v=v.float(),
+        output=torch.empty_like(q, dtype=torch.float32),
+        sm_scale=sm_scale,
+        is_causal=False,
+        attention_mask=None,
     )
     output = torch.empty_like(q)
     fn = implementations_skinny_cross_attention[implementation](output, sm_scale)
@@ -195,4 +203,4 @@ def test_benchmark_skinny_cross_attention(benchmark, implementation):
     _ = r(q, k, v)[0]
     result = benchmark(r)[0]
 
-    assert_all_close(a=expected, b=result, atol=1e-2)
+    assert_all_close(a=expected, b=result.float(), atol=1e-2)

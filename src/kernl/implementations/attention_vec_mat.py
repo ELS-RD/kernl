@@ -9,6 +9,8 @@ from torch.cuda.amp import custom_fwd
 
 @triton.autotune(
     configs=[
+        triton.Config({"SIZE_N": 64}, num_warps=1, num_stages=1),
+        triton.Config({"SIZE_N": 32}, num_warps=1, num_stages=1),
         triton.Config({"SIZE_N": 16}, num_warps=1, num_stages=1),
         triton.Config({"SIZE_N": 8}, num_warps=1, num_stages=1),
         triton.Config({"SIZE_N": 4}, num_warps=1, num_stages=1),
@@ -143,12 +145,10 @@ class AttentionVecMat(torch.autograd.Function):
         assert q.shape[2] == 1, f"q must be 1d on dim 2 but is {q.shape[2]}"
         assert v.shape == k.shape
         batch_size, n_head, seq_len_k, d_head = k.shape
-        out_qkt = torch.zeros((batch_size, n_head, 1, seq_len_k), dtype=torch.float32, device="cuda")
-        out_qktv = torch.zeros((batch_size, n_head, 1, d_head), dtype=torch.float16, device="cuda")
-
+        out_qkt = torch.empty((batch_size, n_head, 1, seq_len_k), dtype=torch.float32, device="cuda")
         vec_mat_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True, scaler=1.0)
-        vec_mat_wrapper(vec=out_qkt, matrix=v, output=out_qktv, softmax_vec=True, transpose_mat=False, scaler=0.3)
-        return out_qktv
+        vec_mat_wrapper(vec=out_qkt, matrix=v, output=output, softmax_vec=True, transpose_mat=False, scaler=0.3)
+        return output
 
 
 def attention_vec_mat_forward(
