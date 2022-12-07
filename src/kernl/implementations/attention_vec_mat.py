@@ -162,6 +162,7 @@ def attention_vec_mat_forward(
 ):
     assert is_causal is False, "causal mask is not supported"
     assert attention_mask is None, "attention_mask is not supported"
+    assert output.shape == q.shape[:3] + k.shape[-1:], f"{output.shape} != {q.shape[:3] + k.shape[-1:]}"
     if v.stride()[-1] == 1:  # is row major
         # change layout to col major
         v.set_(source=v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
