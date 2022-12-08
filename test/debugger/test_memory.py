@@ -3,7 +3,7 @@ import dataclasses
 import pytest
 import torch
 
-from src.kernl.debugger.memory_map import MemoryMap
+from kernl.debugger.memory_map import MemoryMap
 
 
 # TODO: better test

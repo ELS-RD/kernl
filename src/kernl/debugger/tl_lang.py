@@ -1,3 +1,5 @@
+import traceback
+
 import torch
 
 from kernl.debugger.core import ExecutionContext
@@ -94,6 +96,22 @@ class debugger_constexpr:
         other = other.value if isinstance(other, debugger_constexpr) else other
         return self.value == other
 
+    def __or__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value | other
+
+    def __ror__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value | other
+
+    def __and__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value & other
+
+    def __rand__(self, other):
+        other = other.value if isinstance(other, debugger_constexpr) else other
+        return self.value & other
+
     def to(self, dtype, bitcast=False, _builder=None):
         if dtype in [torch.int64]:
             ret_ty = int
@@ -113,6 +131,10 @@ class WrappedTensor:
         return self.tensor.item()
     def __str__(self) -> str:
         return "wrapped_" + str(self.tensor)
+
+    @property
+    def dtype(self):
+        return self.tensor.dtype
 
     @_infer_tensor
     @_tensor_operation
@@ -417,6 +439,9 @@ class TritonLangProxy:
 
     @_tensor_operation
     def where(self, condition, x, y):
+        condition = _primitive_to_tensor(condition)
+        x = _primitive_to_tensor(x)
+        y = _primitive_to_tensor(y)
         return torch.where(condition, x, y)
 
     @_tensor_operation

@@ -13,18 +13,6 @@ from kernl.debugger.tl_lang import _primitive_to_tensor
 
 from kernl.debugger.tl_lang import debugger_constexpr
 
-
-class GridSelector:
-    def __init__(self, func):
-        self.func = func
-
-    def __getitem__(self, grid):
-        return DebuggerFunction(self.func, grid)
-
-    def __call__(self, *args, **kwargs):
-        return DebuggerFunction(self.func)(*args, **kwargs)
-
-
 tl_method_backup = {}
 
 
@@ -100,7 +88,7 @@ class DebuggerFunction:
             return WrappedTensor(_primitive_to_tensor(arg))
 
         new_args = tuple(map(convert_arg, zip(self.func.__code__.co_varnames, args)))
-        new_kwargs = {k: convert_arg((k, v)) for k, v in kwargs.items()}
+        new_kwargs = {k: convert_arg((k, v)) for (k, v) in kwargs.items()}
 
         grid = self._get_grid(**kwargs)
         for program_id in program_ids_from_grid(grid):
@@ -108,6 +96,17 @@ class DebuggerFunction:
             attach_triton(tl, proxy)
             self.func(*new_args, **new_kwargs)
             detach_triton(tl)
+
+
+class GridSelector:
+    def __init__(self, func):
+        self.func = func
+
+    def __getitem__(self, grid):
+        return DebuggerFunction(self.func, grid)
+
+    def __call__(self, *args, **kwargs):
+        return DebuggerFunction(self.func)(*args, **kwargs)
 
 
 def triton_debug(func):
@@ -140,8 +139,9 @@ class AutotuneRunner:
                 if torch.is_tensor(v):
                     return torch.clone(v)
                 return v
+
             new_args = tuple(map(convert_arg, args))
-            new_kwargs = {k: convert_arg((k, v)) for k, v in kwargs.items()}
+            new_kwargs = {k: convert_arg(v) for k, v in kwargs.items()}
             if self.grid:
                 self.func[self.grid](*new_args, **new_kwargs, **config.kwargs)
             else:
