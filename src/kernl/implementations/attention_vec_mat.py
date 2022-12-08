@@ -58,7 +58,7 @@ def vec_mat(
     vec_mask = vec_arange[:, None] < vec_cols
     vec = tl.load(pointer=vec_ptr, mask=vec_mask, other=0.0).to(tl.float32)
 
-    if SCALER != 1:
+    if SCALER != 1.0:
         vec = vec * SCALER
 
     if VEC_SOFTMAX:
@@ -147,7 +147,7 @@ class AttentionVecMat(torch.autograd.Function):
         batch_size, n_head, seq_len_k, d_head = k.shape
         out_qkt = torch.empty((batch_size, n_head, 1, seq_len_k), dtype=torch.float32, device="cuda")
         vec_mat_wrapper(vec=q, matrix=k, output=out_qkt, softmax_vec=False, transpose_mat=True, scaler=1.0)
-        vec_mat_wrapper(vec=out_qkt, matrix=v, output=output, softmax_vec=True, transpose_mat=False, scaler=0.3)
+        vec_mat_wrapper(vec=out_qkt, matrix=v, output=output, softmax_vec=True, transpose_mat=False, scaler=sm_scale)
         return output
 
 
