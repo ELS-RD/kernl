@@ -1,10 +1,14 @@
 # Get started
 
+## Install
+
 To install Kernl library, you just have to pip install it:
 
 ``` { .bash }
 python3 -m pip install install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
+
+## Optimize a model
 
 Then, in your progam, you have to import the optimization function and apply it to your model:
 
