@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from typing import List
+from typing import Callable, List, Tuple
 
 import torch
 import torch._dynamo as torchdynamo
@@ -23,7 +23,7 @@ from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
 # single shared pool by default
-_pool: (int, int) = torch.cuda.graph_pool_handle()
+_pool: Tuple[int, int] = torch.cuda.graph_pool_handle()
 
 
 # needs to be generated once to be reused several times, like encoder/decoder models
@@ -33,7 +33,7 @@ def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
     return cuda_graphs_wrapper(gm, example_inputs, pool=_pool)
 
 
-def optimize_model(original_model: PreTrainedModel) -> None:
+def optimize_model(original_model: PreTrainedModel, compiler_fn: Callable = _compiler) -> None:
     """
     Optimizes a given model by replacing forward method by a call to optimized code.
     It is done in two steps:
@@ -56,7 +56,7 @@ def optimize_model(original_model: PreTrainedModel) -> None:
     assert next(original_model.parameters()).device.type == "cuda", "Model must be on GPU"
     original_model.forward2 = original_model.forward
 
-    @torchdynamo.optimize(_compiler)
+    @torchdynamo.optimize(compiler_fn)
     def run(*args, **kwargs):
         return original_model.forward2(*args, **kwargs)
 
