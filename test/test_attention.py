@@ -178,7 +178,11 @@ implementations_skinny_cross_attention = {
 
 
 @set_seed()
-@pytest.mark.parametrize("shape", [(1, 6, 1500, 64), (1, 16, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)])
+@pytest.mark.parametrize(
+    "shape",
+    [(1, 6, 1500, 64), (1, 16, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)],
+    ids=["tiny", "medium", "large-beam-1", "large-beam-5"],
+)
 @pytest.mark.parametrize("implementation", implementations_skinny_cross_attention.keys())
 def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
     batch, head, seqlen, dhead = shape
