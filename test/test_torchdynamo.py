@@ -132,3 +132,15 @@ def test_t5():
             do_sample=False,
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
+
+    task2 = "translate English to French: What are you doing here sir, may I help you or call someone?"
+    inputs = tokenizer(task2, return_tensors="pt", padding=True).to("cuda")
+    with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
+        output_sequences = model.generate(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            min_length=1,
+            max_length=22,
+            do_sample=False,
+        )
+        assert "Que faites-vous ici, Monsieur" in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
