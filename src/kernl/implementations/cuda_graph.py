@@ -39,11 +39,14 @@ def cuda_graphs_wrapper(
     static_inputs = list()
 
     for i in inputs:
-        t = torch.zeros_like(i)
-        already_seen = getattr(i, "already_seen", False)
-        setattr(t, "already_seen", already_seen)
-        setattr(i, "already_seen", True)
-        static_inputs.append(t)
+        is_recycled = getattr(i, "is_recycled", False)
+        if is_recycled:
+            static_inputs.append(i)
+        else:
+            setattr(i, "is_recycled", True)
+            t = torch.zeros_like(i)
+            setattr(t, "is_recycled", False)
+            static_inputs.append(t)
 
     # required warmup, not just for perf but for correctness
     torch.cuda.synchronize()
@@ -71,7 +74,7 @@ def cuda_graphs_wrapper(
         for dst, src in zip(static_inputs, new_inputs):
             dst.copy_(src)  # cuda graph can only read data from the same address
         for src, dst in zip(new_inputs, static_inputs):
-            if not i.already_seen:  # some tensors are reused from call to call, so we don't need to copy them
+            if not i.is_recycled:  # some tensors are reused from call to call, so we don't need to copy them
                 dst.resize_(src.shape)
                 dst.copy_(src)
 
