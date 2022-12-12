@@ -58,7 +58,6 @@ def cuda_graphs_wrapper(
     torch.cuda.current_stream().wait_stream(stream)
     torch.cuda.synchronize()
 
-
     # record
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph, stream=stream, pool=pool):
