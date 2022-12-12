@@ -68,12 +68,14 @@ def cuda_graphs_wrapper(
     if not isinstance(static_outputs, (list, tuple)):
         static_outputs = (static_outputs,)
 
-    def run(*new_inputs):  # TODO remember that these inputs are themselves recycled btw rounds
+    def run(*new_inputs):
         assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
         assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
         # cuda graph can only read data from the same address
         for src, dst in zip(new_inputs, static_inputs):
-            if dst.reuse_counter <= 1:  # some tensors are reused from call to call, so we don't need to copy them
+            # some tensors are reused from call to call,
+            # if this is the second times or more, they already contain the right data
+            if dst.reuse_counter <= 1:
                 dst.copy_(src)
 
         graph.replay()
