@@ -43,7 +43,7 @@ def cuda_graphs_wrapper(
             i.reuse_counter += 1
             static_inputs.append(i)
         else:
-            t = torch.zeros_like(i)  # TODO test with empty_like
+            t = torch.empty_like(i)
             i.reuse_counter = 1
             t.reuse_counter = 0
             static_inputs.append(t)
