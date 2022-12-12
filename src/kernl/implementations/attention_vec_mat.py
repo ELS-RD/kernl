@@ -17,14 +17,14 @@ from torch.cuda.amp import custom_fwd
         triton.Config({"SIZE_N": 2}, num_warps=1, num_stages=1),
         triton.Config({"SIZE_N": 1}, num_warps=1, num_stages=1),
     ],
-    key=["vec_cols", "mat_rows", "mat_cols", "out_cols"],
+    key=["size_vec_cols", "size_mat_rows", "size_mat_cols", "size_out_cols"],
 )
 @triton.jit
 def vec_mat(
-    vec_cols: tl.constexpr,
-    mat_rows: tl.constexpr,
-    mat_cols: tl.constexpr,
-    out_cols: tl.constexpr,
+    size_vec_cols: tl.constexpr,
+    size_mat_rows: tl.constexpr,
+    size_mat_cols: tl.constexpr,
+    size_out_cols: tl.constexpr,
     vec_tensor,
     matrix_tensor,
     out_tensor,
@@ -41,7 +41,7 @@ def vec_mat(
     out_rows_stride,
     out_cols_stride,
     SCALER: tl.constexpr,
-    VEC_SOFTMAX: tl.constexpr,
+    SHOULD_VEC_SOFTMAX: tl.constexpr,
     VEC_COLS: tl.constexpr,
     SIZE_N: tl.constexpr,
 ):
@@ -49,42 +49,42 @@ def vec_mat(
     n_head_idx = tl.program_id(1)
     batch_idx = tl.program_id(2)
 
-    size_n_arange = tl.arange(0, SIZE_N)
-    vec_arange = tl.arange(0, VEC_COLS)
+    range_offs_size_n = tl.arange(0, SIZE_N)
+    range_offs_vec = tl.arange(0, VEC_COLS)
 
-    vec_ptr = vec_tensor + (
-        batch_idx * vec_batch_stride + n_head_idx * vec_n_head_stride + vec_cols_stride * vec_arange[:, None]
+    ptrs_vec = vec_tensor + (
+        batch_idx * vec_batch_stride + n_head_idx * vec_n_head_stride + vec_cols_stride * range_offs_vec[:, None]
     )
-    vec_mask = vec_arange[:, None] < vec_cols
-    vec = tl.load(pointer=vec_ptr, mask=vec_mask, other=0.0).to(tl.float32)
+    vec_mask = range_offs_vec[:, None] < size_vec_cols
+    vec = tl.load(pointer=ptrs_vec, mask=vec_mask, other=0.0).to(tl.float32)
 
     if SCALER != 1.0:
         vec = vec * SCALER
 
-    if VEC_SOFTMAX:
+    if SHOULD_VEC_SOFTMAX:
         vec_max = tl.max(vec, axis=0)
         vec = vec - vec_max[:, None]
         vec = tl.exp(vec)
         vec = vec / tl.sum(vec, axis=0)[:, None]
 
-    matrix_ptr = matrix_tensor + (
+    ptrs_matrix = matrix_tensor + (
         batch_idx * matrix_batch_stride
         + n_head_idx * matrix_n_head_stride
-        + vec_arange[:, None] * matrix_rows_stride  # cols
-        + (n_block_idx * SIZE_N + size_n_arange)[None, :] * matrix_cols_stride  # rows
+        + range_offs_vec[:, None] * matrix_rows_stride  # cols
+        + (n_block_idx * SIZE_N + range_offs_size_n)[None, :] * matrix_cols_stride  # rows
     )
-    matrix_mask = (vec_arange[:, None] < mat_rows) & ((n_block_idx * SIZE_N + size_n_arange)[None, :] < mat_cols)
-    mat = tl.load(pointer=matrix_ptr, mask=matrix_mask, other=0.0).to(tl.float32)
+    matrix_mask = (range_offs_vec[:, None] < size_mat_rows) & ((n_block_idx * SIZE_N + range_offs_size_n)[None, :] < size_mat_cols)
+    mat = tl.load(pointer=ptrs_matrix, mask=matrix_mask, other=0.0).to(tl.float32)
     result = vec * mat
     result = tl.sum(input=result, axis=0)
 
-    out_ptr = out_tensor + (
+    ptrs_out = out_tensor + (
         batch_idx * out_batch_stride
         + n_head_idx * out_n_head_stride
-        + (n_block_idx * SIZE_N + size_n_arange) * out_cols_stride
+        + (n_block_idx * SIZE_N + range_offs_size_n) * out_cols_stride
     )
-    out_mask = (n_block_idx * SIZE_N + size_n_arange) < out_cols
-    tl.store(pointer=out_ptr, value=result, mask=out_mask, eviction_policy="evict_first")
+    out_mask = (n_block_idx * SIZE_N + range_offs_size_n) < size_out_cols
+    tl.store(pointer=ptrs_out, value=result, mask=out_mask, eviction_policy="evict_first")
 
 
 def vec_mat_wrapper(
@@ -95,6 +95,22 @@ def vec_mat_wrapper(
     softmax_vec: bool,
     transpose_mat: bool,
 ) -> torch.Tensor:
+    """
+    Matrix multiplication of a vector and a matrix:
+    Oi = sum_j Vj * Mij
+    If transpose_mat is True, the matrix is transposed:
+    Oi = sum_j Vj * Mji
+    If softmax_vec is True, the vector is softmaxed:
+    Oi = sum_j exp(Vj - max(V)) / sum_k exp(Vk - max(V)) * Mij
+
+    @param vec: vector to multiply with the matrix
+    @param matrix: matrix to multiply with the vector
+    @param output: output tensor
+    @param scaler: scaler to multiply the vector with before multiplication
+    @param softmax_vec: whether to softmax the vector before multiplication
+    @param transpose_mat: whether to transpose the matrix before multiplication
+    @return: output tensor
+    """
     vec_cols = vec.shape[-1]
     out_cols = output.shape[-1]
 
@@ -164,6 +180,8 @@ def attention_vec_mat_forward(
     assert attention_mask is None, "attention_mask is not supported"
     assert output.shape == q.shape[:3] + k.shape[-1:], f"{output.shape} != {q.shape[:3] + k.shape[-1:]}"
     if v.stride()[-1] == 1:  # is row major
-        # change layout to col major
-        v.set_(source=v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2))
+        # change layout from row major (default) to col major to make coalesced memory access in Triton kernel
+        v_col_major = v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2)
+        # mutate v, so its storage is col major
+        v.set_(source=v_col_major)
     return AttentionVecMat.apply(q, k, v, output, sm_scale)
