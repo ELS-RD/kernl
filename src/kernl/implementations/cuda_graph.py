@@ -39,13 +39,13 @@ def cuda_graphs_wrapper(
     static_inputs = list()
 
     for i in inputs:
-        is_recycled = getattr(i, "is_recycled", False)
-        if is_recycled:
+        if getattr(i, "reuse_counter", 0) > 0:
+            i.reuse_counter += 1
             static_inputs.append(i)
         else:
-            setattr(i, "is_recycled", True)
-            t = torch.zeros_like(i)
-            setattr(t, "is_recycled", False)
+            t = torch.zeros_like(i)  # TODO test with empty_like
+            i.reuse_counter = 1
+            t.reuse_counter = 0
             static_inputs.append(t)
 
     # required warmup, not just for perf but for correctness
@@ -68,14 +68,12 @@ def cuda_graphs_wrapper(
     if not isinstance(static_outputs, (list, tuple)):
         static_outputs = (static_outputs,)
 
-    def run(*new_inputs):
+    def run(*new_inputs):  # TODO remember that these inputs are themselves recycled btw rounds
         assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
         assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
-        for dst, src in zip(static_inputs, new_inputs):
-            dst.copy_(src)  # cuda graph can only read data from the same address
+        # cuda graph can only read data from the same address
         for src, dst in zip(new_inputs, static_inputs):
-            if not i.is_recycled:  # some tensors are reused from call to call, so we don't need to copy them
-                dst.resize_(src.shape)
+            if dst.reuse_counter <= 1:  # some tensors are reused from call to call, so we don't need to copy them
                 dst.copy_(src)
 
         graph.replay()
