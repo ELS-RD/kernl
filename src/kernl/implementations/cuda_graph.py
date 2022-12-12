@@ -25,10 +25,26 @@ def cuda_graphs_wrapper(
     pool: (int, int) = torch.cuda.graph_pool_handle(),
 ):
     """
-    From torchdynamo
+    This function is a wrapper for the model to be used with cuda graphs.
+    It is used to create a cuda graph and to execute it.
+
+    @param model: model to be wrapped
+    @param inputs: original inputs of the model
+    @param copy_outputs: if True, the outputs will be cloned so it can be mutated, etc
+    @param pool: cuda graph pool handle, to share pool between graphs
+    @return: a callable to run the graph
     """
+
     assert isinstance(inputs, (list, tuple)), f"inputs is of type {type(inputs)} instead of list"
-    static_inputs = [torch.zeros_like(x) for x in inputs]
+    static_inputs = list()
+
+    for i in inputs:
+        t = torch.zeros_like(i)
+        already_seen = getattr(i, "already_seen", False)
+        setattr(t, "already_seen", already_seen)
+        setattr(i, "already_seen", True)
+        static_inputs.append(t)
+
     # required warmup, not just for perf but for correctness
     torch.cuda.synchronize()
     stream = torch.cuda.Stream()
@@ -42,6 +58,7 @@ def cuda_graphs_wrapper(
     torch.cuda.current_stream().wait_stream(stream)
     torch.cuda.synchronize()
 
+
     # record
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph, stream=stream, pool=pool):
@@ -54,6 +71,11 @@ def cuda_graphs_wrapper(
         assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
         for dst, src in zip(static_inputs, new_inputs):
             dst.copy_(src)  # cuda graph can only read data from the same address
+        for src, dst in zip(new_inputs, static_inputs):
+            if not i.already_seen:  # some tensors are reused from call to call, so we don't need to copy them
+                dst.resize_(src.shape)
+                dst.copy_(src)
+
         graph.replay()
         if copy_outputs:
             return [x.clone() for x in static_outputs]
