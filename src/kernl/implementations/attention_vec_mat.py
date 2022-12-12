@@ -73,7 +73,9 @@ def vec_mat(
         + range_offs_vec[:, None] * matrix_rows_stride  # cols
         + (n_block_idx * SIZE_N + range_offs_size_n)[None, :] * matrix_cols_stride  # rows
     )
-    matrix_mask = (range_offs_vec[:, None] < size_mat_rows) & ((n_block_idx * SIZE_N + range_offs_size_n)[None, :] < size_mat_cols)
+    matrix_mask = (range_offs_vec[:, None] < size_mat_rows) & (
+        (n_block_idx * SIZE_N + range_offs_size_n)[None, :] < size_mat_cols
+    )
     mat = tl.load(pointer=ptrs_matrix, mask=matrix_mask, other=0.0).to(tl.float32)
     result = vec * mat
     result = tl.sum(input=result, axis=0)
