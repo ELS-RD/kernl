@@ -18,10 +18,25 @@ slideUpElements.forEach(function (element) {
 
 // ----- ----- ----- ----- -----
 // modal management on landing page
+const chartContainer = document.querySelector('.chart-container');
+const sliderActions = document.querySelector('.slider__actions');
+const modalContent = document.querySelector('.modal-content');
+const chartContent = document.querySelector('.chart-content');
 const modal = document.querySelector('.modal');
+let addedChartContainer;
+let addedSliderActions;
+let isModalOpen = false;
 
 function toggleModal() {
+    if (!isModalOpen) {
+        addedChartContainer = modalContent.appendChild(chartContainer);
+        addedSliderActions = modalContent.appendChild(sliderActions);
+    } else {
+        chartContent.appendChild(addedChartContainer);
+        chartContent.appendChild(addedSliderActions);
+    }
     modal.classList.toggle('show-modal');
+    isModalOpen = !isModalOpen;
 }
 
 function windowOnClick(event) {
