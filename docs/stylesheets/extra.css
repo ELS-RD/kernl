@@ -464,7 +464,7 @@ div[class="md-search__scrollwrap"] {
     height: auto;
 }
 
-.knl-highlight__figure .chart-container {
+.knl-highlight__figure > figure .chart-container {
     position: relative;
     margin: auto;
     height: 400px;
@@ -640,14 +640,16 @@ div[class="md-search__scrollwrap"] {
     max-height: 97%;
     padding: 8px;
     text-align: center;
-    border-radius: 8px;
+    border-radius: var(--border-radius-md);
     background-color: white;
     z-index: 10001;
 }
 
-.modal-content img {
-    width: 100%;
-    height: auto;
+.modal-content .chart-container {
+    position: relative;
+    margin: auto;
+    height: 400px;
+    z-index: 0;
 }
 
 .modal-content .close-button {
@@ -660,10 +662,11 @@ div[class="md-search__scrollwrap"] {
     border-radius: 4px;
     stroke: var(--color-primary);
     transition: var(--hover-transform);
+    z-index: 2;
 }
 
 .modal-content .close-button:hover {
-    transform: scale(1.250);
+    transform: var(--hover-scale);
 }
 
 /* ----- ----- ----- ----- ----- */
@@ -790,10 +793,9 @@ div[class="md-search__scrollwrap"] {
     }
 }
 
-/* fix the image display in the modal for small screens in landscape mode */
-@media (orientation: landscape) and (max-height: 575px) {
-    .modal-content img {
-        width: auto;
-        max-height: 94vh;
+/* fix the charts display in the modal for small screens in landscape mode */
+@media (orientation: landscape) and (max-height: 474px) {
+    .modal-content .chart-container {
+        height: 250px;
     }
 }
