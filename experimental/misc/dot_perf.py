@@ -100,10 +100,11 @@ for use_dot in [True, False]:
             d_head,
             use_dot,
         )
+        torch.cuda.synchronize()
         end_event[i].record()
     times_run = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
     # overhead
-    torch.cuda.synchronize()
+
     for i in range(n_repeat):
         start_event[i].record()
         overhead_kernel[grid](
@@ -117,6 +118,7 @@ for use_dot in [True, False]:
             d_head,
             use_dot,
         )
+        torch.cuda.synchronize()
         end_event[i].record()
     times_overhead = torch.median(torch.tensor([s.elapsed_time(e) for s, e in zip(start_event, end_event)]))
     assert torch.allclose(out, vec @ matrix.t(), atol=1e-4)
