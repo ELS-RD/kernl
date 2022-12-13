@@ -17,6 +17,8 @@ slideUpElements.forEach(function (element) {
 })
 
 // ----- ----- ----- ----- -----
+// charts helpers
+// ----- ----- ----- ----- -----
 // modal management on landing page
 const chartContainer = document.querySelector('.chart-container');
 const sliderActions = document.querySelector('.slider__actions');
