@@ -15,10 +15,8 @@
 
 import torch
 
-from kernl.implementations.attention import attention_forward
+from kernl.implementations.attention import attention_forward, attention_reference
 from kernl.utils.extended_matcher import replace_pattern
-
-from kernl.implementations.attention import attention_reference
 
 
 def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
@@ -77,6 +75,7 @@ def fuse_attention_pattern_2(gm: torch.fx.GraphModule, is_causal: bool):
         return output
 
     replace_pattern(gm, pattern, replace)
+
 
 def fuse_attention_pattern_3(gm: torch.fx.GraphModule, is_causal: bool):
     def pattern(q, k, v):

@@ -21,6 +21,7 @@ from kernl.optimizer.layer_norm import replace_layer_norm, replace_layer_norm_rm
 from kernl.optimizer.linear import replace_all_linear
 from kernl.optimizer.normalizer import normalize_operators
 
+
 def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     normalize_operators(gm)
     remove_dropout(gm)

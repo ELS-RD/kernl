@@ -14,8 +14,6 @@
 #
 
 import dataclasses
-import gc
-
 from test.models.bert import (
     get_model_baseline,
     get_model_dynamo_cuda_graphs,
@@ -30,7 +28,7 @@ from typing import Callable
 import pytest
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, WhisperForConditionalGeneration, WhisperProcessor
-from datasets import load_dataset
+
 from conftest import assert_all_close, set_seed, setup_dynamo
 
 from kernl.model_optimization import optimize_model
@@ -135,6 +133,7 @@ def test_t5():
         )
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
+
 @setup_dynamo()
 @pytest.mark.parametrize("implementation", ["reference", "optimized"])
 def test_whisper_hf(benchmark, implementation):
@@ -148,4 +147,6 @@ def test_whisper_hf(benchmark, implementation):
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
         predicted_ids = benchmark(model.generate, inputs, min_length=25, max_length=25, num_beams=2, do_sample=False)
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True, normalize=True)[0]
-        assert transcription == "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        assert (
+            transcription == "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        )
