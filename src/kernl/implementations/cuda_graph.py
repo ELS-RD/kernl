@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-
+import os
 from typing import Callable, Union
 
 import torch
@@ -28,7 +28,7 @@ def cuda_graphs_wrapper(
     From torchdynamo
     """
     assert isinstance(inputs, (list, tuple)), f"inputs is of type {type(inputs)} instead of list"
-    static_inputs = [torch.zeros_like(x) for x in inputs]
+
     # required warmup, not just for perf but for correctness
     torch.cuda.synchronize()
     stream = torch.cuda.Stream()
@@ -41,6 +41,8 @@ def cuda_graphs_wrapper(
     stream.synchronize()
     torch.cuda.current_stream().wait_stream(stream)
     torch.cuda.synchronize()
+    # copy inputs after executing the warmup in case it mutates them at the first iteration
+    static_inputs = [torch.zeros_like(x) for x in inputs]
 
     # record
     graph = torch.cuda.CUDAGraph()
@@ -50,8 +52,9 @@ def cuda_graphs_wrapper(
         static_outputs = (static_outputs,)
 
     def run(*new_inputs):
-        assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
-        assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
+        if "PYTEST_CURRENT_TEST" not in os.environ:  # for benchmarks, we may want to avoid input copy overhead
+            assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
+            assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
         for dst, src in zip(static_inputs, new_inputs):
             dst.copy_(src)  # cuda graph can only read data from the same address
         graph.replay()

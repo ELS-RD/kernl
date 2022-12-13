@@ -19,8 +19,11 @@ import pytest
 import torch
 
 from conftest import assert_all_close, set_seed
+from src.kernl.implementations.attention_skinny import skinny_attention_forward
+from src.kernl.implementations.cuda_graph import cuda_graphs_wrapper
 
 from kernl.implementations.attention import attention_forward, attention_reference, closest_power_of_2
+from kernl.implementations.attention_vec_mat import attention_vec_mat_forward
 
 
 implementations = {
@@ -156,3 +159,52 @@ def test_closest_power_of_2():
     min_range = 4
     max_range = 128
     assert closest_power_of_2(1, min_range=min_range, max_range=max_range) == [2, 4, 8]
+
+
+implementations_skinny_cross_attention = {
+    "torch": lambda output, sm_scale: lambda q, k, v: attention_reference(
+        q=q, k=k, v=v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+    "split-k-parallel": lambda output, sm_scale: lambda q, k, v: skinny_attention_forward(
+        q, k, v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+    "flash-attention": lambda output, sm_scale: lambda q, k, v: attention_forward(
+        q, k, v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+    "vec-mat-mul": lambda output, sm_scale: lambda q, k, v: attention_vec_mat_forward(
+        q=q, k=k, v=v, output=output, sm_scale=sm_scale, is_causal=False, attention_mask=None
+    ),
+}
+
+
+@set_seed()
+@pytest.mark.parametrize(
+    "shape",
+    [(1, 6, 1500, 64), (1, 16, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)],
+    ids=["tiny", "medium", "large-beam-1", "large-beam-5"],
+)
+@pytest.mark.parametrize("implementation", implementations_skinny_cross_attention.keys())
+def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
+    batch, head, seqlen, dhead = shape
+    q = torch.rand((batch, head, 1, dhead), dtype=torch.float16, device="cuda")
+    k = torch.rand((batch, head, seqlen, dhead), dtype=torch.float16, device="cuda")
+    v = torch.rand_like(k)
+    sm_scale = 0.3
+
+    p = torch.cuda.graph_pool_handle()
+    expected = attention_reference(
+        q=q.float(),
+        k=k.float(),
+        v=v.float(),
+        output=torch.empty_like(q, dtype=torch.float32),
+        sm_scale=sm_scale,
+        is_causal=False,
+        attention_mask=None,
+    )
+    output = torch.empty_like(q)
+    fn = implementations_skinny_cross_attention[implementation](output, sm_scale)
+    r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
+    _ = r(q, k, v)[0]
+    result = benchmark(r)[0]
+
+    assert_all_close(a=expected, b=result.float(), atol=1e-2)
