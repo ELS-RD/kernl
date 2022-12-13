@@ -141,6 +141,17 @@ markdown_extensions:
 #      user: squidfunk
 #      repo: mkdocs-material
 
+plugins:
+  - mkdocstrings:
+      custom_templates: templates
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: false
+watch:
+  - src/kernl
+
 # Page tree
 nav:
   - Home: index.md
@@ -149,7 +160,9 @@ nav:
   - How it works:
       - Page 1: how-it-works/page.md
   - Code Reference:
-      - Page 1: reference/page.md
+      - Model Optimization: reference/model_optimization.md
+      - Debugger: reference/debugger.md
+      - Graph Pattern Matching: reference/extended_matcher.md
   - Contribution guide:
       - Page 1: contribution-guide/page.md
   - Changelog & FAQ:

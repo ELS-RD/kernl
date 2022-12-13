@@ -5,11 +5,14 @@
 The easiest and least intrusive way is to use docker.
 
 ```shell
+# Building a mkdocs image with the mkdocstrings plugin
+docker build -t mkdocstrings -f docs/Dockerfile.mkdocstrings docs
+
 # Previewing the site in watch mode
-docker run --rm -it -p 8000:8000 -v ${PWD}:/docs squidfunk/mkdocs-material
+docker run --rm -it -p 8000:8000 -v ${PWD}:/docs mkdocstrings
 
 # Build the static site
-docker run --rm -it -v ${PWD}:/docs squidfunk/mkdocs-material build
+docker run --rm -it -v ${PWD}:/docs mkdocstrings build
 ```
 
 ## Notes for developers
