@@ -138,21 +138,14 @@ def test_t5():
 @setup_dynamo()
 @pytest.mark.parametrize("implementation", ["reference", "optimized"])
 def test_whisper_hf(benchmark, implementation):
-    audio_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-medium").to("cuda")
+    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").to("cuda")
     if implementation == "optimized":
         optimize_model(model.model.encoder)
         optimize_model(model.model.decoder)
 
-    processor = WhisperProcessor.from_pretrained("openai/whisper-medium")
-    speech_data = audio_dataset[0]["audio"]["array"]
-
-    inputs = processor(speech_data, return_tensors="pt", sampling_rate=16_000).input_features.to("cuda")
+    processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+    inputs = torch.load("test/data/whisper_input.pt")
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
         predicted_ids = benchmark(model.generate, inputs, min_length=25, max_length=25, num_beams=2, do_sample=False)
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True, normalize=True)[0]
         assert transcription == "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
-
-    del model
-    gc.collect()
-    torch.cuda.empty_cache()

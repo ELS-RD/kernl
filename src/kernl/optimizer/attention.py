@@ -18,7 +18,7 @@ import torch
 from kernl.implementations.attention import attention_forward
 from kernl.utils.extended_matcher import replace_pattern
 
-from src.kernl.implementations.attention import attention_reference
+from kernl.implementations.attention import attention_reference
 
 
 def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
