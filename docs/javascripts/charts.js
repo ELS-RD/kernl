@@ -852,7 +852,6 @@ const data = [
 const font = {
     family: 'Poppins',
 }
-
 const scaleTitle = {
     display: true,
     font
