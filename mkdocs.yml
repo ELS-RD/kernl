@@ -142,6 +142,7 @@ markdown_extensions:
 #      repo: mkdocs-material
 
 plugins:
+  - search
   - mkdocstrings:
       custom_templates: templates
       default_handler: python
