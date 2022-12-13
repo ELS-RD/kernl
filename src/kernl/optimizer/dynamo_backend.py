@@ -15,7 +15,7 @@
 
 import torch
 
-from kernl.optimizer.attention import fuse_attention_pattern_1, fuse_attention_pattern_2
+from kernl.optimizer.attention import fuse_attention_pattern_1, fuse_attention_pattern_2, fuse_attention_pattern_3
 from kernl.optimizer.dropout import remove_dropout
 from kernl.optimizer.layer_norm import replace_layer_norm, replace_layer_norm_rms
 from kernl.optimizer.linear import replace_all_linear
@@ -27,6 +27,7 @@ def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     remove_dropout(gm)
     fuse_attention_pattern_1(gm, assume_causal)
     fuse_attention_pattern_2(gm, assume_causal)
+    fuse_attention_pattern_3(gm, assume_causal)
     replace_all_linear(gm)
     replace_layer_norm(gm)
     replace_layer_norm_rms(gm)

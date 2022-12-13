@@ -15,12 +15,30 @@
 
 import torch
 
-from kernl.implementations.attention import attention_forward
+from kernl.implementations.attention import attention_forward, attention_reference
 from kernl.utils.extended_matcher import replace_pattern
 
 
 def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
-    return attention_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+    # When tensors are shaped for bmm, first dimension is used for both batch and heads. Our kernel supports tensors
+    # with 4 dimensions, so we add another dimension of size 1 for heads.
+    extend_head = q.dim() == 3
+    if extend_head:
+        q = q.view(q.size(0), 1, q.size(-2), q.size(-1))
+        k = k.view(k.size(0), 1, k.size(-2), k.size(-1))
+        v = v.view(v.size(0), 1, v.size(-2), v.size(-1))
+        output = output.view(output.size(0), 1, output.size(-2), output.size(-1))
+
+    # When there is a large difference between those dimensions, our kernel become inefficient
+    # (almost no parallelization), so we use pytorch instead
+    if q.size(-2) == 1 and k.size(-2) > 50:
+        attention_reference(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+    else:
+        attention_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+
+    if extend_head:
+        return output.view(q.size(0), q.size(-2), q.size(-1))
+    return output
 
 
 torch.fx.wrap("attention_wrapper")
@@ -58,6 +76,23 @@ def fuse_attention_pattern_2(gm: torch.fx.GraphModule, is_causal: bool):
     def replace(q, k, encoder_decoder_position_bias, v):
         output = torch.empty_like(q)
         output = attention_wrapper(q, k, v, output, 1.0, is_causal, encoder_decoder_position_bias)
+        return output
+
+    replace_pattern(gm, pattern, replace)
+
+
+def fuse_attention_pattern_3(gm: torch.fx.GraphModule, is_causal: bool):
+    def pattern(q, k, v):
+        transpose_46 = k.transpose(1, 2)
+        bmm_22 = torch.bmm(q, transpose_46)
+        softmax_11 = torch.nn.functional.softmax(bmm_22, dim=-1)
+        bmm_23 = torch.bmm(softmax_11, v)
+
+        return bmm_23
+
+    def replace(q, k, v):
+        output = torch.empty_like(q)
+        output = attention_wrapper(q, k, v, output, 1.0, is_causal, None)
         return output
 
     replace_pattern(gm, pattern, replace)
