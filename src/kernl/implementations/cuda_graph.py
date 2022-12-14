@@ -12,55 +12,30 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-import os
+
 from typing import Callable, Union
 
 import torch
+from torch._inductor.compile_fx import cudagraphify_impl
+from torch._inductor.utils import dynamo_utils
+from torch._subclasses import FakeTensor
 
 
-def cuda_graphs_wrapper(
-    model: Callable,
-    inputs: Union[list[torch.Tensor], tuple[torch.Tensor]],
-    copy_outputs: bool = False,
-    pool: (int, int) = torch.cuda.graph_pool_handle(),
-):
-    """
-    From torchdynamo
-    """
-    assert isinstance(inputs, (list, tuple)), f"inputs is of type {type(inputs)} instead of list"
+def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]]):
+    assert isinstance(inputs, (list, tuple))
 
-    # required warmup, not just for perf but for correctness
-    torch.cuda.synchronize()
-    stream = torch.cuda.Stream()
-    stream.wait_stream(torch.cuda.current_stream())
-    with torch.cuda.stream(stream):
-        # 2 rounds, 1 to build the model (triton kernels, casting, etc.),
-        # and 1 for warmup
-        for _ in range(2):
-            model(*inputs)
-    stream.synchronize()
-    torch.cuda.current_stream().wait_stream(stream)
-    torch.cuda.synchronize()
-    # copy inputs after executing the warmup in case it mutates them at the first iteration
-    static_inputs = [torch.zeros_like(x) for x in inputs]
+    # if using fake tensors, defer cudagraphs until we get real inputs at runtime
+    if not any(isinstance(inp, FakeTensor) for inp in inputs):
+        f = cudagraphify_impl(lambda args: model(*args), inputs)
+        return lambda args: f(list(args))
 
-    # record
-    graph = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(graph, stream=stream, pool=pool):
-        static_outputs = model(*static_inputs)
-    if not isinstance(static_outputs, (list, tuple)):
-        static_outputs = (static_outputs,)
+    compiled_fn = None
 
     def run(*new_inputs):
-        if "PYTEST_CURRENT_TEST" not in os.environ:  # for benchmarks, we may want to avoid input copy overhead
-            assert isinstance(new_inputs, (list, tuple)), f"inputs is of type {type(new_inputs)} instead of list"
-            assert len(static_inputs) == len(new_inputs), f"{len(static_inputs)} == {len(new_inputs)}"
-        for dst, src in zip(static_inputs, new_inputs):
-            dst.copy_(src)  # cuda graph can only read data from the same address
-        graph.replay()
-        if copy_outputs:
-            return [x.clone() for x in static_outputs]
-        else:
-            return static_outputs
+        nonlocal compiled_fn
+        if compiled_fn is None:
+            with dynamo_utils.preserve_rng_state():
+                f = cudagraphify_impl(lambda args: model(*args), new_inputs)
+        return lambda args: f(list(args))
 
     return run
