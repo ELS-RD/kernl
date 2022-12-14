@@ -29,10 +29,10 @@ A solution is to be found.
 
 ## To do
 
-- Trouver une solution pour ne pas polluer le build et le sitemap.xml
-- Intégrer la conversion dans le chaine de build et de déploiement
-- Réaliser des tests unitaire de conversion de csv en json
-- Bonus: intégration de typescript avec Vite.
+- Find a solution to not pollute the build and the sitemap.xml
+- Integrate the conversion in the build and deployment chain
+- Perform unit tests to convert csv to json
+- Bonus: typescript integration with Vite.
 
 ## Node version used
 
