@@ -1,0 +1,19 @@
+{
+  "name": "csv-to-json",
+  "version": "1.0.0",
+  "description": "Convert the csv file of the charts to json",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon app.js"
+  },
+  "author": "kernl.ai",
+  "license": "ISC",
+  "dependencies": {
+    "papaparse": "^5.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  }
+}
