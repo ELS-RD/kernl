@@ -23,7 +23,6 @@ from torch._subclasses import FakeTensor
 
 def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]]):
     assert isinstance(inputs, (list, tuple))
-
     # if using fake tensors, defer cudagraphs until we get real inputs at runtime
     if not any(isinstance(inp, FakeTensor) for inp in inputs):
         f = cudagraphify_impl(lambda args: model(*args), inputs)
@@ -36,6 +35,10 @@ def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple
         if compiled_fn is None:
             with dynamo_utils.preserve_rng_state():
                 f = cudagraphify_impl(lambda args: model(*args), new_inputs)
-        return lambda args: f(list(args))
+
+                def compiled_fn(args):
+                    return f(list(args))
+
+        return compiled_fn(new_inputs)
 
     return run
