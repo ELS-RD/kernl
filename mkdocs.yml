@@ -165,6 +165,8 @@ nav:
       - Debugger: reference/debugger.md
       - Graph Pattern Matching: reference/extended_matcher.md
   - Contribution guide:
-      - Page 1: contribution-guide/page.md
+      - Contributing: contribution-guide/contributing.md
+      - Code of conduct: contribution-guide/code-of-conduct.md
+      - How to contribute: contribution-guide/how-to-contribute.md
   - Changelog & FAQ:
       - Page 1: changelog/page.md
