@@ -2,7 +2,10 @@
 
 ## Who Can Participate?
 
-todo
+**Everyone** is invited to participate in [kernl.ai](https://www.kernl.ai/)!
+
+You don't have to be a developer or a Machine Learning practitioner. **Anyone can contribute in some way**, just have a
+desire to **grow kernl** 🌱.
 
 ## Why Should You Participate?
 
