@@ -17,7 +17,6 @@ from typing import List
 
 import torch
 import torch._dynamo as torchdynamo
-from torch._dynamo.optimizations import BACKENDS
 from transformers import AutoModel
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
