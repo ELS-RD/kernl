@@ -29,7 +29,7 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 &&
 
 RUN python3.9 -m ensurepip --default-pip --upgrade
 
-RUN pip install --pre torch==1.14.0.dev20221029+cu117 --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+RUN pip install --pre torch==2.0.0.dev20221214+cu117 --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 
 
 WORKDIR /syncback
