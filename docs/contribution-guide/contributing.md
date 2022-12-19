@@ -1,36 +1,45 @@
 # Contributing
 
-## Who Can Participate?
+## Who can participate?
 
-**Everyone** is invited to participate in [kernl.ai](https://www.kernl.ai/)!
+**Everyone** is invited to participate in **kernl.ai**!
 
 You don't have to be a developer or a Machine Learning practitioner. **Anyone can contribute in some way**, just have a
-desire to **grow kernl** 🌱.
+desire to **grow kernl.ai 🌱** or **strengthen it**.
 
-## Why Should You Participate?
+## Why should I participate?
 
-todo
+Kernl's goal is to **make models accessible** to more developers, **with efficiency** at heart.
+In doing so, we not only **democratize large language models**, but also contribute to a more **resilient AI ecosystem**.
 
-## What Can I Do and How to Get Started?
+Participating allows you to contribute to the **beautiful adventure of kernl.ai** and to **its values**.
+This way, you ensure that **the project you love is constantly improving**, **avoiding vendor lock-in**.
 
-todo
+## What can I do?
 
-## Things to Know Before Joining
+It depends on what you want to do and your skills.
 
-todo
+Contributing does not necessarily mean that you have to know how to code. Code is central, but it is only one part of the project.
 
-## How Do I Know The Contributing Guidelines for Projects?
+There are a lot of things to do like :
 
-todo
+- **Adding and fixing code**: This is the most obvious when you think about contributing. You can fix bugs, optimize already supported models, optimize new ones, add new features, etc.
+- **Improve documentation**: Documentation, in all its forms, is vital. You can help develop it, improve it, correct it.
+- **Manage contributions**: Of course, depending on your skills, you can help manage contributions. You can for example sort issues, answer questions, do code reviews, etc.
+- **Submit ideas**: You can also submit ideas for new features, new models to optimize, etc.
+- **UI/UX design**: User Experience is essential, among other things to make kernl.ai even more accessible. You can contribute to it!
 
-## How Does The Entire Process Work?
+Of course, and we count on you, you can help spread the word and share the project to improve its visibility.
 
-todo
+## Things to know before contributing
 
-## How To Make Your First Pull Request?
+**Be respectful**. kernl.ai is a community project. Respect is essential. We are all here to help each other and to make kernl better.
 
-todo
+Specifically, you must comply with the standard project **[code of conduct](code-of-conduct.md)**.
 
-## It's Your First, Hopefully You Can Contribute More
+The contribution relies solely on the practice of **[Github](https://docs.github.com/)** and the **[els-rd/kernl](https://github.com/ELS-RD/kernl)** repository. A minimum level of knowledge of Git is therefore required to start contributing.
 
-todo
+## How do I know the contributing guidelines?
+
+Contribution guidelines are available in the **[How to contribute](how-to-contribute.md)** section.
+
