@@ -37,9 +37,9 @@ If you have a question, an idea for a new feature, or an optimization, you can u
 
 If you think you've found a bug but don't have the time to send a PR, please follow these guidelines:
 
-- Make sure the bug has not already been reported in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
+- First, make sure the bug has not already been reported in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
 
-**Bug reports without a reproduction will be immediately closed asking for a reproduction.**
+**Bug reports without a reproduction will be immediately closed.**
 
 <br>
 **<span style="color:#fff; background:#ff0000">todo: create a bug template ???</span>**
