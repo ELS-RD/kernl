@@ -11,7 +11,7 @@ Please read the full text so that you can understand what actions will and will 
 
 ## Open development
 
-All work is done directly on **[GitHub](https://github.com/ELS-RD/kernl)**. Core team members and external contributors submit issues and pull requests following the same rules and processes.
+All work is done directly on **[GitHub](https://github.com/ELS-RD/kernl)**. Core team members and external contributors submit Issues and Pull Requests following the same rules and processes.
 
 ## Writing and formatting text
 
@@ -20,15 +20,31 @@ Use (**[Markdown](https://www.markdownguide.org/basic-syntax/)**) to structure y
 
 Commits must also respect the **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)** specification.
 
-## Ask a question / share your ideas for new features
+## Process
 
-A dedicated **[discussion forum](todo)** is available to ask questions, propose new features, discuss new optimizations, etc.
-{{ create the forum and add the link }}
+### Ask a question / share your ideas for new features
+
+If you have a question, an idea for a new feature, or an optimization, you can use the dedicated **[discussion forum](todo)**.
+<br>
+**<span style="color:#fff; background:#ff0000">todo: create the dedicated forum ??? and add the link</span>**
 
 <figure markdown>
   ![discussion forum](discussion-forum.png){ loading=lazy, width=100% }
   <figcaption>kernl discussion forum</figcaption>
 </figure>
+
+### Report a bug
+
+If you think you've found a bug but don't have the time to send a PR, please follow these guidelines:
+
+- Make sure the bug has not already been reported in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
+
+**Bug reports without a reproduction will be immediately closed asking for a reproduction.**
+
+<br>
+**<span style="color:#fff; background:#ff0000">todo: create a bug template ???</span>**
+
+-----
 
 ## Issues
 
