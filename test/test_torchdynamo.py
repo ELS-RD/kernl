@@ -150,13 +150,13 @@ def test_whisper_hf(benchmark, implementation):
 
         WhisperForConditionalGeneration._reorder_cache = fix_reorder_cache
 
-    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large").to("cuda")
+    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").to("cuda")
 
     if implementation == "optimized":
         optimize_model(model.model.encoder)
         optimize_model(model.model.decoder)
 
-    processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+    processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
     inputs = torch.load("test/data/whisper_input.pt")
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
         predicted_ids = benchmark(model.generate, inputs, min_length=25, max_length=25, num_beams=5, do_sample=False)
