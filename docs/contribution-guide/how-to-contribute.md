@@ -20,7 +20,7 @@ Use (**[Markdown](https://www.markdownguide.org/basic-syntax/)**) to structure y
 
 Commit messages must respect the **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)** specification.
 
-## Process
+## Development Process
 
 ### Ask a question / share your ideas or new features
 
@@ -30,7 +30,9 @@ If you have a question, an idea for a new feature, or an optimization, you can u
 <br>
 **<span style="color:#fff; background:#ff0000">@todo: and add the link</span>**
 
-### Bug report issues
+### Issues
+
+#### Bugs
 
 If you think you've found a bug but don't have the time to send a PR, please:
 
@@ -48,29 +50,31 @@ If you think you've found a bug but don't have the time to send a PR, please:
 <br>
 **<span style="color:#fff; background:#009900">team: see bug report template > .github/ISSUE_TEMPLATE/bug-report.yml</span>**
 
------
-## Branch Organization
+#### Feature requests
 
+#### Proposals
+
+## Development
+
+### Branch Organization
 
 Kernl has one primary branch main and we use feature branches with deploy previews to deliver new features with pull requests.
 Kernl a une branche principale et nous utilisons de nouvelles branches par fonctionnalités, fixes, etc. avec des demandes de pull.
 
-## Commits
+### Installation
 
-## Documentation?
+### Code convention
 
-## Code quality?
+### Documentation?
 
-- Static Analysis
-- Linting
-- Coding style
+## Pull Requests
 
-## Testing?
+### Writing a good commit message
 
-## Writing a good commit message?
+### Code quality?
 
+### Testing?
 -----
-
 
 ### Feature request
 
@@ -87,26 +91,6 @@ Assignez l'Issue à un membre de l'équipe ou à vous-même si vous êtes en tra
 Ajoutez les étiquettes appropriées pour indiquer le type de fonctionnalité (par exemple, "nouvelle fonctionnalité", "amélioration") et le niveau de priorité.
 
 En suivant ces conseils, vous devriez être en mesure de proposer efficacement une nouvelle fonctionnalité sur GitHub de manière à ce qu'elle puisse être prise en compte et éventuellement mise en œuvre.
-
-### Documentation
-
-### Other
-
-### Issue labels
-
-### Issue workflow
-
-## Pull requests
-
-### Pull request types
-
-### Bug fix
-
-### Feature
-
-### Documentation
-
-### Other
 
 
 
