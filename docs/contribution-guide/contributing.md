@@ -38,7 +38,7 @@ Of course, and we count on you, you can help spread the word and share the proje
 
 We have adopted the **Contributor Covenant** as its **[Code of Conduct](code-of-conduct.md)**, and we expect project participants to adhere to it.
 
-The contribution relies solely on the practice of **[Github](https://docs.github.com/)** and the **[els-rd/kernl](https://github.com/ELS-RD/kernl)** repository. A minimum level of knowledge of Git is therefore required to start contributing.
+The contribution relies solely on the practice of **[Github](https://docs.github.com/)** and the **[els-rd/kernl](https://github.com/ELS-RD/kernl)** repository. A minimum level of knowledge of Github is therefore required to start contributing.
 
 ## How do I know the contributing guidelines?
 
