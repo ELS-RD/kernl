@@ -137,15 +137,29 @@ def test_t5():
 @setup_dynamo()
 @pytest.mark.parametrize("implementation", ["reference", "optimized"])
 def test_whisper_hf(benchmark, implementation):
-    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").to("cuda")
+    if implementation == "optimized":
+
+        @staticmethod
+        def fix_reorder_cache(past, beam_idx):
+            reordered_past = ()
+            for layer_past in past:
+                reordered_past += (
+                    tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                )
+            return reordered_past
+
+        WhisperForConditionalGeneration._reorder_cache = fix_reorder_cache
+
+    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large").to("cuda")
+
     if implementation == "optimized":
         optimize_model(model.model.encoder)
         optimize_model(model.model.decoder)
 
-    processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+    processor = WhisperProcessor.from_pretrained("openai/whisper-large")
     inputs = torch.load("test/data/whisper_input.pt")
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
-        predicted_ids = benchmark(model.generate, inputs, min_length=25, max_length=25, num_beams=2, do_sample=False)
+        predicted_ids = benchmark(model.generate, inputs, min_length=25, max_length=25, num_beams=5, do_sample=False)
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True, normalize=True)[0]
         assert (
             transcription == "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
