@@ -1,4 +1,4 @@
-# Contributing
+# Contributing to kernl
 
 ## Who can participate?
 
@@ -30,7 +30,7 @@ There are a lot of things to do like :
 - **Submit ideas**: You can also submit ideas for new features, new models to optimize, etc.
 - **UI/UX design**: User Experience is also essential, among other things to make kernl.ai even more accessible. You can contribute to it!
 
-Of course, and we count on you, you can help spread the word and share the project to improve its visibility.
+Of course, you can help spread the word and share the project to improve its visibility.
 
 ## Things to know before contributing
 
@@ -38,9 +38,16 @@ Of course, and we count on you, you can help spread the word and share the proje
 
 We have adopted the **Contributor Covenant** as its **[Code of Conduct](code-of-conduct.md)**, and we expect project participants to adhere to it.
 
-The contribution relies solely on the practice of **[Github](https://docs.github.com/)** and the **[els-rd/kernl](https://github.com/ELS-RD/kernl)** repository. A minimum level of knowledge of Github is therefore required to start contributing.
+The **[Open Source Guides](https://opensource.guide/)** website has a collection of resources for individuals, communities, and companies who want to learn how to run and contribute to an open source project.
+Contributors and people new to open source alike will find the following guides especially useful:
+
+ - [x] **[How to Contribute to Open Source](https://opensource.guide/how-to-contribute/)**
+ - [x] **[Building Welcoming Communities](https://opensource.guide/building-community/)**
+
+Kernl uses **[GitHub](https://github.com/ELS-RD/kernl)** as its source of truth.
+A minimum level of knowledge about it is therefore required to start contributing.
 
 ## How do I know the contributing guidelines?
 
-Contribution guidelines are available in this **[section](how-to-contribute.md)**.
+Just follow the **[contribution guidelines](how-to-contribute.md)**. 
 
