@@ -21,17 +21,6 @@ from torch._inductor.utils import dynamo_utils
 from torch._subclasses import FakeTensor
 
 
-__seen = set()
-
-
-def forget_static_inputs():
-    """
-    Forget the static inputs seen so far.
-    """
-    global __seen
-    __seen = set()
-
-
 def get_static_input_ids(inputs: list[torch.Tensor]) -> list[int]:
     """
     Returns the indices of the inputs that are static (i.e. already seen).
@@ -41,11 +30,10 @@ def get_static_input_ids(inputs: list[torch.Tensor]) -> list[int]:
     """
     static_input_ids: list[int] = list()
     for idx, i in enumerate(inputs):
-        if i.data_ptr() in __seen:
+        if getattr(i, "is_static", False):
             static_input_ids.append(idx)
         else:
-            # setattr(i.storage(), "is_static", True)
-            __seen.add(i.data_ptr())
+            setattr(i, "is_static", True)
     return static_input_ids
 
 
