@@ -189,6 +189,9 @@ def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
     q = torch.rand((batch, head, 1, dhead), dtype=torch.float16, device="cuda")
     k = torch.rand((batch, head, seqlen, dhead), dtype=torch.float16, device="cuda")
     v = torch.rand_like(k)
+    if "vec-mat-mul" in implementation:
+        # change layout from row major (default) to col major to make coalesced memory access in Triton kernel
+        v = v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2)
     sm_scale = 0.3
 
     expected = attention_reference(
