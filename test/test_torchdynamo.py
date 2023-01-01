@@ -157,7 +157,6 @@ def test_whisper_hf(benchmark, implementation, num_beam):
 
     def wrapper(*args, **kwargs):
         o = forward2(*args, **kwargs)
-        # print("---")
         for idx, past in enumerate(o.past_key_values):
             v_col_major = past[-1].permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2)
             # mutate v, so its storage is col major

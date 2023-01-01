@@ -56,10 +56,10 @@ def optimize_model(original_model: PreTrainedModel) -> None:
     if major < 8:
         raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to use Kernl")
     assert next(original_model.parameters()).device.type == "cuda", "Model must be on GPU"
-    original_model.forward2 = original_model.forward
+    original_model.forward_original = original_model.forward
 
     @torchdynamo.optimize(_compiler)
     def run(*args, **kwargs):
-        return original_model.forward2(*args, **kwargs)
+        return original_model.forward_original(*args, **kwargs)
 
     original_model.forward = run
