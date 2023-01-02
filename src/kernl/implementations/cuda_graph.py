@@ -22,7 +22,7 @@ from torch._inductor.utils import dynamo_utils
 from torch._subclasses import FakeTensor
 
 
-static_inputs: dict[str, deque[torch.Tensor]] = defaultdict(deque)
+static_inputs_pool: dict[str, deque[torch.Tensor]] = defaultdict(deque)
 
 
 def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
@@ -34,7 +34,7 @@ def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
     @return: list of inputs to be used in CUDA graphs
     """
     local_static_inputs: dict[str, deque[torch.Tensor]] = defaultdict(deque)
-    for k, v in static_inputs.items():
+    for k, v in static_inputs_pool.items():
         local_static_inputs[k] = v.copy()
     cuda_graph_input = list()
     for index, original_tensor in enumerate(model_inputs):
@@ -44,9 +44,9 @@ def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
             static_tensor = local_static_inputs[key].popleft()
         else:
             static_tensor = torch.empty((storage_size,), dtype=original_tensor.dtype, device=original_tensor.device)
-            static_inputs[key].append(static_tensor)
+            static_inputs_pool[key].append(static_tensor)
 
-        # storage offset should not be used... otherwise it changes cuda address
+        # storage offset should not be used below... otherwise it changes cuda address
         static_tensor = torch.as_strided(static_tensor, original_tensor.size(), original_tensor.stride())
         static_tensor.copy_(original_tensor)
         cuda_graph_input.append(static_tensor)
@@ -66,23 +66,22 @@ def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple
     # if using fake tensors, defer cudagraphs until we get real inputs at runtime
     if not any(isinstance(inp, FakeTensor) for inp in inputs):
         inputs = get_static_inputs(inputs)
-        static_inputs = tuple(range(len(inputs)))
-
         model(*inputs)  # additional warmup needed when input is mutated by some kernel
-        f = cudagraphify_impl(model=lambda args: model(*args), inputs=inputs, static_input_idxs=static_inputs)
-        return lambda args: f(list(args))
+        f = cudagraphify_impl(
+            model=lambda args: model(*args), inputs=inputs, static_input_idxs=tuple(range(len(inputs)))
+        )
+        return lambda args: f(get_static_inputs(args))
 
     compiled_fn = None
 
     def run(*new_inputs):
         new_inputs = get_static_inputs(list(new_inputs))
-        static_inputs = tuple(range(len(inputs)))
         nonlocal compiled_fn
         if compiled_fn is None:
             with dynamo_utils.preserve_rng_state():
                 model(*new_inputs)  # additional warmup needed when input is mutated by some kernel
                 f = cudagraphify_impl(
-                    model=lambda args: model(*args), inputs=new_inputs, static_input_idxs=static_inputs
+                    model=lambda args: model(*args), inputs=new_inputs, static_input_idxs=tuple(range(len(inputs)))
                 )
 
                 def compiled_fn(args):
