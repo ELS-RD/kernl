@@ -56,7 +56,7 @@ If you think you've found a bug but don't have the time to send a PR, please:
     - [x] Add appropriate labels to indicate the type of problem (e.g., "bug", "performance problem").
 
 <br>
-**<span style="color:#fff; background:#009900">@team: see bug report template ></span>** [.github/ISSUE_TEMPLATE/bug-report.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug-report.yml)
+**<span style="color:#fff; background:#009900">@team: see bug report template ></span>** [.github/ISSUE_TEMPLATE/bug.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug-report.yml)
 
 #### Feature requests
 
