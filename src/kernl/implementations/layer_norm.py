@@ -56,6 +56,7 @@ def pytorch_naive_rmsnorm(a: torch.Tensor, weight: torch.Tensor, eps: float):
 
     return weight * a
 
+
 @triton.jit
 def layer_norm_xformers(
     output_ptr,
@@ -162,9 +163,9 @@ def _layer_norm_fwd_fused_single_pass(
         a_ptr_mask = col_offs < N
         # eviction policy below have little impact now because of new implementation. Kept as is.
         # float32 is used to avoid overflow because of the square operation
-        a = tl.load(a_ptr + a_row_off + col_offs * a_col_stride, mask=a_ptr_mask, other=0.0, eviction_policy="evict_last").to(
-            tl.float32
-        )
+        a = tl.load(
+            a_ptr + a_row_off + col_offs * a_col_stride, mask=a_ptr_mask, other=0.0, eviction_policy="evict_last"
+        ).to(tl.float32)
         if IS_RMSNORM:
             var += tl.sum(a * a, axis=0)
         else:
@@ -192,9 +193,9 @@ def _layer_norm_fwd_fused_single_pass(
         weight = tl.load(weight_ptr + col_offs, mask=a_ptr_mask)
 
         # eviction policy helps to keep weights in cache (reused by other threads)
-        a = tl.load(a_ptr + a_row_off + col_offs * a_col_stride, mask=a_ptr_mask, other=0.0, eviction_policy="evict_first").to(
-            tl.float32
-        )
+        a = tl.load(
+            a_ptr + a_row_off + col_offs * a_col_stride, mask=a_ptr_mask, other=0.0, eviction_policy="evict_first"
+        ).to(tl.float32)
         a_hat = (a - mean) * rstd
         out = a_hat * weight
         if HAS_BIAS:
@@ -202,6 +203,7 @@ def _layer_norm_fwd_fused_single_pass(
             out = out + bias
         # write-back
         tl.store(output_ptr + row_idx * output_row_stride + col_offs * output_col_stride, out, mask=a_ptr_mask)
+
 
 @triton.jit
 def _layer_norm_fwd_fused_multi_pass(
@@ -236,7 +238,9 @@ def _layer_norm_fwd_fused_multi_pass(
     mean_acc = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
     for block_n_start_idx in range(0, N, BLOCK_SIZE):
         cols_offs = block_n_start_idx + block_range_offs
-        a = tl.load(a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
+        a = tl.load(
+            a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last"
+        ).to(tl.float32)
         mean_acc += a
     mean = tl.sum(mean_acc, axis=0) / N
 
@@ -244,7 +248,9 @@ def _layer_norm_fwd_fused_multi_pass(
     var_acc = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
     for block_n_start_idx in range(0, N, BLOCK_SIZE):
         cols_offs = block_n_start_idx + block_range_offs
-        a = tl.load(a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
+        a = tl.load(
+            a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last"
+        ).to(tl.float32)
         a = tl.where(cols_offs < N, a - mean, 0.0)
         var_acc += a * a
     var = tl.sum(var_acc, axis=0) / N
@@ -261,7 +267,9 @@ def _layer_norm_fwd_fused_multi_pass(
         mask_ptr = cols_offs < N
         weight = tl.load(weight_ptr + cols_offs, mask=mask_ptr)
         bias = tl.load(bias_ptr + cols_offs, mask=mask_ptr)
-        a = tl.load(a_ptr + row_off + cols_offs * a_col_stride, mask=mask_ptr, other=0.0, eviction_policy="evict_first").to(tl.float32)
+        a = tl.load(
+            a_ptr + row_off + cols_offs * a_col_stride, mask=mask_ptr, other=0.0, eviction_policy="evict_first"
+        ).to(tl.float32)
         a_hat = (a - mean) * rstd
         output = a_hat * weight + bias
         # write-back

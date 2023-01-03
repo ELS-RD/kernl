@@ -167,7 +167,10 @@ def _fwd_part_1(
         if MASK_HEAD_SIZE == 1:
             attention_mask_head_idx = 0
 
-        attention_mask_off = attention_mask_batch_idx * attention_mask_batch_stride + attention_mask_head_idx * attention_mask_head_stride
+        attention_mask_off = (
+            attention_mask_batch_idx * attention_mask_batch_stride
+            + attention_mask_head_idx * attention_mask_head_stride
+        )
 
     block_n_start_idx = n_block_idx * BLOCK_N_SIZE
     block_n_offs = block_n_start_idx + range_offs_n
@@ -254,10 +257,10 @@ def _fwd_part_1(
     result = tl.dot(numerators.to(q_ptr.dtype.element_ty), v)
 
     output_offs = (
-            current_batch_idx * output_batch_stride
-            + current_head_idx * output_head_stride
-            + n_block_idx * output_step_stride
-            + (m_offs[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
+        current_batch_idx * output_batch_stride
+        + current_head_idx * output_head_stride
+        + n_block_idx * output_step_stride
+        + (m_offs[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
     )
 
     output_ptrs = output_ptr + output_offs

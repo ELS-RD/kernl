@@ -53,7 +53,9 @@ def vec_mat(
     vec_cols_rounded_range_offs = tl.arange(0, VEC_COLS_ROUNDED_SIZE)
 
     vec_ptrs = vec_ptr + (
-            batch_idx * vec_batch_stride + head_idx * vec_head_stride + vec_cols_stride * vec_cols_rounded_range_offs[:, None]
+        batch_idx * vec_batch_stride
+        + head_idx * vec_head_stride
+        + vec_cols_stride * vec_cols_rounded_range_offs[:, None]
     )
     vec_ptr_mask = vec_cols_rounded_range_offs[:, None] < vec_cols_size
     vec = tl.load(pointer=vec_ptrs, mask=vec_ptr_mask, other=0.0).to(tl.float32)
@@ -68,13 +70,13 @@ def vec_mat(
         vec = vec / tl.sum(vec, axis=0)[:, None]
 
     matrix_ptrs = matrix_ptr + (
-            batch_idx * matrix_batch_stride
-            + head_idx * matrix_head_stride
-            + vec_cols_rounded_range_offs[:, None] * matrix_rows_stride  # cols
-            + (n_block_idx * N_SIZE + n_range_offs)[None, :] * matrix_cols_stride  # rows
+        batch_idx * matrix_batch_stride
+        + head_idx * matrix_head_stride
+        + vec_cols_rounded_range_offs[:, None] * matrix_rows_stride  # cols
+        + (n_block_idx * N_SIZE + n_range_offs)[None, :] * matrix_cols_stride  # rows
     )
     matrix_ptr_mask = (vec_cols_rounded_range_offs[:, None] < matrix_rows_size) & (
-            (n_block_idx * N_SIZE + n_range_offs)[None, :] < matrix_cols_size
+        (n_block_idx * N_SIZE + n_range_offs)[None, :] < matrix_cols_size
     )
     matrix = tl.load(pointer=matrix_ptrs, mask=matrix_ptr_mask, other=0.0).to(tl.float32)
 
@@ -82,9 +84,9 @@ def vec_mat(
     result = tl.sum(input=result, axis=0)
 
     output_ptrs = output_ptr + (
-            batch_idx * output_batch_stride
-            + head_idx * output_head_stride
-            + (n_block_idx * N_SIZE + n_range_offs) * output_cols_stride
+        batch_idx * output_batch_stride
+        + head_idx * output_head_stride
+        + (n_block_idx * N_SIZE + n_range_offs) * output_cols_stride
     )
     output_ptr_mask = (n_block_idx * N_SIZE + n_range_offs) < output_cols_size
     tl.store(pointer=output_ptrs, value=result, mask=output_ptr_mask, eviction_policy="evict_first")
