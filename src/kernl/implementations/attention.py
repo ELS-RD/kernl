@@ -370,20 +370,20 @@ def _fwd_kernel(
                     )
 
             if (M_LOAD_MASK_NEEDED & IS_MATRIX_MASK) | N_LOAD_MASK_NEEDED:
-                m = tl.load(
+                attention_mask = tl.load(
                     attention_mask_ptr + attention_mask_offs,
                     eviction_policy="evict_first",
                     mask=attention_mask_ptr_mask,
                     other=float("-inf"),
                 )
             else:
-                m = tl.load(
+                attention_mask = tl.load(
                     attention_mask_ptr + attention_mask_offs,
                     eviction_policy="evict_first",
                 )
             # Avoids NaN
-            m = tl.where(m == float("-inf"), min_clamp_value, m)
-            qk += m
+            attention_mask = tl.where(attention_mask == float("-inf"), min_clamp_value, attention_mask)
+            qk += attention_mask
 
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions

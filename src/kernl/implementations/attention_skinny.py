@@ -57,17 +57,17 @@ def attention_split_1_reference(
 
 @triton.jit
 def _fwd_part_1(
-    heads,
-    size_m,
-    size_n,
-    Q,
-    K,
-    V,
+    head_size,
+    m_size,
+    n_size,
+    q_ptr,
+    k_ptr,
+    v_ptr,
     sm_scale,
-    attention_mask,
-    output,
-    maximums,
-    sums,
+    attention_mask_ptr,
+    output_ptr,
+    maximums_ptr,
+    sums_ptr,
     q_batch_stride,
     q_head_stride,
     q_m_stride,
@@ -88,27 +88,27 @@ def _fwd_part_1(
     maximums_head_stride,
     maximums_step_stride,
     maximums_m_stride,
-    o_batch_stride,
-    o_head_stride,
-    o_step_stride,
-    o_m_stride,
-    o_n_stride,
+    output_batch_stride,
+    output_head_stride,
+    output_step_stride,
+    output_m_stride,
+    output_n_stride,
     attention_mask_batch_stride,
     attention_mask_head_stride,
     attention_mask_m_stride,
     attention_mask_k_stride,
     min_clamp_value,
-    NEED_LOAD_MASK_SIZE_N: tl.constexpr,
-    NEED_LOAD_MASK_SIZE_M: tl.constexpr,
+    N_LOAD_MASK_NEEDED: tl.constexpr,
+    M_LOAD_MASK_NEEDED: tl.constexpr,
     MASK_BATCH_SIZE: tl.constexpr,
     MASK_HEAD_SIZE: tl.constexpr,
     MASK_M_SIZE: tl.constexpr,
     MASK_K_SIZE: tl.constexpr,
     HAS_MASK: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
-    BLOCK_M: tl.constexpr,
-    BLOCK_DHEAD: tl.constexpr,
-    BLOCK_N: tl.constexpr,
+    BLOCK_M_SIZE: tl.constexpr,
+    BLOCK_DHEAD_SIZE: tl.constexpr,
+    BLOCK_N_SIZE: tl.constexpr,
 ):
     # Index of the block on M axis (M axis is the rows of matrix K)
     n_block_idx = tl.program_id(0)
@@ -116,20 +116,20 @@ def _fwd_part_1(
     head_idx = tl.program_id(2)
 
     # offsets
-    range_offs_m = tl.arange(0, BLOCK_M)  # first block on M dimension
-    range_offs_n = tl.arange(0, BLOCK_N)  # first block on N dimension
-    range_offs_d = tl.arange(0, BLOCK_DHEAD)  # full head
+    range_offs_m = tl.arange(0, BLOCK_M_SIZE)  # first block on M dimension
+    range_offs_n = tl.arange(0, BLOCK_N_SIZE)  # first block on N dimension
+    range_offs_d = tl.arange(0, BLOCK_DHEAD_SIZE)  # full head
 
-    offs_m = m_block_idx * BLOCK_M + range_offs_m  # rows offsets on M axis
+    m_offs = m_block_idx * BLOCK_M_SIZE + range_offs_m  # rows offsets on M axis
 
-    current_batch_idx = head_idx // heads
-    current_head_idx = head_idx % heads
+    current_batch_idx = head_idx // head_size
+    current_head_idx = head_idx % head_size
     # memory offsets matrices on whole Q, K, V matrices
     # Offsets for the current block on matrix Q
     offs_q = (
         current_batch_idx * q_batch_stride
         + current_head_idx * q_head_stride
-        + (offs_m[:, None] * q_m_stride + range_offs_d[None, :] * q_k_stride)
+        + (m_offs[:, None] * q_m_stride + range_offs_d[None, :] * q_k_stride)
     )
 
     # Offsets for the first block on matrix K
@@ -147,196 +147,197 @@ def _fwd_part_1(
     )
 
     # pointers to blocks in Q, K, V
-    ptrs_q = Q + offs_q
-    ptrs_k = K + offs_k
-    ptrs_v = V + offs_v
+    ptrs_q = q_ptr + offs_q
+    ptrs_k = k_ptr + offs_k
+    ptrs_v = v_ptr + offs_v
 
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
-    if NEED_LOAD_MASK_SIZE_M:
-        q = tl.load(ptrs_q, mask=offs_m[:, None] < size_m, eviction_policy="", other=0.0)
+    if M_LOAD_MASK_NEEDED:
+        q = tl.load(ptrs_q, mask=m_offs[:, None] < m_size, eviction_policy="", other=0.0)
     else:
         q = tl.load(ptrs_q, eviction_policy="")
 
     if HAS_MASK:
-        mask_batch_idx = (current_batch_idx,)
+        attention_mask_batch_idx = (current_batch_idx,)
         if MASK_BATCH_SIZE == 1:
-            mask_batch_idx = 0
+            attention_mask_batch_idx = 0
 
-        mask_head_idx = current_head_idx
+        attention_mask_head_idx = current_head_idx
         if MASK_HEAD_SIZE == 1:
-            mask_head_idx = 0
+            attention_mask_head_idx = 0
 
-        offs_base_mask = mask_batch_idx * attention_mask_batch_stride + mask_head_idx * attention_mask_head_stride
+        attention_mask_off = attention_mask_batch_idx * attention_mask_batch_stride + attention_mask_head_idx * attention_mask_head_stride
 
-    block_start_index_n = n_block_idx * BLOCK_N
-    offs_n = block_start_index_n + range_offs_n
+    block_n_start_idx = n_block_idx * BLOCK_N_SIZE
+    block_n_offs = block_n_start_idx + range_offs_n
+
     # We load the current block in K in SRAM
     # We do the first multiplication between the block in Q and the current block in K
     # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
-    if NEED_LOAD_MASK_SIZE_N:
-        load_mask = offs_n[:, None] < size_n
-        k = tl.load(ptrs_k + block_start_index_n * k_n_stride, mask=load_mask, eviction_policy="", other=0.0)
+    if N_LOAD_MASK_NEEDED:
+        k_ptr_mask = block_n_offs[:, None] < n_size
+        k = tl.load(ptrs_k + block_n_start_idx * k_n_stride, mask=k_ptr_mask, eviction_policy="", other=0.0)
     else:
-        k = tl.load(ptrs_k + block_start_index_n * k_n_stride, eviction_policy="")
+        k = tl.load(ptrs_k + block_n_start_idx * k_n_stride, eviction_policy="")
 
-    qk = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    qk = tl.zeros((BLOCK_M_SIZE, BLOCK_N_SIZE), dtype=tl.float32)
 
     # required to fix a Triton compiler bug, if not done, there is a precision issue
-    if NEED_LOAD_MASK_SIZE_N:
-        qk = tl.where(range_offs_n[None, :] < size_n, qk, float("-inf"))
+    if N_LOAD_MASK_NEEDED:
+        qk = tl.where(range_offs_n[None, :] < n_size, qk, float("-inf"))
     qk += tl.dot(q, k, trans_b=True)
     qk *= sm_scale
     if IS_CAUSAL:
-        qk += tl.where(offs_m[:, None] >= offs_n[None, :], 0, float("-inf"))
+        qk += tl.where(m_offs[:, None] >= block_n_offs[None, :], 0, float("-inf"))
 
     if HAS_MASK:
         # we assume mask has a vector shape
-        offs_mask = offs_base_mask + offs_n[None, :] * attention_mask_k_stride
+        attention_mask_offs = attention_mask_off + block_n_offs[None, :] * attention_mask_k_stride
         if MASK_M_SIZE != 1:  # mask has a square shape, we load (BLOCK_M, BLOCK_N) elements
-            offs_mask += offs_m[:, None] * attention_mask_m_stride
+            attention_mask_offs += m_offs[:, None] * attention_mask_m_stride
 
-        if NEED_LOAD_MASK_SIZE_N & MASK_M_SIZE == 1:  # mask has a vector shape need a load mask
-            attention_load_mask = offs_n[None, :] < size_n
+        if N_LOAD_MASK_NEEDED & MASK_M_SIZE == 1:  # mask has a vector shape need a load mask
+            attention_mask_ptr_mask = block_n_offs[None, :] < n_size
         if MASK_M_SIZE != 1:  # mask has a matrix shape
-            if NEED_LOAD_MASK_SIZE_M & (not NEED_LOAD_MASK_SIZE_N):  # load mask on M axis
-                attention_load_mask = offs_m[:, None] < size_m
-            elif (not NEED_LOAD_MASK_SIZE_M) & NEED_LOAD_MASK_SIZE_N:  # load mask on N axis
-                attention_load_mask = offs_n[None, :] < size_n
-            elif NEED_LOAD_MASK_SIZE_M & NEED_LOAD_MASK_SIZE_N:  # load mask on both axis
-                attention_load_mask = (offs_n[None, :] < size_n) & (offs_m[:, None] < size_m)
+            if M_LOAD_MASK_NEEDED & (not N_LOAD_MASK_NEEDED):  # load mask on M axis
+                attention_mask_ptr_mask = m_offs[:, None] < m_size
+            elif (not M_LOAD_MASK_NEEDED) & N_LOAD_MASK_NEEDED:  # load mask on N axis
+                attention_mask_ptr_mask = block_n_offs[None, :] < n_size
+            elif M_LOAD_MASK_NEEDED & N_LOAD_MASK_NEEDED:  # load mask on both axis
+                attention_mask_ptr_mask = (block_n_offs[None, :] < n_size) & (m_offs[:, None] < m_size)
 
-        if NEED_LOAD_MASK_SIZE_M | NEED_LOAD_MASK_SIZE_N:
-            m = tl.load(
-                attention_mask + offs_mask,
+        if M_LOAD_MASK_NEEDED | N_LOAD_MASK_NEEDED:
+            attention_mask = tl.load(
+                attention_mask_ptr + attention_mask_offs,
                 eviction_policy="",
-                mask=attention_load_mask,
+                mask=attention_mask_ptr_mask,
                 other=float("-inf"),
             )
         else:
-            m = tl.load(
-                attention_mask + offs_mask,
+            attention_mask = tl.load(
+                attention_mask_ptr + attention_mask_offs,
                 eviction_policy="",
             )
         # Avoids NaN
-        m = tl.where(m == float("-inf"), min_clamp_value, m)
-        qk += m
+        attention_mask = tl.where(attention_mask == float("-inf"), min_clamp_value, attention_mask)
+        qk += attention_mask
 
     l_j = tl.max(qk, 1)
     numerators = tl.exp(qk - l_j[:, None])
     d_j = tl.sum(numerators, 1)
 
-    offs_maximums = (
+    maximums_offs = (
         current_batch_idx * maximums_batch_stride
         + current_head_idx * maximums_head_stride
         + n_block_idx * maximums_step_stride
-        + offs_m * maximums_m_stride
+        + m_offs * maximums_m_stride
     )
-    maximums_ptrs = maximums + offs_maximums
-    tl.store(maximums_ptrs, l_j, mask=offs_m < size_m)
+    maximums_ptrs = maximums_ptr + maximums_offs
+    tl.store(maximums_ptrs, l_j, mask=m_offs < m_size)
 
-    offs_sums = (
+    sums_offs = (
         current_batch_idx * sums_batch_stride
         + current_head_idx * sums_head_stride
         + n_block_idx * sums_step_stride
-        + offs_m * sums_m_stride
+        + m_offs * sums_m_stride
     )
-    sums_ptrs = sums + offs_sums
-    tl.store(sums_ptrs, d_j, mask=offs_m < size_m)
+    sums_ptrs = sums_ptr + sums_offs
+    tl.store(sums_ptrs, d_j, mask=m_offs < m_size)
 
-    if NEED_LOAD_MASK_SIZE_N:
-        load_mask = offs_n[:, None] < size_n  # repeated otherwise triton segfault
-        v = tl.load(ptrs_v + block_start_index_n * v_k_stride, mask=load_mask, other=0.0, eviction_policy="evict_first")
+    if N_LOAD_MASK_NEEDED:
+        v_ptr_mask = block_n_offs[:, None] < n_size  # repeated otherwise triton segfault
+        v = tl.load(ptrs_v + block_n_start_idx * v_k_stride, mask=v_ptr_mask, other=0.0, eviction_policy="evict_first")
     else:
-        v = tl.load(ptrs_v + block_start_index_n * v_k_stride, eviction_policy="evict_first")
+        v = tl.load(ptrs_v + block_n_start_idx * v_k_stride, eviction_policy="evict_first")
 
-    result = tl.dot(numerators.to(Q.dtype.element_ty), v)
+    result = tl.dot(numerators.to(q_ptr.dtype.element_ty), v)
 
-    off_o = (
-        current_batch_idx * o_batch_stride
-        + current_head_idx * o_head_stride
-        + n_block_idx * o_step_stride
-        + (offs_m[:, None] * o_m_stride + range_offs_d[None, :] * o_n_stride)
+    output_offs = (
+            current_batch_idx * output_batch_stride
+            + current_head_idx * output_head_stride
+            + n_block_idx * output_step_stride
+            + (m_offs[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
     )
 
-    out_ptrs = output + off_o
+    output_ptrs = output_ptr + output_offs
 
-    if NEED_LOAD_MASK_SIZE_M:
-        out_store_mask = offs_m[:, None] < size_m
-        tl.store(out_ptrs, result, mask=out_store_mask)
+    if M_LOAD_MASK_NEEDED:
+        output_ptr_mask = m_offs[:, None] < m_size
+        tl.store(output_ptrs, result, mask=output_ptr_mask)
     else:
-        tl.store(out_ptrs, result)
+        tl.store(output_ptrs, result)
 
 
 @triton.jit
 def _fwd_part_2(
-    heads_count,
-    intermediates_count,
-    size_m,
-    inputs,
+    head_size,
+    intermediates_size,
+    m_size,
+    input_ptr,
     input_batch_stride,
     input_head_stride,
     input_intermediate_stride,
     input_m_stride,
     input_n_stride,
-    maximums,
+    maximums_ptr,
     maximums_batch_stride,
     maximums_head_stride,
     maximums_intermediate_stride,
     maximums_m_stride,
-    sums,
+    sums_ptr,
     sums_batch_stride,
     sums_head_stride,
     sums_intermediate_stride,
     sums_m_stride,
-    output,
+    output_ptr,
     output_batch_stride,
     output_head_stride,
     output_m_stride,
     output_n_stride,
-    BLOCK_M: tl.constexpr,
-    BLOCK_DHEAD: tl.constexpr,
+    BLOCK_M_SIZE: tl.constexpr,
+    BLOCK_DHEAD_SIZE: tl.constexpr,
 ):
-    m_block_idx = tl.program_id(0)
+    block_m_idx = tl.program_id(0)
     head_idx = tl.program_id(1)
-    current_batch_idx = head_idx // heads_count
-    current_head_idx = head_idx % heads_count
+    current_batch_idx = head_idx // head_size
+    current_head_idx = head_idx % head_size
 
-    range_offs_m = tl.arange(0, BLOCK_M)
-    range_offs_d = tl.arange(0, BLOCK_DHEAD)
+    m_range_offs = tl.arange(0, BLOCK_M_SIZE)
+    dhead_range_offs = tl.arange(0, BLOCK_DHEAD_SIZE)
 
-    offs_m = m_block_idx * BLOCK_M + range_offs_m
+    m_offs = block_m_idx * BLOCK_M_SIZE + m_range_offs
 
-    acc = tl.zeros((BLOCK_M, BLOCK_DHEAD), dtype=tl.float32)
-    l_i = tl.zeros((BLOCK_M,), dtype=tl.float32) - float("inf")
-    d_i = tl.zeros((BLOCK_M,), dtype=tl.float32)
-    for n_intermediate_idx in range(0, intermediates_count):
-        offs_inputs = (
+    acc = tl.zeros((BLOCK_M_SIZE, BLOCK_DHEAD_SIZE), dtype=tl.float32)
+    l_i = tl.zeros((BLOCK_M_SIZE,), dtype=tl.float32) - float("inf")
+    d_i = tl.zeros((BLOCK_M_SIZE,), dtype=tl.float32)
+    for n_intermediate_idx in range(0, intermediates_size):
+        input_offs = (
             current_batch_idx * input_batch_stride
             + current_head_idx * input_head_stride
             + n_intermediate_idx * input_intermediate_stride
-            + (offs_m[:, None] * input_m_stride + range_offs_d[None, :] * input_n_stride)
+            + (m_offs[:, None] * input_m_stride + dhead_range_offs[None, :] * input_n_stride)
         )
-        ptrs_inputs = inputs + offs_inputs
-        numerators = tl.load(ptrs_inputs, mask=offs_m[:, None] < size_m, other=0.0)
+        input_ptrs = input_ptr + input_offs
+        numerators = tl.load(input_ptrs, mask=m_offs[:, None] < m_size, other=0.0)
 
-        offs_sums = (
+        sums_offs = (
             current_batch_idx * sums_batch_stride
             + current_head_idx * sums_head_stride
             + n_intermediate_idx * sums_intermediate_stride
-            + offs_m * sums_m_stride
+            + m_offs * sums_m_stride
         )
-        ptrs_sums = sums + offs_sums
-        d_j = tl.load(ptrs_sums, mask=offs_m < size_m, other=0.0)
+        sums_ptrs = sums_ptr + sums_offs
+        d_j = tl.load(sums_ptrs, mask=m_offs < m_size, other=0.0)
 
-        offs_maximums = (
+        maximums_offs = (
             current_batch_idx * maximums_batch_stride
             + current_head_idx * maximums_head_stride
             + n_intermediate_idx * maximums_intermediate_stride
-            + offs_m * maximums_m_stride
+            + m_offs * maximums_m_stride
         )
-        ptrs_maximums = maximums + offs_maximums
-        l_j = tl.load(ptrs_maximums, mask=offs_m < size_m, other=0.0)
+        maximums_ptrs = maximums_ptr + maximums_offs
+        l_j = tl.load(maximums_ptrs, mask=m_offs < m_size, other=0.0)
 
         l_new = tl.maximum(l_i, l_j)
         alpha = tl.exp(l_i - l_new)
@@ -353,13 +354,13 @@ def _fwd_part_2(
         d_i = d_new
         l_i = l_new
 
-    offs_output = (
+    output_offs = (
         current_batch_idx * output_batch_stride
         + current_head_idx * output_head_stride
-        + (offs_m[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
+        + (m_offs[:, None] * output_m_stride + dhead_range_offs[None, :] * output_n_stride)
     )
-    ptrs_output = output + offs_output
-    tl.store(ptrs_output, acc, mask=offs_m[:, None] < size_m)
+    output_ptrs = output_ptr + output_offs
+    tl.store(output_ptrs, acc, mask=m_offs[:, None] < m_size)
 
 
 class SkinnyAttention(torch.autograd.Function):
@@ -452,17 +453,17 @@ class SkinnyAttention(torch.autograd.Function):
             HAS_MASK = True
 
         _fwd_part_1[grid](
-            heads=heads,
-            size_m=size_m,
-            size_n=size_n,
-            Q=q,
-            K=k,
-            V=v,
+            head_size=heads,
+            m_size=size_m,
+            n_size=size_n,
+            q_ptr=q,
+            k_ptr=k,
+            v_ptr=v,
             sm_scale=sm_scale,
-            attention_mask=attention_mask,
-            output=splitted_qkt,
-            maximums=maximums,
-            sums=sums,
+            attention_mask_ptr=attention_mask,
+            output_ptr=splitted_qkt,
+            maximums_ptr=maximums,
+            sums_ptr=sums,
             q_batch_stride=q.stride(0),
             q_head_stride=q.stride(1),
             q_m_stride=q.stride(2),
@@ -483,17 +484,17 @@ class SkinnyAttention(torch.autograd.Function):
             maximums_head_stride=maximums.stride(1),
             maximums_step_stride=maximums.stride(2),
             maximums_m_stride=maximums.stride(3),
-            o_batch_stride=splitted_qkt.stride(0),
-            o_head_stride=splitted_qkt.stride(1),
-            o_step_stride=splitted_qkt.stride(2),
-            o_m_stride=splitted_qkt.stride(3),
-            o_n_stride=splitted_qkt.stride(4),
+            output_batch_stride=splitted_qkt.stride(0),
+            output_head_stride=splitted_qkt.stride(1),
+            output_step_stride=splitted_qkt.stride(2),
+            output_m_stride=splitted_qkt.stride(3),
+            output_n_stride=splitted_qkt.stride(4),
             attention_mask_batch_stride=attention_mask.stride(0) if HAS_MASK else 0,
             attention_mask_head_stride=attention_mask.stride(1) if HAS_MASK else 0,
             attention_mask_m_stride=attention_mask.stride(2) if HAS_MASK else 0,
             attention_mask_k_stride=attention_mask.stride(3) if HAS_MASK else 0,
-            NEED_LOAD_MASK_SIZE_N=NEED_LOAD_MASK_SIZE_N,
-            NEED_LOAD_MASK_SIZE_M=NEED_LOAD_MASK_SIZE_M,
+            N_LOAD_MASK_NEEDED=NEED_LOAD_MASK_SIZE_N,
+            M_LOAD_MASK_NEEDED=NEED_LOAD_MASK_SIZE_M,
             min_clamp_value=torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,
             MASK_BATCH_SIZE=attention_mask.size(0) if HAS_MASK else 0,
             MASK_HEAD_SIZE=attention_mask.size(1) if HAS_MASK else 0,
@@ -501,9 +502,9 @@ class SkinnyAttention(torch.autograd.Function):
             MASK_K_SIZE=attention_mask.size(3) if HAS_MASK else 0,
             HAS_MASK=HAS_MASK,
             IS_CAUSAL=is_causal,
-            BLOCK_M=BLOCK_M,
-            BLOCK_N=BLOCK_N,
-            BLOCK_DHEAD=dhead,
+            BLOCK_M_SIZE=BLOCK_M,
+            BLOCK_N_SIZE=BLOCK_N,
+            BLOCK_DHEAD_SIZE=dhead,
             num_warps=1,
             num_stages=8,
         )
@@ -524,8 +525,8 @@ class SkinnyAttention(torch.autograd.Function):
             *sums.stride(),
             output,
             *output.stride(),
-            BLOCK_M=BLOCK_M,
-            BLOCK_DHEAD=dhead,
+            BLOCK_M_SIZE=BLOCK_M,
+            BLOCK_DHEAD_SIZE=dhead,
             num_warps=4,
             num_stages=1,
         )
