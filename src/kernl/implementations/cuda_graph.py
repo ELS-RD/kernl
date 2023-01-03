@@ -22,7 +22,7 @@ from torch._inductor.utils import dynamo_utils
 from torch._subclasses import FakeTensor
 
 
-static_inputs_pool: dict[str, deque[torch.Tensor]] = defaultdict(deque)
+static_inputs_pool: dict[(int, torch.dtype), deque[torch.Tensor]] = defaultdict(deque)
 
 
 def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
@@ -33,15 +33,15 @@ def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
     @param model_inputs: list of inputs
     @return: list of inputs to be used in CUDA graphs
     """
-    local_static_inputs: dict[str, deque[torch.Tensor]] = defaultdict(deque)
+    static_inputs_clone: dict[(int, torch.dtype), deque[torch.Tensor]] = defaultdict(deque)
     for k, v in static_inputs_pool.items():
-        local_static_inputs[k] = v.copy()
-    cuda_graph_input = list()
+        static_inputs_clone[k] = v.copy()
+    cuda_graph_input: list[torch.Tensor] = list()
     for index, original_tensor in enumerate(model_inputs):
         storage_size = triton.next_power_of_2(len(original_tensor._storage()))
-        key = f"{storage_size}_{original_tensor.dtype}"
-        if len(local_static_inputs[key]) > 0:
-            static_tensor = local_static_inputs[key].popleft()
+        key = (storage_size, original_tensor.dtype)
+        if len(static_inputs_clone[key]) > 0:
+            static_tensor = static_inputs_clone[key].popleft()
         else:
             static_tensor = torch.empty((storage_size,), dtype=original_tensor.dtype, device=original_tensor.device)
             static_inputs_pool[key].append(static_tensor)

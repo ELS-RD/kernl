@@ -18,7 +18,7 @@ import torch
 import torch._dynamo as torchdynamo
 from transformers import PreTrainedModel
 
-from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+from kernl.implementations.cuda_graph import cuda_graphs_wrapper, static_inputs_pool
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
@@ -56,6 +56,7 @@ def optimize_model(original_model: PreTrainedModel) -> None:
     if major < 8:
         raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to use Kernl")
     assert next(original_model.parameters()).device.type == "cuda", "Model must be on GPU"
+    static_inputs_pool.clear()
     original_model.forward_original = original_model.forward
 
     @torchdynamo.optimize(_compiler)

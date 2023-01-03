@@ -22,6 +22,7 @@ import torch._dynamo as dynamo
 
 from kernl.benchmark.benchmark_fixture import BenchmarkFixture
 from kernl.benchmark.benchmark_session import BenchmarkSession
+from kernl.implementations.cuda_graph import static_inputs_pool
 
 
 @contextmanager
@@ -35,6 +36,7 @@ def set_seed(seed: int = 0):
 def setup_dynamo():
     cache_limit = dynamo.config.cache_size_limit
     dynamo.config.cache_size_limit = 512
+    static_inputs_pool.clear()
     dynamo.reset()
     yield
     dynamo.config.cache_size_limit = cache_limit
