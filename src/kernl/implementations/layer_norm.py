@@ -56,19 +56,18 @@ def pytorch_naive_rmsnorm(a: torch.Tensor, weight: torch.Tensor, eps: float):
 
     return weight * a
 
-
 @triton.jit
 def layer_norm_xformers(
-    Out,
-    A,
-    Weight,
-    Bias,
-    Mean,
-    Rstd,
-    stride_row_out,
-    stride_col_out,
-    stride_row_a,
-    stride_col_a,
+    output_ptr,
+    a_ptr,
+    weight_ptr,
+    bias_ptr,
+    mean_ptr,
+    rstd_ptr,
+    output_row_stride,
+    output_col_stride,
+    a_row_stride,
+    a_col_stride,
     N,
     eps,
     HAS_BIAS: tl.constexpr,  # not used, just to make the signature similar to single pass
@@ -88,41 +87,41 @@ def layer_norm_xformers(
     cols = tl.arange(0, BLOCK_SIZE)
     mask = cols < N
 
-    x_ptrs = A + row * stride_row_a + cols * stride_col_a
+    x_ptrs = a_ptr + row * a_row_stride + cols * a_col_stride
 
     x = tl.load(x_ptrs, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
-    w = tl.load(Weight + cols, mask=mask, other=1.0)
-    b = tl.load(Bias + cols, mask=mask, other=0.0)
+    w = tl.load(weight_ptr + cols, mask=mask, other=1.0)
+    b = tl.load(bias_ptr + cols, mask=mask, other=0.0)
 
     # Compute mean and variance
     mean = tl.sum(x, axis=0) / N
     x_zm = tl.where(mask, x - mean, 0.0)
-    tl.store(Mean + row, mean)
+    tl.store(mean_ptr + row, mean)
 
     x_var = tl.sum(x_zm * x_zm, axis=0) / N
     rstd = 1.0 / tl.sqrt(x_var + eps)
 
     # Normalize
     y = x_zm * rstd
-    tl.store(Rstd + row, rstd)
+    tl.store(rstd_ptr + row, rstd)
 
     y = y * w + b
-    y_ptrs = Out + row * stride_row_out + cols * stride_col_out
+    y_ptrs = output_ptr + row * output_row_stride + cols * output_col_stride
     tl.store(y_ptrs, y, mask=mask)
 
 
 @triton.jit
 def _layer_norm_fwd_fused_single_pass(
-    Out,
-    A,
-    Weight,
-    Bias,
-    Mean,
-    Rstd,
-    stride_row_out,
-    stride_col_out,
-    stride_row_a,
-    stride_col_a,
+    output_ptr,
+    a_ptr,
+    weight_ptr,
+    bias_ptr,
+    mean_ptr,
+    rstd_ptr,
+    output_row_stride,
+    output_col_stride,
+    a_row_stride,
+    a_col_stride,
     N,
     eps,
     HAS_BIAS: tl.constexpr,
@@ -134,13 +133,13 @@ def _layer_norm_fwd_fused_single_pass(
     https://changyaochen.github.io/welford/
     https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 
-    :param Out: output tensor
-    :param A: input tensor
-    :param Weight: weights applied to the normalized input
-    :param Bias: bias added to the normalized input
-    :param Mean: save mean tensor for backward
-    :param Rstd: save standard deviation tensor for backward
-    :param stride_row_a: stride of the input tensor
+    :param output_ptr: output tensor
+    :param a_ptr: input tensor
+    :param weight_ptr: weights applied to the normalized input
+    :param bias_ptr: bias added to the normalized input
+    :param mean_ptr: save mean tensor for backward
+    :param rstd_ptr: save standard deviation tensor for backward
+    :param a_row_stride: stride of the input tensor
     :param N: number of elements per row in the input tensor
     :param eps: epsilon value to avoid division by zero
     :param HAS_BIAS: whether the bias is provided
@@ -149,73 +148,73 @@ def _layer_norm_fwd_fused_single_pass(
     :return: None
     """
     # position of elements processed by this program
-    _idx = tl.program_id(0)
-    a_ptr = A + _idx * stride_row_a
-    out_ptr = Out + _idx * stride_row_out
+    row_idx = tl.program_id(0)
+
+    a_row_off = row_idx * a_row_stride
+    block_range_offs = tl.arange(0, BLOCK_SIZE)
     # compute mean
     mean = 0.0
     var = 0.0
-    for start_n_offset in range(0, N, BLOCK_SIZE):
-        end_n_offset = min((start_n_offset + BLOCK_SIZE), N)
-        nb_block_cols = end_n_offset - start_n_offset
-        column_offset = start_n_offset + tl.arange(0, BLOCK_SIZE)
-        mask = column_offset < N
+    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+        n_end_off = min((block_n_start_idx + BLOCK_SIZE), N)
+        block_cols_count = n_end_off - block_n_start_idx
+        col_offs = block_n_start_idx + block_range_offs
+        a_ptr_mask = col_offs < N
         # eviction policy below have little impact now because of new implementation. Kept as is.
         # float32 is used to avoid overflow because of the square operation
-        a = tl.load(a_ptr + column_offset * stride_col_a, mask=mask, other=0.0, eviction_policy="evict_last").to(
+        a = tl.load(a_ptr + a_row_off + col_offs * a_col_stride, mask=a_ptr_mask, other=0.0, eviction_policy="evict_last").to(
             tl.float32
         )
         if IS_RMSNORM:
             var += tl.sum(a * a, axis=0)
         else:
-            block_mean = tl.sum(a, axis=0) / nb_block_cols
+            block_mean = tl.sum(a, axis=0) / block_cols_count
             # mean is 0 or has a mask applied to it, no need to mask delta_mean!
             delta_mean = block_mean - mean
             delta_mean_sqr = delta_mean * delta_mean
 
             block_delta = tl.sum((a - block_mean) * a, axis=0)
             # mean has a mask
-            mean += tl.sum((a - mean) * mask, axis=0) / end_n_offset
-            var += block_delta + delta_mean_sqr * (start_n_offset * nb_block_cols) / end_n_offset
+            mean += tl.sum((a - mean) * a_ptr_mask, axis=0) / n_end_off
+            var += block_delta + delta_mean_sqr * (block_n_start_idx * block_cols_count) / n_end_off
 
     var /= N
     rstd = 1 / tl.sqrt(var + eps)
 
     # write-back mean/rstd for backward pass
-    tl.store(Mean + _idx, mean)
-    tl.store(Rstd + _idx, rstd)
+    tl.store(mean_ptr + row_idx, mean)
+    tl.store(rstd_ptr + row_idx, rstd)
 
     # multiply by weight and add bias
-    for off in range(0, N, BLOCK_SIZE):
-        column_offset = off + tl.arange(0, BLOCK_SIZE)
-        mask = column_offset < N
-        weight = tl.load(Weight + column_offset, mask=mask)
+    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+        col_offs = block_n_start_idx + block_range_offs
+        a_ptr_mask = col_offs < N
+        weight = tl.load(weight_ptr + col_offs, mask=a_ptr_mask)
 
         # eviction policy helps to keep weights in cache (reused by other threads)
-        a = tl.load(a_ptr + column_offset * stride_col_a, mask=mask, other=0.0, eviction_policy="evict_first").to(
+        a = tl.load(a_ptr + a_row_off + col_offs * a_col_stride, mask=a_ptr_mask, other=0.0, eviction_policy="evict_first").to(
             tl.float32
         )
         a_hat = (a - mean) * rstd
         out = a_hat * weight
         if HAS_BIAS:
-            bias = tl.load(Bias + column_offset, mask=mask)
+            bias = tl.load(bias_ptr + col_offs, mask=a_ptr_mask)
             out = out + bias
         # write-back
-        tl.store(out_ptr + column_offset * stride_col_out, out, mask=mask)
-
+        tl.store(output_ptr + row_idx * output_row_stride + col_offs * output_col_stride, out, mask=a_ptr_mask)
 
 @triton.jit
 def _layer_norm_fwd_fused_multi_pass(
-    Out,
-    A,
-    Weight,
-    Bias,
-    Mean,
-    Rstd,
-    stride_row_out,
-    stride_col_out,
-    stride_row_a,
-    stride_col_a,
+    output_ptr,
+    a_ptr,
+    weight_ptr,
+    bias_ptr,
+    mean_ptr,
+    rstd_ptr,
+    output_row_stride,
+    output_col_stride,
+    a_row_stride,
+    a_col_stride,
     N,
     eps,
     IS_RMSNORM: tl.constexpr,  # not used, just to have the same signature than the single pass
@@ -229,40 +228,44 @@ def _layer_norm_fwd_fused_multi_pass(
     -> only used in benchmarks
     """
     # position of elements processed by this program
-    row = tl.program_id(0)
-    Out += row * stride_row_out
-    A += row * stride_row_a
+    row_idx = tl.program_id(0)
+    row_off = row_idx * a_row_stride
+    block_range_offs = tl.arange(0, BLOCK_SIZE)
+
     # compute mean
-    mean = 0
-    _mean = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
-    for off in range(0, N, BLOCK_SIZE):
-        cols = off + tl.arange(0, BLOCK_SIZE)
-        a = tl.load(A + cols * stride_col_a, mask=cols < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
-        _mean += a
-    mean = tl.sum(_mean, axis=0) / N
+    mean_acc = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
+    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+        cols_offs = block_n_start_idx + block_range_offs
+        a = tl.load(a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
+        mean_acc += a
+    mean = tl.sum(mean_acc, axis=0) / N
+
     # compute variance
-    _var = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
-    for off in range(0, N, BLOCK_SIZE):
-        cols = off + tl.arange(0, BLOCK_SIZE)
-        a = tl.load(A + cols * stride_col_a, mask=cols < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
-        a = tl.where(cols < N, a - mean, 0.0)
-        _var += a * a
-    var = tl.sum(_var, axis=0) / N
+    var_acc = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
+    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+        cols_offs = block_n_start_idx + block_range_offs
+        a = tl.load(a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last").to(tl.float32)
+        a = tl.where(cols_offs < N, a - mean, 0.0)
+        var_acc += a * a
+    var = tl.sum(var_acc, axis=0) / N
+
     rstd = 1 / tl.sqrt(var + eps)
+
     # write-back mean/rstd
-    tl.store(Mean + row, mean)
-    tl.store(Rstd + row, rstd)
+    tl.store(mean_ptr + row_idx, mean)
+    tl.store(rstd_ptr + row_idx, rstd)
+
     # multiply by weight and add bias
-    for off in range(0, N, BLOCK_SIZE):
-        cols = off + tl.arange(0, BLOCK_SIZE)
-        mask = cols < N
-        weight = tl.load(Weight + cols, mask=mask)
-        bias = tl.load(Bias + cols, mask=mask)
-        a = tl.load(A + cols * stride_col_a, mask=mask, other=0.0, eviction_policy="evict_first").to(tl.float32)
+    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+        cols_offs = block_n_start_idx + tl.arange(0, BLOCK_SIZE)
+        mask_ptr = cols_offs < N
+        weight = tl.load(weight_ptr + cols_offs, mask=mask_ptr)
+        bias = tl.load(bias_ptr + cols_offs, mask=mask_ptr)
+        a = tl.load(a_ptr + row_off + cols_offs * a_col_stride, mask=mask_ptr, other=0.0, eviction_policy="evict_first").to(tl.float32)
         a_hat = (a - mean) * rstd
-        out = a_hat * weight + bias
+        output = a_hat * weight + bias
         # write-back
-        tl.store(Out + cols * stride_col_out, out, mask=mask)
+        tl.store(output_ptr + row_idx * output_row_stride + cols_offs * output_col_stride, output, mask=mask_ptr)
 
 
 class LayerNorm(torch.autograd.Function):
@@ -301,16 +304,16 @@ class LayerNorm(torch.autograd.Function):
         # heuristics for number of warps
         num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
         implementation[(M,)](
-            Out=out,
-            A=a_arg,
-            Weight=weight,
-            Bias=bias if bias is not None else a_arg,
-            Mean=mean,
-            Rstd=std,
-            stride_row_out=out.stride(-2),
-            stride_col_out=out.stride(-1),
-            stride_row_a=a_arg.stride(0),
-            stride_col_a=a_arg.stride(1),
+            output_ptr=out,
+            a_ptr=a_arg,
+            weight_ptr=weight,
+            bias_ptr=bias if bias is not None else a_arg,
+            mean_ptr=mean,
+            rstd_ptr=std,
+            output_row_stride=out.stride(-2),
+            output_col_stride=out.stride(-1),
+            a_row_stride=a_arg.stride(0),
+            a_col_stride=a_arg.stride(1),
             N=N,
             eps=eps,
             HAS_BIAS=bias is not None,
