@@ -9,6 +9,12 @@ body:
       value: |
         Thank you for your help in improving kernl by reporting bugs.
         
+        Before you create your issue.
+        
+          - Check that the bug is not already the subject of an existing issue. 
+          - Make sure it is reproducible.
+          - Make sure you have enough material to fuel the search and resolution.
+        
         Please fill out the form below to help us better understand the problem.
   - type: textarea
     attributes:
