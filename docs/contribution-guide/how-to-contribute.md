@@ -25,10 +25,18 @@ Commit messages must respect the **[Conventional commit](https://www.conventiona
 ### Ask a question / share your ideas or new features
 
 If you have a question, an idea for a new feature, or an optimization, you can use the dedicated **[discussion forum](todo)**.
-<br>
-**<span style="color:#fff; background:#ff0000">@team: what about creating a dedicated discussion forum?</span>**
-<br>
-**<span style="color:#fff; background:#ff0000">@todo: and add the link</span>**
+
+**<span style="color:#fff; background:#ff0000">@team: to be validated:</span>**
+```markdown
+@team:  what about creating a dedicated discussion forum?
+        like Remix: https://github.com/remix-run/remix/discussions or Vite for example
+            Proposed categories:
+            - General (That's what we communicate)
+            - Ideas (open to ideas in general)
+            - Q&A
+            - Feature discussion (dedicated to features)
+        @todo:  If you agree, create the discussion forum and add the link above.
+```
 
 ### Issues
 
@@ -37,7 +45,7 @@ If you have a question, an idea for a new feature, or an optimization, you can u
 If you think you've found a bug but don't have the time to send a PR, please:
 
 - First, make sure the bug has not already been reported in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
-- If you don't find a similar issue, **[open a new one](https://github.com/ELS-RD/kernl/issues)**.
+- If you don't find a similar issue, **[open a new one](todo)**.
 
 **Bug reports without a reproduction will be immediately closed.**
 
@@ -48,9 +56,13 @@ If you think you've found a bug but don't have the time to send a PR, please:
     - [x] Add appropriate labels to indicate the type of problem (e.g., "bug", "performance problem").
 
 <br>
-**<span style="color:#fff; background:#009900">team: see bug report template > .github/ISSUE_TEMPLATE/bug-report.yml</span>**
+**<span style="color:#fff; background:#009900">@team: see bug report template ></span>** [.github/ISSUE_TEMPLATE/bug-report.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug-report.yml)
 
 #### Feature requests
+
+If you would like to request a **new feature** or **an enhancement**, 
+but are not planning to open a Pull Request, you can **[open a dedicated issue](todo)**.
+You can also use the **[discussion forum](todo)** for feature requests that you would like to discuss.
 
 #### Proposals
 
