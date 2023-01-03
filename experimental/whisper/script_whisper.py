@@ -28,41 +28,11 @@ WhisperForConditionalGeneration._reorder_cache = fix_reorder_cache
 
 model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").to("cuda").eval()
 
-
-# model.model.encoder.forward2 = model.model.encoder.forward
-# model.model.decoder.forward2 = model.model.decoder.forward
-#
-# decoder_times = []
-#
-# def wrapper_encoder_timer(*args, **kwargs):
-#     torch.cuda.synchronize()
-#     start = time.time()
-#     o = model.model.encoder.forward2(*args, **kwargs)
-#     torch.cuda.synchronize()
-#     end = time.time()
-#     print("encoder time: ", end - start)
-#     decoder_times.clear()
-#     return o
-#
-#
-# def wrapper_decoder_timer(*args, **kwargs):
-#     torch.cuda.synchronize()
-#     start = time.time()
-#     o = model.model.decoder.forward2(*args, **kwargs)
-#     torch.cuda.synchronize()
-#     end = time.time()
-#     decoder_times.append(end - start)
-#     print("decoder time: ", sum(decoder_times))
-#     return o
-
-# model.model.encoder.forward = wrapper_encoder_timer
-# model.model.decoder.forward = wrapper_decoder_timer
-
-model.model.decoder.forward2 = model.model.decoder.forward
+model.model.decoder.forward_before = model.model.decoder.forward
 
 
-def wrapper(*args, **kwargs):
-    o = model.model.decoder.forward2(*args, **kwargs)
+def wrapper_stride(*args, **kwargs):
+    o = model.model.decoder.forward_before(*args, **kwargs)
     past_key_values = list(o.past_key_values)
     for idx in range(len(past_key_values)):
         layer = past_key_values[idx]
@@ -70,21 +40,13 @@ def wrapper(*args, **kwargs):
         if v.stride(2) != 1:
             v_col_major = v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2)
             past_key_values[idx] = layer[:-1] + (v_col_major,)
+
     o.past_key_values = tuple(past_key_values)
+
     return o
 
 
-model.model.decoder.forward = wrapper
-
-
-# def optimize_model(original_model) -> None:
-#     original_model.forward2 = original_model.forward
-#
-#     @torchdynamo.optimize("eager")
-#     def run(*args, **kwargs):
-#         return original_model.forward2(*args, **kwargs)
-#
-#     original_model.forward = run
+model.model.decoder.forward = wrapper_stride
 
 
 optimize_model(model.model.decoder)
