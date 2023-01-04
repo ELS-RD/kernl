@@ -70,6 +70,9 @@ class debugger_constexpr:
         else:
             self.value = value
 
+    def __str__(self) -> str:
+        return "debugger_constexpr(" + str(self.value) + ")"
+
     def __index__(self) -> int:
         return self.value
 
@@ -127,8 +130,10 @@ class debugger_constexpr:
 class WrappedTensor:
     def __init__(self, tensor):
         self.tensor = tensor
+
     def __index__(self) -> int:
         return self.tensor.item()
+
     def __str__(self) -> str:
         return "wrapped_" + str(self.tensor)
 
@@ -307,10 +312,12 @@ class WrappedTensor:
         #     return semantic.bitcast(self, dtype, )
         # return semantic.cast(self, dtype, )
 
+
 def _constexpr_to_value(v):
     if isinstance(v, debugger_constexpr):
         return v.value
     return v
+
 
 class TritonLangProxy:
     _memory_map: MemoryMap
@@ -332,6 +339,7 @@ class TritonLangProxy:
     float32 = torch.float32
     float64 = torch.float64
     float16 = torch.float16
+
     # constexpr = debugger_constexpr
 
     # Program functions

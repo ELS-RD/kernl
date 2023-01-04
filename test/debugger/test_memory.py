@@ -1,5 +1,3 @@
-import dataclasses
-
 import pytest
 import torch
 

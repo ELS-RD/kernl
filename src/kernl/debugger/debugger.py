@@ -7,11 +7,8 @@ import triton.language as tl
 
 from kernl.debugger.core import ExecutionContext
 from kernl.debugger.memory_map import MemoryMap
-from kernl.debugger.tl_lang import TritonLangProxy, WrappedTensor
+from kernl.debugger.tl_lang import TritonLangProxy, WrappedTensor, _primitive_to_tensor, debugger_constexpr
 
-from kernl.debugger.tl_lang import _primitive_to_tensor
-
-from kernl.debugger.tl_lang import debugger_constexpr
 
 tl_method_backup = {}
 
@@ -88,7 +85,7 @@ class DebuggerFunction:
             return WrappedTensor(_primitive_to_tensor(arg))
 
         new_args = tuple(map(convert_arg, zip(self.func.__code__.co_varnames, args)))
-        new_kwargs = {k: convert_arg((k, v)) for (k, v) in kwargs.items()}
+        new_kwargs = {k: convert_arg((k, v)) for (k, v) in kwargs.items() if k not in ["num_warps"]}
 
         grid = self._get_grid(**kwargs)
         for program_id in program_ids_from_grid(grid):
@@ -135,6 +132,7 @@ class AutotuneRunner:
         assert len(self.autotune_params["configs"]) >= 1
 
         for config in self.autotune_params["configs"][1:]:
+
             def convert_arg(v):
                 if torch.is_tensor(v):
                     return torch.clone(v)
