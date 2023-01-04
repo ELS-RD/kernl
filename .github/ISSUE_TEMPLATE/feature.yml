@@ -1,5 +1,6 @@
 name: 💅 Feature
 description: Submit a detailed feature request with a concrete proposal.
+title: "feature: "
 labels: [feature, "status: needs triage"]
 body:
   - type: markdown
