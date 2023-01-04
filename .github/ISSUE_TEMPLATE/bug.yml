@@ -16,12 +16,14 @@ body:
           - Make sure you have enough material to fuel the search and resolution.
         
         Please fill out the form below to help us better understand the problem.
+
   - type: textarea
     attributes:
       label: Description
       description: A clear and concise description of what the bug is.
     validations:
       required: true
+
   - type: textarea
     attributes:
       label: Steps to reproduce
@@ -32,6 +34,7 @@ body:
         3. Step 3...
     validations:
       required: true
+
   - type: textarea
     attributes:
       label: Expected Behavior
@@ -39,12 +42,14 @@ body:
       placeholder: Write what you thought would happen.
     validations:
       required: true
+
   - type: textarea
     attributes:
       label: Actual Behavior
       description: A concise description of what you're experiencing.
     validations:
       required: true
+
   - type: textarea
     attributes:
       label: Your environment
@@ -56,6 +61,7 @@ body:
         - etc.
     validations:
       required: true
+
   - type: checkboxes
     id: terms
     attributes:
