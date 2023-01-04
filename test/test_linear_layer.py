@@ -24,11 +24,6 @@ from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.implementations.linear_layer import linear_layer
 
 
-@pytest.fixture
-def cuda_graphs_pool() -> (int, int):
-    return torch.cuda.graph_pool_handle()
-
-
 def get_pytorch_activation(activation: str) -> Callable:
     if activation == "gelu":
         return torch.nn.functional.gelu
@@ -71,7 +66,6 @@ def test_benchmark(
     bias: bool,
     activation: str,
     contiguous: bool,
-    cuda_graphs_pool: (int, int),
 ):
     batch, M, N, K = shape
 
@@ -96,9 +90,9 @@ def test_benchmark(
 
     fn = implementations[implementation](layer_weight, layer_bias, activation)
     if cuda_graphs:
-        run = cuda_graphs_wrapper(model=fn, inputs=[x], pool=cuda_graphs_pool)
+        run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
-        fn = lambda tensor: run(tensor)[0]  # noqa: E731
+        fn = lambda tensor: run([tensor])[0]  # noqa: E731
 
     value = benchmark(fn, x)
 

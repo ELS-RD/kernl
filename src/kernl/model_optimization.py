@@ -22,32 +22,34 @@ from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
-# single shared pool by default
-_pool: (int, int) = torch.cuda.graph_pool_handle()
-
-
 # needs to be generated once to be reused several times, like encoder/decoder models
 # https://github.com/pytorch/torchdynamo/issues/1816
 def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
     dynamo_backend_ofi(gm)
-    return cuda_graphs_wrapper(gm, example_inputs, pool=_pool)
+    return cuda_graphs_wrapper(gm, example_inputs)
 
 
 def optimize_model(original_model: PreTrainedModel) -> None:
-    """
-    Optimizes a given model by replacing forward method by a call to optimized code.
+    """Optimizes a given model by replacing forward method by a call to optimized code.
     It is done in two steps:
+
     *  first step is to convert the given model to fx graph.
     *  second step is to replace patterns found in the graph by fast to run kernels.
 
-    Example:
-    model = AutoModel.from_pretrained(...).eval().cuda()
+    Examples:
 
-    optimize_model(model)
-    inputs = ...
-    model(**inputs)
+        ``` { .py }
+        import tensorflow as tf
 
-    @param original_model: model to optimize
+        model = AutoModel.from_pretrained(...).eval().cuda()
+
+        optimize_model(model)
+        inputs = ...
+        model(**inputs)
+        ```
+
+    Args:
+        original_model: model to optimize
     """
     assert torch.cuda.is_available(), "CUDA capacity is required to use Kernl"
     major, _ = torch.cuda.get_device_capability()
