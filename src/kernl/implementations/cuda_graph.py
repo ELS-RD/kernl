@@ -38,7 +38,7 @@ def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
         static_inputs_clone[k] = v.copy()
     cuda_graph_input: list[torch.Tensor] = list()
     for index, original_tensor in enumerate(model_inputs):
-        storage_size = triton.next_power_of_2(len(original_tensor._storage()))
+        storage_size = triton.next_power_of_2(len(original_tensor.untyped_storage()))
         key = (storage_size, original_tensor.dtype)
         if len(static_inputs_clone[key]) > 0:
             static_tensor = static_inputs_clone[key].popleft()
