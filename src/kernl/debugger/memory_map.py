@@ -6,6 +6,7 @@ import torch
 @dataclasses.dataclass
 class RegisteredStorage:
     storage: torch.Storage
+    dtype: torch.dtype
     size: int
     ptr: int
 
@@ -15,7 +16,7 @@ class RegisteredStorage:
 
     @property
     def access_tensor(self) -> torch.Tensor:
-        return torch.tensor(self.storage, dtype=self.storage.dtype, device=self.storage.device)
+        return torch.tensor(self.storage, dtype=self.dtype, device=self.storage.device)
 
     def ensure_immutable(self):
         assert self.storage.data_ptr() == self.ptr and self.storage.size() == self.size
@@ -43,8 +44,8 @@ class MemoryMap:
         return registered_storage
 
     def add_tensor(self, t: torch.Tensor):
-        storage = t.storage()
-        self.storages.append(RegisteredStorage(storage, storage.size(), storage.data_ptr()))
+        storage = t._storage()
+        self.storages.append(RegisteredStorage(storage, t.dtype, storage.size(), storage.data_ptr()))
         return t.data_ptr()
 
     def load(
