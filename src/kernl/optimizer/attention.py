@@ -35,10 +35,10 @@ def attention_wrapper(
 
     extend_head = q.dim() == 3
     if extend_head:
-        q = q.view(q.size(0), 1, q.size(-2), q.size(-1))
-        k = k.view(k.size(0), 1, k.size(-2), k.size(-1))
-        v = v.view(v.size(0), 1, v.size(-2), v.size(-1))
-        output = output.view(output.size(0), 1, output.size(-2), output.size(-1))
+        q.unsqueeze_(dim=1)
+        k.unsqueeze_(dim=1)
+        v.unsqueeze_(dim=1)
+        output.unsqueeze_(dim=1)
 
     # When there is a large difference between those dimensions, our kernel become inefficient
     # (almost no parallelization), so we use pytorch instead
@@ -51,7 +51,7 @@ def attention_wrapper(
         attention_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
 
     if extend_head:
-        return output.view(q.size(0), q.size(-2), q.size(-1))
+        output.squeeze_(dim=1)
     return output
 
 
