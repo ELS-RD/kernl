@@ -171,7 +171,7 @@ def test_load_partial_vect(config):
     ptr = memory.add_tensor(t)
 
     index_to_load = start_index + torch.arange(size, device="cuda")
-    assert torch.equal(memory.load(ptr + index_to_load), t[start_index : start_index + size])
+    assert torch.equal(memory.load(ptr + index_to_load), t[start_index: start_index + size])
 
 
 @pytest.mark.parametrize("torch_type", [torch.float16, torch.float32, torch.int8, torch.int32])

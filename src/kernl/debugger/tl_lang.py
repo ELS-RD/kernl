@@ -1,5 +1,3 @@
-import traceback
-
 import torch
 
 from kernl.debugger.core import ExecutionContext
@@ -386,23 +384,23 @@ class TritonLangProxy:
 
     @_tensor_operation
     def dequantize(self, input, scale, shift, nbit, dst_ty=float16):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def broadcast(self, input, other):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def broadcast_to(self, input, shape):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def cat(self, input, shape):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def reshape(self, input, shape):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def dot(self, input, other, trans_a=False, trans_b=False, allow_tf32=True):
@@ -415,35 +413,35 @@ class TritonLangProxy:
 
     @_tensor_operation
     def atomic_cas(self, pointer, cmp, val):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def atomic_xchg(self, pointer, val, mask=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def atomic_add(self, pointer, val, mask=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def atomic_max(self, pointer, val, mask=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def atomic_min(self, pointer, val, mask=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def atomic_and(self, pointer, val, mask=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def atomic_or(self, pointer, val, mask=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def atomic_xor(self, pointer, val, mask=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def where(self, condition, x, y):
@@ -454,11 +452,11 @@ class TritonLangProxy:
 
     @_tensor_operation
     def umulhi(self, x, y):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def fdiv(self, x, y, ieee_rounding=False):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def exp(self, x):
@@ -482,15 +480,15 @@ class TritonLangProxy:
 
     @_tensor_operation
     def globaltimer(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def clock(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def debug_barrier(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def multiple_of(self, input, values):
@@ -518,23 +516,23 @@ class TritonLangProxy:
 
     @_tensor_operation
     def sigmoid(self, x):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def softmax(self, x, ieee_rounding=False):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def ravel(self, x):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def swizzle2d(self, i, j, size_i, size_j, size_g):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def zeros_like(self, input):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def max(self, input, axis=None):
@@ -544,7 +542,7 @@ class TritonLangProxy:
 
     @_tensor_operation
     def argmax(self, input, axis):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def min(self, input, axis=None):
@@ -554,7 +552,7 @@ class TritonLangProxy:
 
     @_tensor_operation
     def argmin(self, input, axis):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @_tensor_operation
     def sum(self, input, axis=None):
@@ -564,4 +562,4 @@ class TritonLangProxy:
 
     @_tensor_operation
     def xor_sum(self, input, axis):
-        raise NotImplemented()
+        raise NotImplementedError()

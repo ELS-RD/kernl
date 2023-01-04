@@ -1,4 +1,3 @@
-import pytest
 import torch
 import triton
 import triton.language as tl
@@ -43,7 +42,10 @@ def test_addition():
     expected = a + b
 
     output = torch.empty((128,), device="cuda")
-    grid = lambda meta: (triton.cdiv(128, meta["BLOCK_SIZE"]),)
+
+    def grid(meta):
+        return (triton.cdiv(128, meta["BLOCK_SIZE"]),)
+
     add_kernel[grid](a, b, output, 128, BLOCK_SIZE=32)
 
     assert_all_close(expected, output)
@@ -201,8 +203,11 @@ def test_matmul():
         assert K % 32 == 0, "We don't check memory-out-of-bounds with K so K must be divisible by BLOCK_SIZE_K"
         # allocates output
         c = torch.empty((M, N), device=a.device, dtype=a.dtype)
+
         # 1D launch kernel where each block gets its own program.
-        grid = lambda META: (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+        def grid(META):
+            return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+
         matmul_kernel[grid](
             a,
             b,
