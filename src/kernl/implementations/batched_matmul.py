@@ -137,7 +137,8 @@ def matmul_kernel(
     # k_range_offs[None, :] is a row vector of size BLOCK_K_SIZE columns indexes
     # We multiply stride_ak to get a row vector of memory offsets to each start of a column
     # When we add both. We get a matrix of memory offsets.
-    # For A in RowMajor stride_ak will be 1, so k_range_offs[None, :] * stride_ak will be just 0,1,2,3,4,5....BLOCK_K_SIZE
+    # For A in RowMajor stride_ak will be 1, so k_range_offs[None, :] * stride_ak will be
+    # just 0,1,2,3,4,5....BLOCK_K_SIZE
     a_ptrs = a_ptr + a_batch_stride * batch_idx + (a_offs[:, None] * a_m_stride + k_range_offs[None, :] * a_k_stride)
     b_ptrs = b_ptr + b_batch_stride * batch_idx + (k_range_offs[:, None] * b_k_stride + b_offs[None, :] * b_n_stride)
 
