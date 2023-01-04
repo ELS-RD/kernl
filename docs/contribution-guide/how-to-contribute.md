@@ -53,7 +53,6 @@ If you think you've found a bug but don't have the time to send a PR, please:
 
     - [x] Give a concise and explicit title to the problem so that you can quickly understand what it is about.
     - [x] Describe the problem clearly and in detail. Explain what is not working as expected, what you expected to happen and what happened instead. Include as much information as possible, all the steps you need to take to reproduce the bug, etc. If you have ideas on how to fix the problem, feel free to include them in your description.
-    - [x] Add appropriate labels to indicate the type of problem (e.g., "bug", "performance problem").
 
 <br>
 **<span style="color:#fff; background:#009900">@team: see bug report template ></span>** [.github/ISSUE_TEMPLATE/bug.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug.yml)
@@ -63,6 +62,9 @@ If you think you've found a bug but don't have the time to send a PR, please:
 If you would like to request a **new feature** or **an enhancement**, 
 but are not planning to open a Pull Request, you can **[open a dedicated issue](todo)**.
 You can also use the **[discussion forum](todo)** for feature requests that you would like to discuss.
+
+<br>
+**<span style="color:#fff; background:#009900">@team: see feature request template ></span>** [.github/ISSUE_TEMPLATE/feature.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/feature.yml)
 
 #### Proposals
 
@@ -86,23 +88,7 @@ Kernl a une branche principale et nous utilisons de nouvelles branches par fonct
 ### Code quality?
 
 ### Testing?
------
 
-### Feature request
-
-Voici quelques conseils pour rédiger une Issue sur GitHub pour proposer une nouvelle fonctionnalité :
-
-Donnez un titre concis et explicite à votre idée : utilisez des mots-clés qui permettent de comprendre rapidement de quoi il s'agit.
-
-Décrivez votre idée de manière claire et détaillée : expliquez pourquoi vous pensez que cette fonctionnalité serait utile et comment elle pourrait être mise en œuvre. Incluez autant d'informations que possible, telles que des exemples de cas d'utilisation ou de scénarios où cette fonctionnalité pourrait être utile.
-
-Si vous avez des idées sur la manière de mettre en œuvre cette fonctionnalité, n'hésitez pas à les inclure dans votre description.
-
-Assignez l'Issue à un membre de l'équipe ou à vous-même si vous êtes en train de travailler sur l'idée.
-
-Ajoutez les étiquettes appropriées pour indiquer le type de fonctionnalité (par exemple, "nouvelle fonctionnalité", "amélioration") et le niveau de priorité.
-
-En suivant ces conseils, vous devriez être en mesure de proposer efficacement une nouvelle fonctionnalité sur GitHub de manière à ce qu'elle puisse être prise en compte et éventuellement mise en œuvre.
 
 
 
