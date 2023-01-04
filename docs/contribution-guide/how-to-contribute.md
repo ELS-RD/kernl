@@ -72,12 +72,53 @@ You can also use the **[discussion forum](todo)** for feature requests that you 
 
 ### Branch Organization
 
-Kernl has one primary branch main and we use feature branches with deploy previews to deliver new features with pull requests.
-Kernl a une branche principale et nous utilisons de nouvelles branches par fonctionnalités, fixes, etc. avec des demandes de pull.
+Kernl works with a `main` branch. This is the source of truth.
 
-### Installation
+Each **new Pull Request**, for a new feature, bug fix, or other, must be done on **a new branch**.
 
-### Code convention
+#### Template and example of a new branch name
+
+The name of a new branch must respect the following syntax:
+```
+{prefix}/{name-identifying-the-object-of-the-pull-request}
+``` 
+
+??? question "Which prefixes and characters are allowed?"
+
+    Prefixes should respect, as much as possible, the values of **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)**
+    For example:
+        ```{.javascript .copy}
+        [
+          'feat',
+          'fix',
+          'docs',
+          'refactor',
+          'build',
+          'ci',
+          'perf',
+          'chore',
+          'revert',
+          'style',
+          'test'
+        ];
+        ```
+    The allowed characters are:
+        ```regexp
+        [a-z_-]
+        ```
+    !!! example "Examples"
+        - feat/debugger
+        - feat/backward_layernorm
+        - refactor/refactor-kernels
+        - docs/contribution-guide-doc
+
+### Installation?
+
+### Code convention?
+
+### Code quality?
+
+### Testing?
 
 ### Documentation?
 
@@ -87,9 +128,6 @@ Kernl a une branche principale et nous utilisons de nouvelles branches par fonct
 
 Commit messages must respect the **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)** specification.
 
-### Code quality?
-
-### Testing?
 
 
 
