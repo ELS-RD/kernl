@@ -55,6 +55,10 @@ If you think you've found a bug but don't have the time to send a PR, please:
 <br>
 **<span style="color:#fff; background:#009900">@team: see bug report template ></span>** [.github/ISSUE_TEMPLATE/bug.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug.yml)
 
+#### Proposals
+
+If you intend to **make non-trivial changes to existing implementations**, we recommend that you **file an Issue** with the **[proposal template](todo)**. This allows us to reach agreement on your proposal before you put any effort into it.
+
 #### Feature requests
 
 If you would like to request a **new feature** or **an enhancement**, 
@@ -63,10 +67,6 @@ You can also use the **[discussion forum](todo)** for feature requests that you 
 
 <br>
 **<span style="color:#fff; background:#009900">@team: see feature request template ></span>** [.github/ISSUE_TEMPLATE/feature.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/feature.yml)
-
-#### Proposals
-
-If you intend to **make non-trivial changes to existing implementations**, we recommend that you **file an Issue** with the **[proposal template](todo)**. This allows us to reach agreement on your proposal before you put any effort into it.
 
 ## Development
 
