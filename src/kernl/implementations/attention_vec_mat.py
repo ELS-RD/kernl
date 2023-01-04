@@ -53,9 +53,7 @@ def vec_mat(
     vec_col_rounded_range_offs = tl.arange(0, VEC_COL_ROUNDED_SIZE)
 
     vec_ptrs = vec_ptr + (
-        batch_idx * vec_batch_stride
-        + head_idx * vec_head_stride
-        + vec_col_stride * vec_col_rounded_range_offs[:, None]
+        batch_idx * vec_batch_stride + head_idx * vec_head_stride + vec_col_stride * vec_col_rounded_range_offs[:, None]
     )
     vec_ptr_mask = vec_col_rounded_range_offs[:, None] < vec_col_size
     vec = tl.load(pointer=vec_ptrs, mask=vec_ptr_mask, other=0.0).to(tl.float32)
