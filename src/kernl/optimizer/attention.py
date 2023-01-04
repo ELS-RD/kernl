@@ -43,7 +43,7 @@ def attention_wrapper(
     # When there is a large difference between those dimensions, our kernel become inefficient
     # (almost no parallelization), so we use pytorch instead
     if q.size(-2) == 1 and k.size(-2) > 50:
-        if v.stride(-2) == 1 and (attention_mask is None) and not is_causal:
+        if (attention_mask is None) and (not is_causal):
             attention_vec_mat_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
         else:
             attention_reference(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
