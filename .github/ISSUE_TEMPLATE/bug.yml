@@ -11,7 +11,7 @@ body:
         
         Before you create your issue.
         
-          - Check that the bug is not already the subject of an existing issue. 
+          - Make sure the bug has not already been reported in the issue tracker.
           - Make sure it is reproducible.
           - Make sure you have enough material to fuel the search and resolution.
         
