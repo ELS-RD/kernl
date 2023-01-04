@@ -24,7 +24,7 @@ Use (**[Markdown](https://www.markdownguide.org/basic-syntax/)**) to structure y
 
 If you have a question, an idea for a new feature, or an optimization, you can **use the dedicated [discussion forum](todo)**.
 
-**<span style="color:#fff; background:#ff0000">@team: to be validated:</span>**
+**<span style="color:#fff; background:#ff0000">@reviewer: to be validated:</span>**
 ```markdown
 @team:  what about creating a dedicated discussion forum?
         like Remix: https://github.com/remix-run/remix/discussions or Vite for example
@@ -47,17 +47,18 @@ If you think you've found a bug but don't have the time to send a PR, please:
 
 **Bug reports without a reproduction will be immediately closed.**
 
-!!! note annotate "tips for writing your Issue"
+!!! tip annotate "tips for writing your Issue"
 
     - [x] Give a concise and explicit title to the problem so that you can quickly understand what it is about.
     - [x] Describe the problem clearly and in detail. Explain what is not working as expected, what you expected to happen and what happened instead. Include as much information as possible, all the steps you need to take to reproduce the bug, etc. If you have ideas on how to fix the problem, feel free to include them in your description.
 
-<br>
-**<span style="color:#fff; background:#009900">@team: see bug report template ></span>** [.github/ISSUE_TEMPLATE/bug.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug.yml)
+!!! example annotate "@reviewer: see bug[report template](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug.yml)"
 
 #### Proposals
 
 If you intend to **make non-trivial changes to existing implementations**, we recommend that you **file an Issue** with the **[proposal template](todo)**. This allows us to reach agreement on your proposal before you put any effort into it.
+
+!!! example annotate "@reviewer: see [proposal template](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/proposal.yml)"
 
 #### Feature requests
 
@@ -65,8 +66,7 @@ If you would like to request a **new feature** or **an enhancement**,
 but are not planning to open a Pull Request, you can **[open a dedicated issue](todo)**.
 You can also use the **[discussion forum](todo)** for feature requests that you would like to discuss.
 
-<br>
-**<span style="color:#fff; background:#009900">@team: see feature request template ></span>** [.github/ISSUE_TEMPLATE/feature.yml](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/feature.yml)
+!!! example annotate "@reviewer: see [feature request template](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/feature.yml)"
 
 ## Development
 
