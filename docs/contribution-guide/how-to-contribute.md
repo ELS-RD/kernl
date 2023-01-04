@@ -18,13 +18,11 @@ Kernl uses **[GitHub](https://github.com/ELS-RD/kernl)** as a source of truth. T
 In a global way, texts in Issues, PRs and commits should be written **in English**, **with care**, **consistency**, and **clarity**.
 Use (**[Markdown](https://www.markdownguide.org/basic-syntax/)**) to structure your texts, and to make them more readable.
 
-Commit messages must respect the **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)** specification.
-
 ## Development Process
 
 ### Ask a question / share your ideas or new features
 
-If you have a question, an idea for a new feature, or an optimization, you can use the dedicated **[discussion forum](todo)**.
+If you have a question, an idea for a new feature, or an optimization, you can **use the dedicated [discussion forum](todo)**.
 
 **<span style="color:#fff; background:#ff0000">@team: to be validated:</span>**
 ```markdown
@@ -44,7 +42,7 @@ If you have a question, an idea for a new feature, or an optimization, you can u
 
 If you think you've found a bug but don't have the time to send a PR, please:
 
-- First, make sure the bug has not already been reported in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
+- First, **make sure the bug has not already been reported** in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
 - If you don't find a similar issue, **[open a new one](todo)**.
 
 **Bug reports without a reproduction will be immediately closed.**
@@ -68,6 +66,8 @@ You can also use the **[discussion forum](todo)** for feature requests that you 
 
 #### Proposals
 
+If you intend to **make non-trivial changes to existing implementations**, we recommend that you **file an Issue** with the **[proposal template](todo)**. This allows us to reach agreement on your proposal before you put any effort into it.
+
 ## Development
 
 ### Branch Organization
@@ -84,6 +84,8 @@ Kernl a une branche principale et nous utilisons de nouvelles branches par fonct
 ## Pull Requests
 
 ### Writing a good commit message
+
+Commit messages must respect the **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)** specification.
 
 ### Code quality?
 
