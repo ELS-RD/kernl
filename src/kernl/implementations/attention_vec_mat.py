@@ -17,32 +17,32 @@ from torch.cuda.amp import custom_fwd
         triton.Config({"N_SIZE": 2}, num_warps=1, num_stages=1),
         triton.Config({"N_SIZE": 1}, num_warps=1, num_stages=1),
     ],
-    key=["vec_cols_size", "matrix_rows_size", "matrix_cols_size", "output_cols_size"],
+    key=["vec_col_size", "matrix_row_size", "matrix_col_size", "output_col_size"],
 )
 @triton.jit
 def vec_mat(
-    vec_cols_size: tl.constexpr,
-    matrix_rows_size: tl.constexpr,
-    matrix_cols_size: tl.constexpr,
-    output_cols_size: tl.constexpr,
+    vec_col_size: tl.constexpr,
+    matrix_row_size: tl.constexpr,
+    matrix_col_size: tl.constexpr,
+    output_col_size: tl.constexpr,
     vec_ptr,
     vec_batch_stride,
     vec_head_stride,
-    vec_rows_stride,
-    vec_cols_stride,
+    vec_row_stride,
+    vec_col_stride,
     matrix_ptr,
     matrix_batch_stride,
     matrix_head_stride,
-    matrix_rows_stride,
-    matrix_cols_stride,
+    matrix_row_stride,
+    matrix_col_stride,
     output_ptr,
     output_batch_stride,
     output_head_stride,
-    output_rows_stride,
-    output_cols_stride,
+    output_row_stride,
+    output_col_stride,
     SCALER: tl.constexpr,
     SHOULD_VEC_SOFTMAX: tl.constexpr,
-    VEC_COLS_ROUNDED_SIZE: tl.constexpr,
+    VEC_COL_ROUNDED_SIZE: tl.constexpr,
     N_SIZE: tl.constexpr,
 ):
     n_block_idx = tl.program_id(0)
@@ -50,14 +50,14 @@ def vec_mat(
     batch_idx = tl.program_id(2)
 
     n_range_offs = tl.arange(0, N_SIZE)
-    vec_cols_rounded_range_offs = tl.arange(0, VEC_COLS_ROUNDED_SIZE)
+    vec_col_rounded_range_offs = tl.arange(0, VEC_COL_ROUNDED_SIZE)
 
     vec_ptrs = vec_ptr + (
         batch_idx * vec_batch_stride
         + head_idx * vec_head_stride
-        + vec_cols_stride * vec_cols_rounded_range_offs[:, None]
+        + vec_col_stride * vec_col_rounded_range_offs[:, None]
     )
-    vec_ptr_mask = vec_cols_rounded_range_offs[:, None] < vec_cols_size
+    vec_ptr_mask = vec_col_rounded_range_offs[:, None] < vec_col_size
     vec = tl.load(pointer=vec_ptrs, mask=vec_ptr_mask, other=0.0).to(tl.float32)
 
     if SCALER != 1.0:
@@ -72,11 +72,11 @@ def vec_mat(
     matrix_ptrs = matrix_ptr + (
         batch_idx * matrix_batch_stride
         + head_idx * matrix_head_stride
-        + vec_cols_rounded_range_offs[:, None] * matrix_rows_stride  # cols
-        + (n_block_idx * N_SIZE + n_range_offs)[None, :] * matrix_cols_stride  # rows
+        + vec_col_rounded_range_offs[:, None] * matrix_row_stride  # cols
+        + (n_block_idx * N_SIZE + n_range_offs)[None, :] * matrix_col_stride  # rows
     )
-    matrix_ptr_mask = (vec_cols_rounded_range_offs[:, None] < matrix_rows_size) & (
-        (n_block_idx * N_SIZE + n_range_offs)[None, :] < matrix_cols_size
+    matrix_ptr_mask = (vec_col_rounded_range_offs[:, None] < matrix_row_size) & (
+        (n_block_idx * N_SIZE + n_range_offs)[None, :] < matrix_col_size
     )
     matrix = tl.load(pointer=matrix_ptrs, mask=matrix_ptr_mask, other=0.0).to(tl.float32)
 
@@ -86,9 +86,9 @@ def vec_mat(
     output_ptrs = output_ptr + (
         batch_idx * output_batch_stride
         + head_idx * output_head_stride
-        + (n_block_idx * N_SIZE + n_range_offs) * output_cols_stride
+        + (n_block_idx * N_SIZE + n_range_offs) * output_col_stride
     )
-    output_ptr_mask = (n_block_idx * N_SIZE + n_range_offs) < output_cols_size
+    output_ptr_mask = (n_block_idx * N_SIZE + n_range_offs) < output_col_size
     tl.store(pointer=output_ptrs, value=result, mask=output_ptr_mask, eviction_policy="evict_first")
 
 
