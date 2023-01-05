@@ -59,7 +59,10 @@ def fast_gelu(x):
 @triton.jit
 def fast_gelu_grad(x):
     """Derivative of fast approximation of the gelu function."""
-    raise NotImplementedError()
+    # CREDITS: Fast implementation proposed in
+    # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/fused_bias_gelu.py#L30
+    tanh_out = tanh(0.79788456 * x * (1 + 0.044715 * x * x))
+    return 0.5 * x * ((1 - tanh_out * tanh_out) * (0.79788456 + 0.1070322243 * x * x)) + 0.5 * (1 + tanh_out)
 
 
 @triton.jit
