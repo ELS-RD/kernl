@@ -23,6 +23,7 @@ import triton.language as tl
 
 sqrt2pi = math.sqrt(2.0 / math.pi)
 sqrt2 = math.sqrt(2.0)
+gaussian_pdf_normalization = 1.0 / math.sqrt(2 * math.pi)
 
 
 @triton.jit
@@ -32,18 +33,40 @@ def tanh(x):
 
 
 @triton.jit
+def tanh_grad(x):
+    """Tanh derivative function"""
+    return 1 - tl.libdevice.pow(tl.libdevice.tanh(x), 2)
+
+
+@triton.jit
 def relu(x):
     """Relu activation function"""
     return tl.maximum(0, x)
 
+@triton.jit
+def relu_grad(x):
+    """Relu derivative function"""
+    return tl.maximum(0, x)
 
 @triton.jit
 def fast_gelu(x):
     """Fast approximation of the gelu function. May slightly decrease accuracy."""
     return 0.5 * x * (1 + tanh(sqrt2pi * (x + 0.044715 * x * x * x)))
 
+@triton.jit
+def fast_gelu_grad(x):
+    """Derivative of fast approximation of the gelu function."""
+    raise NotImplemented()
 
 @triton.jit
 def gelu(x):
     """Gaussian Error Linear Unit (GELU)"""
     return x * 0.5 * (1.0 + tl.libdevice.erf(x / sqrt2))
+
+
+@triton.jit
+def gelu_grad(x):
+    """Derivative of Gaussian Error Linear Unit (GELU)"""
+    cdf = 0.5 * (1.0 + tl.libdevice.erf(x * sqrt2))
+    pdf = tl.exp(-0.5 * x * x) * gaussian_pdf_normalization
+    return cdf + x * pdf
