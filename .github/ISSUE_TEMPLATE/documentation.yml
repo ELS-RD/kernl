@@ -1,10 +1,13 @@
 name: 📚 Documentation
 description: Report an issue related to documentation
+title: "docs: "
 labels: [documentation, 'status: needs triage']
 body:
   - type: markdown
     attributes:
       value: |
+        Thanks for your help to improve kernl.
+        
         This template is strictly used for documentation requests. 
 
         For example:
@@ -12,7 +15,7 @@ body:
         - Adding or modifying tutorials.
         - ...
 
-        This issue should not touch the code base.
+        > This issue should not touch the code base.
 
   - type: textarea
     attributes:
@@ -34,7 +37,7 @@ body:
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this proposal, you agree to follow our [Code of Conduct](https://www.kernl.ai/contribution-guide/code-of-conduct/)
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://www.kernl.ai/contribution-guide/code-of-conduct/)
       options:
         - label: I agree to follow this project's Code of Conduct
           required: true
