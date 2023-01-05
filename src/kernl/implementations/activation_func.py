@@ -43,20 +43,24 @@ def relu(x):
     """Relu activation function"""
     return tl.maximum(0, x)
 
+
 @triton.jit
 def relu_grad(x):
     """Relu derivative function"""
     return tl.maximum(0, x)
+
 
 @triton.jit
 def fast_gelu(x):
     """Fast approximation of the gelu function. May slightly decrease accuracy."""
     return 0.5 * x * (1 + tanh(sqrt2pi * (x + 0.044715 * x * x * x)))
 
+
 @triton.jit
 def fast_gelu_grad(x):
     """Derivative of fast approximation of the gelu function."""
     raise NotImplemented()
+
 
 @triton.jit
 def gelu(x):

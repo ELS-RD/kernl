@@ -17,7 +17,7 @@ from typing import Callable
 
 import torch
 
-from kernl.implementations.linear_layer import linear_layer
+from kernl.implementations.linear_layer import linear_layer_fwd
 from kernl.utils.extended_matcher import replace_pattern
 
 
@@ -35,7 +35,7 @@ def linear_wrapper_functional(v: torch.Tensor, weight: torch.Tensor, bias: torch
     if bias is not None and bias.dtype == torch.float32:
         bias.data = bias.data.half()
 
-    return linear_layer(v, weight, bias, activation=activation)
+    return linear_layer_fwd(v, weight, bias, activation=activation)
 
 
 torch.fx.wrap("linear_wrapper_functional")

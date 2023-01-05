@@ -22,7 +22,7 @@ import torch
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
-from torch.cuda.amp import custom_fwd
+from torch.cuda.amp import custom_bwd, custom_fwd
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
 from kernl.implementations import activation_func
@@ -275,7 +275,7 @@ class LinearLayerFwd(torch.autograd.Function):
         return outputs
 
 
-def linear_layer(
+def linear_layer_fwd(
     x: torch.Tensor,
     weight: torch.Tensor,
     bias: Optional[torch.Tensor],
@@ -283,6 +283,7 @@ def linear_layer(
     act_inputs: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     return LinearLayerFwd.apply(x, weight, bias, activation, act_inputs)
+
 
 @triton.autotune(
     configs=[
@@ -408,69 +409,83 @@ def kernel_bwd(
     tl.store(C, acc, mask=mask)
 
 
-def LinearlayerBwd(
+class LinearLayerBwd(torch.autograd.Function):
+    @staticmethod
+    @custom_bwd
+    def backward(
+        ctx: FunctionCtx,
+        grad_outputs: torch.Tensor,
+        weight: torch.Tensor,
+        activation: str = "id",
+        act_inputs: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Compute e = activation(grad_output @ weight + bias).
+        This wrapper kicks the `kernel_fwd` Triton kernel
+        :param ctx: context for autograd
+        :param grad_outputs: input tensor
+        :param weight: weight matrix
+        :param activation: Activation name. Needs to be a Triton kernel.
+        :param act_inputs: an optional tensor to save the activation inputs (for backward)
+        :return: result tensor
+        """
+        assert activation in ["id", "gelu", "gelu_approx", "squared_relu"]
+
+        batch_shape, n = grad_outputs.shape[:-1], grad_outputs.shape[-1]
+        batch_dim = batch_shape.numel()
+        grad_output_reshaped = grad_outputs.reshape(batch_dim, n)
+
+        if grad_output_reshaped.stride(0) > 1 and grad_output_reshaped.stride(1) > 1:
+            grad_output_reshaped = grad_output_reshaped.contiguous()
+        if weight.stride(0) > 1 and weight.stride(1) > 1:
+            weight = weight.contiguous()
+
+        assert (
+                grad_outputs.dtype == weight.dtype
+        ), f"grad_output and weight must have the same dtype, got {grad_outputs.dtype} and {weight.dtype}"
+        assert (
+            grad_output_reshaped.shape[1] == weight.shape[0]
+        ), f"Incompatible dimensions: {grad_output_reshaped.shape} - {weight.shape}"
+        if activation != "id":
+            assert act_inputs is not None, f"act_input is required for activation {activation}"
+
+        # M, N, K in bwd are different from M, N, K in fwd
+        M, K = grad_output_reshaped.shape
+        K, N = weight.shape
+
+        grad_input = torch.empty((M, N), device=grad_outputs.device, dtype=grad_outputs.dtype)
+
+        # 1D launch kernel where each block gets its own program.
+        grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
+
+        kernel_bwd[grid](
+            grad_input,
+            act_inputs,
+            grad_output_reshaped,
+            weight,  # data ptrs
+            M,  # shapes
+            N,
+            K,
+            M // 32,  # key for triton cache (limit number of compilations)
+            N // 32,
+            K // 32,
+            stride_cm=grad_input.stride(0),  # strides
+            # stride_cn=grad_input.stride(1),
+            stride_am=grad_output_reshaped.stride(0),
+            stride_ak=grad_output_reshaped.stride(1),
+            stride_bk=weight.stride(0),
+            stride_bn=weight.stride(1),
+            ACTIVATION=activation,  # optional fused activation
+            GROUP_M=8,  # speed optimization: group the programs
+        )
+
+        return grad_input.reshape(*batch_shape, grad_input.shape[-1])
+
+
+def linear_layer_bwd(
     grad_output: torch.Tensor,
     weight: torch.Tensor,
-    activation: str = "id",
-    act_input: Optional[torch.Tensor] = None,
+    activation="",
+    act_inputs: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    """
-    Compute e = activation(grad_output @ weight + bias).
-    This wrapper kicks the `kernel_fwd` Triton kernel
-    :param grad_output: input tensor
-    :param weight: weight matrix
-    :param activation: Activation name. Needs to be a Triton kernel.
-    :param act_input: an optional tensor to save the activation inputs (for backward)
-    :return: result tensor
-    """
-    assert activation in ["id", "gelu", "gelu_approx", "squared_relu"]
-
-    batch_shape, n = grad_output.shape[:-1], grad_output.shape[-1]
-    batch_dim = batch_shape.numel()
-    grad_output_reshaped = grad_output.reshape(batch_dim, n)
-
-    if grad_output_reshaped.stride(0) > 1 and grad_output_reshaped.stride(1) > 1:
-        grad_output_reshaped = grad_output_reshaped.contiguous()
-    if weight.stride(0) > 1 and weight.stride(1) > 1:
-        weight = weight.contiguous()
-
-    assert (
-        grad_output.dtype == weight.dtype
-    ), f"grad_output and weight must have the same dtype, got {grad_output.dtype} and {weight.dtype}"
-    assert (
-        grad_output_reshaped.shape[1] == weight.shape[0]
-    ), f"Incompatible dimensions: {grad_output_reshaped.shape} - {weight.shape}"
-    if activation != "id":
-        assert act_input is not None, f"act_input is required for activation {activation}"
-
-    # M, N, K in bwd are different from M, N, K in fwd
-    M, K = grad_output_reshaped.shape
-    K, N = weight.shape
-
-    grad_input = torch.empty((M, N), device=grad_output.device, dtype=grad_output.dtype)
-
-    # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
-
-    kernel_bwd[grid](
-        grad_input,
-        act_input,
-        grad_output_reshaped,
-        weight,  # data ptrs
-        M,  # shapes
-        N,
-        K,
-        M // 32,  # key for triton cache (limit number of compilations)
-        N // 32,
-        K // 32,
-        stride_cm=grad_input.stride(0),  # strides
-        # stride_cn=grad_input.stride(1),
-        stride_am=grad_output_reshaped.stride(0),
-        stride_ak=grad_output_reshaped.stride(1),
-        stride_bk=weight.stride(0),
-        stride_bn=weight.stride(1),
-        ACTIVATION=activation,  # optional fused activation
-        GROUP_M=8,  # speed optimization: group the programs
-    )
-
-    return grad_input.reshape(*batch_shape, grad_input.shape[-1])
+    return LinearLayerBwd.apply(grad_output, weight, activation, act_inputs)
