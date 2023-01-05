@@ -88,16 +88,16 @@ Each **new Pull Request**, for a new feature, bug fix, or other, must be done on
 
 #### Standardization of branch names
 
-The name of a new branch must respect the following syntax:
+The name of a new branch must respect the following format:
 ```
-{prefix}/{name-identifying-the-object-of-the-pull-request}
+<type>(scope)/<subject>
 ``` 
 
-??? question "Which prefixes and characters are allowed?"
+??? question "Which types and characters are allowed?"
 
-    The prefixes of new branches are inspired by the values of **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)**.
+    The types of new branches are inspired by the values of **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)**.
     
-    **List of possible prefixes:**
+    **List of possible types:**
 
     - `feat`: new functionality, optimization or implementation of a proposal.
     - `fix`: bug fix.
@@ -107,7 +107,7 @@ The name of a new branch must respect the following syntax:
     - `chore`: upgrading dependencies, releasing new versions. Tasks that are regularly done for maintenance purposes.
     - `misc`: anything else that doesn't change production code, yet is not test or chore. e.g. updating GitHub actions workflow.
 
-    **Allowed characters to identify the object of the Pull Request:** 
+    **Allowed characters for the subject:** 
         ```regexp
         [a-z_-]
         ```
