@@ -133,6 +133,8 @@ The name of a new branch must respect the following syntax:
 
 Commit messages must respect the **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)** specification.
 
+:warning: Please **pay special attention to breaking changes**.
+
 
 
 
