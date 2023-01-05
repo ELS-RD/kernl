@@ -176,5 +176,5 @@ def test_whisper_hf(benchmark, implementation, num_beam):
         )
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True, normalize=True)[0]
         assert (
-            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel" in transcription
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel" == transcription
         )
