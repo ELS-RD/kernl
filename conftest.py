@@ -39,6 +39,7 @@ def setup_dynamo():
     static_inputs_pool.clear()
     dynamo.reset()
     yield
+    static_inputs_pool.clear()
     dynamo.config.cache_size_limit = cache_limit
 
 
