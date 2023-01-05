@@ -441,7 +441,7 @@ class LinearLayerBwd(torch.autograd.Function):
             weight = weight.contiguous()
 
         assert (
-                grad_outputs.dtype == weight.dtype
+            grad_outputs.dtype == weight.dtype
         ), f"grad_output and weight must have the same dtype, got {grad_outputs.dtype} and {weight.dtype}"
         assert (
             grad_output_reshaped.shape[1] == weight.shape[0]

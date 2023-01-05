@@ -59,7 +59,7 @@ def fast_gelu(x):
 @triton.jit
 def fast_gelu_grad(x):
     """Derivative of fast approximation of the gelu function."""
-    raise NotImplemented()
+    raise NotImplementedError()
 
 
 @triton.jit

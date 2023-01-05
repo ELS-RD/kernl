@@ -21,7 +21,7 @@ import torch
 from conftest import assert_all_close, set_seed
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
-from kernl.implementations.linear_layer import linear_layer
+from kernl.implementations.linear_layer import linear_layer_fwd
 
 
 def get_pytorch_activation(activation: str) -> Callable:
@@ -41,7 +41,7 @@ implementations = {
     "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
         torch.nn.functional.linear(x, weight, bias)
     ),
-    "triton": lambda weight, bias, activation: lambda x: linear_layer(x, weight, bias, activation),
+    "triton": lambda weight, bias, activation: lambda x: linear_layer_fwd(x, weight, bias, activation),
 }
 
 
