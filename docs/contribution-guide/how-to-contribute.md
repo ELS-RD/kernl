@@ -87,22 +87,16 @@ The name of a new branch must respect the following syntax:
 
     Prefixes should respect, as much as possible, the values of **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)**
     For example:
-        ```{.javascript .copy}
-        [
-          'feat',
-          'fix',
-          'docs',
-          'refactor',
-          'build',
-          'ci',
-          'perf',
-          'chore',
-          'revert',
-          'style',
-          'test'
-        ];
-        ```
-    The allowed characters are:
+
+    - `feat`: new functionality, optimization or implementation of a proposal.
+    - `fix`: bug fix.
+    - `docs`: ajout ou modification de la documentation.
+    - `refactor`: a change in the code that does not result in any difference in behavior.
+    - `test`: adding tests, refactoring tests. No production code change.
+    - `chore`: upgrading dependencies, releasing new versions. Tasks that are regularly done for maintenance purposes.
+    - `misc`: anything else that doesn't change production code, yet is not test or chore. e.g. updating GitHub actions workflow.
+
+    Allowed characters:
         ```regexp
         [a-z_-]
         ```
