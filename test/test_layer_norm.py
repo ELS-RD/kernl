@@ -18,7 +18,6 @@ import torch
 
 from conftest import assert_all_close, set_seed
 
-from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.implementations.layer_norm import (
     _layer_norm_fwd_fused_multi_pass,
     _layer_norm_fwd_fused_single_pass,
@@ -27,6 +26,7 @@ from kernl.implementations.layer_norm import (
     pytorch_naive_layernorm,
     pytorch_naive_rmsnorm,
 )
+from kernl.optimizer.cuda_graph import cuda_graphs_wrapper
 
 
 implementations_layer_norm = {

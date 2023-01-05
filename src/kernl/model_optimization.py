@@ -18,7 +18,7 @@ import torch
 import torch._dynamo as torchdynamo
 from transformers import PreTrainedModel
 
-from kernl.implementations.cuda_graph import cuda_graphs_wrapper, static_inputs_pool
+from kernl.optimizer.cuda_graph import cuda_graphs_wrapper, static_inputs_pool
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 

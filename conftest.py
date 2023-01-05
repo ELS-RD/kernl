@@ -22,7 +22,7 @@ import torch._dynamo as dynamo
 
 from kernl.benchmark.benchmark_fixture import BenchmarkFixture
 from kernl.benchmark.benchmark_session import BenchmarkSession
-from kernl.implementations.cuda_graph import static_inputs_pool
+from kernl.optimizer.cuda_graph import static_inputs_pool
 
 
 @contextmanager

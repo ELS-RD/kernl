@@ -20,10 +20,10 @@ import torch
 
 from conftest import assert_all_close, set_seed
 from src.kernl.implementations.attention_skinny import skinny_attention_forward
-from src.kernl.implementations.cuda_graph import cuda_graphs_wrapper
 
 from kernl.implementations.attention import attention_forward, attention_reference, closest_power_of_2
 from kernl.implementations.attention_vec_mat import attention_vec_mat_forward
+from kernl.optimizer.cuda_graph import cuda_graphs_wrapper
 
 
 implementations = {
