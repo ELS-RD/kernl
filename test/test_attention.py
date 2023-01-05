@@ -180,8 +180,8 @@ implementations_skinny_cross_attention = {
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(1, 6, 1500, 64), (30, 1, 1500, 64), (1, 16, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)],
-    ids=["tiny", "tiny-beam-5", "medium", "large-beam-1", "large-beam-5"],
+    [(1, 6, 1500, 64), (5, 6, 1500, 64), (1, 16, 1500, 64), (5, 16, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)],
+    ids=["tiny-beam-1", "tiny-beam-5", "medium-beam-1", "medium-beam-5", "large-beam-1", "large-beam-5"],
 )
 @pytest.mark.parametrize("implementation", implementations_skinny_cross_attention.keys())
 def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
