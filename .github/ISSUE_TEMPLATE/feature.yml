@@ -6,6 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
+        Thanks for your help to improve kernl.
+        
         Important stuff:
 
         - We expect you to submit a real feature request and not just a basic idea.
