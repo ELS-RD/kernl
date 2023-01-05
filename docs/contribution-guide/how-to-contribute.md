@@ -9,7 +9,7 @@ Please read this document before contributing!
 Kernl has adopted the **Contributor Covenant** as its **[Code of Conduct](code-of-conduct.md)**, and we expect project participants to adhere to it. 
 Please read the **[full text](code-of-conduct.md)** so that you can understand what actions will and will not be tolerated.
 
-## Open development
+## Open Development
 
 Kernl uses **[GitHub](https://github.com/ELS-RD/kernl)** as a source of truth. The core team works directly on it. All changes are public.
 
@@ -129,12 +129,55 @@ The name of a new branch must respect the following format:
 
 ## Pull Requests
 
-### Writing a good commit message
+You want to contribute by opening a Pull Request, we appreciate it. We'll do our best to work with you and get the PR reviewed.
+
+> If you're working on your first Pull Request, you can learn how from this free video series from Kent C. Dodds: [How to Contribute to an Open Source Project on GitHub](https://egghead.io/courses/how-to-contribute-to-an-open-source-project-on-github)
+
+### Recommendations
+
+- Any new Pull Request must be **created from the `main` branch**.
+- The **name** of the new branch must **follow the [standardization](#standardization-of-branch-names)**
+- A PR should be kept as **small as possible**. Smaller PRs are much easier to examine and merge.
+- Make sure the PR only does **one thing**, otherwise split it up.
+- Write a **descriptive title**. It is recommended to **follow this [commit message style](#semantic-commit-messages)**.
+- The **description should be clear and structured** to improve readability.
+- When relevant, remember to **reference the issue** with `fix #issue_number`.
+
+!!! success "contribution is more important than following any procedure"
+
+    The maintainers will review your code and point out obvious problems.
+    Your contribution is more important than following any procedure, although following these recommendations will certainly save everyone time.
+
+### Breaking Changes
+
+When adding a new Breaking change, we recommend following this template in your Pull Request description:
+
+```{.markdown .copy}
+### Breaking change
+
+- **Who does this affect**:
+- **How to migrate**:
+- **An index to measure the severity and effort required for migration**:
+```
+
+### Semantic Commit Messages 
 
 Commit messages must respect the **[Conventional commit](https://www.conventionalcommits.org/en/v1.0.0/)** specification.
 
-:warning: Please **pay special attention to breaking changes**.
+The principle is simple, the commit must respect the format:
+```
+<type>(<scope>): <subject>
+```
 
+The types are described in the [specification](https://www.conventionalcommits.org/en/v1.0.0/), the message must be **lower case**.
+
+??? warning "Please pay special attention to the breaking changes"
+
+    A breaking change MUST be indicated by a `!` immediately before the `:`.
+
+    !!! example
+
+        `fix!: fake commit message.` 
 
 
 
