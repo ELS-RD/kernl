@@ -181,8 +181,5 @@ def attention_vec_mat_forward(
     assert is_causal is False, "causal mask is not supported"
     assert attention_mask is None, "attention_mask is not supported"
     assert output.shape == q.shape[:3] + k.shape[-1:], f"{output.shape} != {q.shape[:3] + k.shape[-1:]}"
-    # print("q", q.size(), q.stride(), len(q.untyped_storage()), q.dtype)
-    # print("k", k.size(), k.stride(), len(k.untyped_storage()), k.dtype)
-    # print("v", v.size(), v.stride(), len(v.untyped_storage()), v.dtype)
 
     return AttentionVecMat.apply(q, k, v, output, sm_scale)
