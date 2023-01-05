@@ -22,15 +22,11 @@ from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
-# single shared pool by default
-_pool: (int, int) = torch.cuda.graph_pool_handle()
-
-
 # needs to be generated once to be reused several times, like encoder/decoder models
 # https://github.com/pytorch/torchdynamo/issues/1816
 def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
     dynamo_backend_ofi(gm)
-    return cuda_graphs_wrapper(gm, example_inputs, pool=_pool)
+    return cuda_graphs_wrapper(gm, example_inputs)
 
 
 def optimize_model(original_model: PreTrainedModel) -> None:

@@ -191,7 +191,6 @@ def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
     v = torch.rand_like(k)
     sm_scale = 0.3
 
-    p = torch.cuda.graph_pool_handle()
     expected = attention_reference(
         q=q.float(),
         k=k.float(),
@@ -203,8 +202,8 @@ def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
     )
     output = torch.empty_like(q)
     fn = implementations_skinny_cross_attention[implementation](output, sm_scale)
-    r = cuda_graphs_wrapper(fn, [q, k, v], pool=p)
-    _ = r(q, k, v)[0]
-    result = benchmark(r)[0]
+    r = cuda_graphs_wrapper(fn, [q, k, v])
+    _ = r([q, k, v])[0]
+    result = benchmark(r, [q, k, v])[0]
 
     assert_all_close(a=expected, b=result.float(), atol=1e-2)
