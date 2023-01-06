@@ -18,7 +18,7 @@ import torch
 import torch._dynamo as torchdynamo
 from transformers import PreTrainedModel
 
-from kernl.implementations.cuda_graph import cuda_graphs_wrapper
+from kernl.optimizer.cuda_graph import cuda_graphs_wrapper, static_inputs_pool
 from kernl.optimizer.dynamo_backend import dynamo_backend_ofi
 
 
@@ -29,7 +29,7 @@ def _compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
     return cuda_graphs_wrapper(gm, example_inputs)
 
 
-def optimize_model(original_model: PreTrainedModel) -> None:
+def optimize_model(model: PreTrainedModel) -> None:
     """Optimizes a given model by replacing forward method by a call to optimized code.
     It is done in two steps:
 
@@ -49,17 +49,18 @@ def optimize_model(original_model: PreTrainedModel) -> None:
         ```
 
     Args:
-        original_model: model to optimize
+        model: model to optimize
     """
     assert torch.cuda.is_available(), "CUDA capacity is required to use Kernl"
     major, _ = torch.cuda.get_device_capability()
     if major < 8:
         raise RuntimeError("GPU compute capability 8.0 (Ampere) or higher is required to use Kernl")
-    assert next(original_model.parameters()).device.type == "cuda", "Model must be on GPU"
-    original_model.forward2 = original_model.forward
+    assert next(model.parameters()).device.type == "cuda", "Model must be on GPU"
+    static_inputs_pool.clear()
+    model.forward_original = model.forward
 
     @torchdynamo.optimize(_compiler)
     def run(*args, **kwargs):
-        return original_model.forward2(*args, **kwargs)
+        return model.forward_original(*args, **kwargs)
 
-    original_model.forward = run
+    model.forward = run
