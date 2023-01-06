@@ -17,7 +17,6 @@ from typing import List
 
 import torch
 import torch._dynamo as torchdynamo
-from torch._dynamo.optimizations import BACKENDS
 from transformers import AutoModel
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
@@ -35,8 +34,7 @@ def get_model_baseline(base):
 
 def get_model_dynamo_cuda_graphs(base):
     def compiler(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
-        compiled = BACKENDS["cudagraphs"](gm, example_inputs)
-        return compiled
+        return cuda_graphs_wrapper(gm, example_inputs)
 
     @torchdynamo.optimize(compiler)
     def run(*args, **kwargs):
