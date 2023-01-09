@@ -226,7 +226,7 @@ make source_code_check_format
 
 You want to contribute by opening a Pull Request, we appreciate it. We'll do our best to work with you and get the PR reviewed.
 
-> If you're working on your first Pull Request, you can learn how from this free video series from Kent C. Dodds: [How to Contribute to an Open Source Project on GitHub](https://egghead.io/courses/how-to-contribute-to-an-open-source-project-on-github)
+> If you're working on your first Pull Request, you can learn how from this free video series from Kent C. Dodds "[How to Contribute to an Open Source Project on GitHub](https://egghead.io/courses/how-to-contribute-to-an-open-source-project-on-github)" and "[About pull requests](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests)".
 
 ### Recommendations
 
@@ -237,6 +237,7 @@ You want to contribute by opening a Pull Request, we appreciate it. We'll do our
 - Write a **descriptive title**. It is recommended to **follow this [commit message style](#semantic-commit-messages)**.
 - The **description should be clear and structured** to improve readability.
 - When relevant, remember to **reference the issue** with `fix #issue_number`.
+- Finally, while your PR is in progress, **leave it as a draft**. **Once finalized, make it ready for review**.
 
 !!! success "contribution is more important than following any procedure"
 
