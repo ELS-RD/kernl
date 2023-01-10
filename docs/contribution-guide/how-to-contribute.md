@@ -47,7 +47,7 @@ If you think you've found a bug but don't have the time to send a PR, please:
 - First, **make sure the bug has not already been reported** in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
 - If you don't find a similar Issue, **[open a new one](todo)**.
 
-**Bug reports without a reproduction will be immediately closed.**
+Bug reports without a reproduction will be immediately closed.
 
 !!! tip "tips for writing your Issue"
 
