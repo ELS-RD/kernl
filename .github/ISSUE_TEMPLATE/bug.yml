@@ -63,6 +63,15 @@ body:
       required: true
 
   - type: checkboxes
+    attributes:
+      label: Self-service
+      description: |
+        If you think you can help fix this bug, please check the box below. This lets us know that someone wants to work on it.
+        If you check this box, please send a Pull Request within 7 days of a maintainer's approval so we can delegate this task.
+      options:
+        - label: I would be willing to help fix this bug myself.
+
+  - type: checkboxes
     id: terms
     attributes:
       label: Code of Conduct
