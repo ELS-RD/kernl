@@ -37,7 +37,7 @@ def get_pytorch_activation(activation: str) -> Callable:
         raise ValueError(f"Unknown activation: {activation}")
 
 
-implementations = {
+forward_implementations = {
     "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
         torch.nn.functional.linear(x, weight, bias)
     ),
@@ -57,7 +57,7 @@ implementations = {
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
 @pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
 @pytest.mark.parametrize("implementation", ["triton", "pytorch"])
-def test_benchmark(
+def test_benchmark_linear_forward(
     benchmark,
     implementation: str,
     cuda_graphs: bool,
@@ -88,7 +88,7 @@ def test_benchmark(
         layer_bias = layer_bias.to(dtype=dtype)
     x = x.to(dtype=dtype)
 
-    fn = implementations[implementation](layer_weight, layer_bias, activation)
+    fn = forward_implementations[implementation](layer_weight, layer_bias, activation)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
