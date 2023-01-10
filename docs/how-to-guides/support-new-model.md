@@ -18,11 +18,13 @@ This backend combines two steps:
 - First one is to apply the graph replacements
 - Second one is to use [CUDA graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/)
 
-We won't elaborate the second step and focus on the first one that actually does the graph replacements.
+The second step eliminates most of the CPU overhead but we won't elaborate on this and focus on the first one that does the graph replacements.
+
+
 ### Inspecting the FX Graph
 
-First of all, a few words about [Torch FX](https://pytorch.org/docs/1.13/fx.html).
-Torch FX is a torch module to module transformation toolkit. It can trace a torch module (or a function) execution. All the operation are then recorded into a list of nodes that are represented as an FX Graph. From this graph, Torch FX generates python code matching the graph's semantic. Both graph and python code are accessible from the Torch FX GraphModule, which is also a torch module instance. Torch FX allows us to play with FX graphs but stay at the torch module level.
+First, a few words about [Torch FX](https://pytorch.org/docs/1.13/fx.html).
+Torch FX is a torch module to module transformation toolkit. It can trace a torch module (or a function) execution. All the operations are then recorded into a list of nodes that are represented as an FX Graph. From this graph, Torch FX generates python code matching the graph's semantics. Both graph and python code are accessible from the Torch FX GraphModule, which is also a torch module instance. Torch FX allows us to play with FX graphs but stay at the torch module level.
 
 <figure markdown>
   ![Torch FX](torchfx.drawio.svg){ lazyload=true }
@@ -31,7 +33,7 @@ Torch FX is a torch module to module transformation toolkit. It can trace a torc
 
 With a FX GraphModule, we can inspect both the FX Graph and the generated code, with `.graph` and `.code` respectively. For better readability, one may want to use `#!python graph_report(gm)` that print the FX Graph in a tabular way (similarly to [Torch FX `print_tabular` method](https://pytorch.org/docs/1.13/fx.html#torch.fx.Graph.print_tabular)).
 
-`#!python graph_report(gm)` list all the operations during the execution. Each line correspond to a node from the FX Graph with the given information:
+`#!python graph_report(gm)` lists all the operations during the execution. Each line corresponds to a node from the FX Graph with the given information:
 
 - `opcode` is the kind of operation
 - `name` is the node name, usually the operation name
@@ -76,7 +78,7 @@ name    target_type
 linear  Linear(in_features=4, out_features=5, bias=True)
 ```
 
-We can see here every operations listed in computation order, from getting the forward function parameter to returning the output. One more useful thing that `graph_report(gm)` does is to print the list of torch modules used in the graph, as in the node list we only have the torch module names and not the actual torch module types.
+We can see here every operation listed in computation order, from getting the forward function parameter to returning the output. One more useful thing that `graph_report(gm)` does is to print the list of torch modules used in the graph, as in the node list we only have the torch module names and not the actual torch module types.
 
 The generated code from this FX Graph is the following:
 
@@ -108,7 +110,7 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
 
 The function takes a graph `gm` and two callables `pattern` and `replacement` that can be either a torch module or a function. It'll convert `pattern` and `replacement` to an FX Graph and try to replace subgraphs from `gm` matching `pattern` with `replacement`.
 
-For example, given this 2-layers perceptron model, we'd like to replace the first layer activation from `tanh`to `reLU`.
+For example, given this 2-layers perceptron model, we'd like to replace the first layer activation from `tanh` to `reLU`.
 
 ``` { .py }
 class FeedForward(torch.nn.Module):
@@ -152,7 +154,7 @@ fc2      Linear(in_features=10, out_features=1, bias=True)
 sigmoid  Sigmoid()
 ```
 
-We see that the graph is straightforward sequence of operations. To replace the first layer and its activation function, we just need to match the highlighted subgraph. To achieve that we create a simple torch module with a linear module and the tanh activation function.
+We see that the graph is a straightforward sequence of operations. To replace the first layer and its activation function, we just need to match the highlighted subgraph. To achieve that we create a simple torch module with a linear module and the tanh activation function.
 
 ``` { .py }
 class Pattern(torch.nn.Module):
@@ -183,9 +185,9 @@ linear      Linear(in_features=1, out_features=1, bias=True)
 activation  Tanh()
 ```
 
-We don't need the node names to be the same as the ones in the graph we want to match, what's is important is that we match the same node pattern.
+We don't need the node names to be the same as the ones in the graph we want to match, what is important is that we match the same node pattern.
 
-We may now write our replacement subgraph with the ReLU activation function and display it's FX Graph.
+We may now write our replacement subgraph with the ReLU activation function and display its FX Graph.
 
 ``` { .py }
 class Replacement(torch.nn.Module):
@@ -214,9 +216,9 @@ linear  Linear(in_features=1, out_features=1, bias=True)
 relu    ReLU()
 ```
 
-Unlike the matching pattern, we must be a bit cautious of the node names in the replacement pattern. If we want to reuse the nodes matched in the graph, we have to use the same node names as in the pattern. Otherway it'll create a new node in the graph. In our example, the `linear` and the `v` node are kept from the node matched in the original graph but the `relu` node is added to the graph.
+Unlike the matching pattern, we must be a bit cautious of the node names in the replacement pattern. If we want to reuse the nodes matched in the graph, we must use the same node names as in the pattern. Otherwise, it'll create a new node in the graph. In our example, the `linear` and the `v` node are kept from the node matched in the original graph but the `relu` node is added to the graph.
 
-Finally, we can apply the replacement and look a the resulting FX Graph:
+Finally, we can apply the replacement and look at the resulting FX Graph:
 
 ``` { .py }
 replace_pattern(gm, Pattern(), Replacement())
@@ -242,13 +244,13 @@ fc2      Linear(in_features=10, out_features=1, bias=True)
 sigmoid  Sigmoid()
 ```
 
-The resulting graph have switched from `tanh` activation to `reLU`, the `fc1` node have been kept untouched.
+The resulting graph has switched from `tanh` activation to `reLU`, the `fc1` node has been kept untouched.
 
 When we don't need to match a call to a torch submodule, it's easier to write pattern and a replacement as functions, as we'll see in [our example with BERT attention].
 
   [our example with BERT attention]: #example-replacing-bert-attention
 
-There is some limitations with the subgraph rewriting. When we use a function not covered by Torch FX, we'll have to use [Torch wrap function](https://pytorch.org/docs/1.13/fx.html#non-torch-functions) in order to appears in the FX Graph but not to be traced.
+There are some limitations with subgraph rewriting. When we use a function not covered by Torch FX, we'll have to use [Torch wrap function](https://pytorch.org/docs/1.13/fx.html#non-torch-functions) in order to appear in the FX Graph but not to be traced.
 
 ``` { .py }
 torch.fx.wrap(fn)
@@ -260,7 +262,7 @@ In this example, we'll see how to replace the attention part of a BERT model wit
 
 ### Understanding Attention
 
-First of all, we need to look how attention actually works, the [original paper](https://arxiv.org/abs/1706.03762) "Attention Is All You Need" is a good starting point. More specifically, we'll focus on the Attention part where the attention function is defined:
+First, we need to look how attention works, the [original paper](https://arxiv.org/abs/1706.03762) "Attention Is All You Need" is a good starting point. More specifically, we'll focus on the Attention part where the attention function is defined:
 
 !!! quote "Attention Is All You Need"
     An attention function can be described as mapping a query and a set of key-value pairs to an output,
@@ -271,11 +273,11 @@ First of all, we need to look how attention actually works, the [original paper]
     (...)
 
 	We call our particular attention "Scaled Dot-Product Attention". The input consists of
-	queries and keys of dimension $d_k$, and values of dimension $d_v$ . We compute the dot products of the
+	queries and keys of dimension $d_k$, and values of dimension $d_v$. We compute the dot products of the
     query with all keys, divide each by $\sqrt{d_k}$, and apply a softmax function to obtain the weights on the
     values.
     In practice, we compute the attention function on a set of queries simultaneously, packed together
-    into a matrix $Q$. The keys and values are also packed together into matrices $K$ and $V$ . We compute
+    into a matrix $Q$. The keys and values are also packed together into matrices $K$ and $V$. We compute
     the matrix of outputs as:
 
     $$
@@ -434,7 +436,7 @@ For our example, we'll replace the attention part from the "bert-base-uncased" p
     3.  $\operatorname{softmax}(\frac{QK^T}{\sqrt{d_k}})$
     4.  $\operatorname{softmax}(\frac{QK^T}{\sqrt{d_k}})V$
 
-We see that the Hugging Face implementation is close to the definition from the paper, we can actually want to find the attention pattern in this model.
+We see that the Hugging Face implementation is close to the definition from the paper, we want to find the attention pattern in this model.
 
 To begin, we'll write a short script running the model with a dummy input:
 
@@ -458,7 +460,7 @@ with torch.inference_mode(), torch.cuda.amp.autocast(enabled=True, dtype=torch.f
     output = model(**inputs)
 ```
 
-If we run `#!python graph_report(gm)` and `#!python gm.code` in the `#!python dynamo_backend_ofi(gm)` function, we can print the FX Graph and the python code from the model computation. For our example, we'll keep the `normalize_operators` and the `remove_dropout` functions as it simplifies a bit the model's graph.
+If we run `#!python graph_report(gm)` and `#!python gm.code` in the `#!python dynamo_backend_ofi(gm)` function in the Kernl library, we can print the FX Graph and the python code from the model computation. For our example, we'll keep the `normalize_operators` and the `remove_dropout` functions as it simplifies the model's graph a bit.
 
 ``` { .py }
 def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
@@ -597,7 +599,7 @@ def pattern(q, k, attention_mask, v):
 
 ### Replace the Attention part
 
-We now needs to add our replace function to call the optimized kernel. We can see in [kernl/model_optimization.py](https://github.com/ELS-RD/kernl/blob/v0.1.0/src/kernl/implementations/attention.py#L483) the optimized attention kernel needs in addition to `q`, `k`, `v` and `attention_mask`, the `output` and the `sm_scale` parameter.
+We now need to add our replace function to call the optimized kernel. We can see in [kernl/model_optimization.py](https://github.com/ELS-RD/kernl/blob/v0.1.0/src/kernl/implementations/attention.py#L483) the optimized attention kernel needs in addition to `q`, `k`, `v` and `attention_mask`, the `output` and the `sm_scale` parameter.
 
 ``` { .py }
 def attention_forward(
@@ -669,7 +671,7 @@ def dynamo_backend_ofi(gm: torch.fx.GraphModule, assume_causal=False):
     return gm
 ```
 
-If we print again the FX Graph after the graph replacement, we see that's all the previous nodes from the attention part is now replaced by the call to the optimized kernel.
+If we print again the FX Graph after the graph replacement, we see that's all the previous nodes from the attention part are now replaced by the call to the optimized kernel.
 
 === "Attention in BERT FX Graph"
 
