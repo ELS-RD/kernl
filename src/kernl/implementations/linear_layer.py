@@ -458,12 +458,12 @@ class LinearLayer(torch.autograd.Function):
             M // 32,  # key for triton cache (limit number of compilations)
             N // 32,
             K // 32,
-            stride_cm=grad_input.stride(0),  # strides
-            # stride_cn=grad_input.stride(1),
-            stride_am=grad_output_reshaped.stride(0),
-            stride_ak=grad_output_reshaped.stride(1),
-            stride_bk=weight.stride(0),
-            stride_bn=weight.stride(1),
+            stride_om=grad_input.stride(0),  # strides
+            stride_on=grad_input.stride(1),
+            stride_im=grad_output_reshaped.stride(0),
+            stride_ik=grad_output_reshaped.stride(1),
+            stride_wn=weight.stride(0),
+            stride_wk=weight.stride(1),
             ACTIVATION=activation,  # optional fused activation
             GROUP_M=8,  # speed optimization: group the programs
         )
