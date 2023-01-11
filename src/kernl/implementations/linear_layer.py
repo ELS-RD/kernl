@@ -138,7 +138,6 @@ def kernel_fma(
     This kernel will consolidate over K
     """
 
-    assert ACTIVATION in ["", "tanh", "gelu", "fast_gelu", "relu"], f"{ACTIVATION} is not supported"
     pid = tl.program_id(axis=0)
 
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
@@ -268,7 +267,6 @@ def kernel_bwd(
     EVEN_K: tl.constexpr,
     ACTIVATION: tl.constexpr,
 ):
-    assert ACTIVATION in ["", "tanh", "gelu", "fast_gelu", "relu"], f"{ACTIVATION} is not supported"
     pid = tl.program_id(axis=0)
 
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
@@ -398,7 +396,7 @@ class LinearLayer(torch.autograd.Function):
 
         outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
         ctx.save_for_backward(weight, bias, x)
-        return tuple[outputs, act_inputs]
+        return outputs, act_inputs
 
     @staticmethod
     @custom_bwd

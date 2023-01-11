@@ -50,7 +50,6 @@ forward_implementations = {
 @set_seed()
 @pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
 @pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
-@pytest.mark.parametrize("act_inputs", [True, False], ids=["with_act_inputs", "no_act_inputs"])
 @pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
 @pytest.mark.parametrize(
     "shape",
@@ -69,7 +68,6 @@ def test_benchmark_linear_forward(
     bias: bool,
     activation: str,
     contiguous: bool,
-    act_inputs: bool,
 ):
     batch, M, N, K = shape
 
@@ -83,7 +81,6 @@ def test_benchmark_linear_forward(
     factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
     layer_weight = torch.randn((N, K), **factory_kwargs)
     layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
-    act_inputs = torch.zeros((M, N), **factory_kwargs) if act_inputs else None
     pytorch_layer_activation = get_pytorch_activation(activation)
     expected = pytorch_layer_activation(torch.nn.functional.linear(x, layer_weight, layer_bias))
 
@@ -91,17 +88,15 @@ def test_benchmark_linear_forward(
     layer_weight = layer_weight.to(dtype=dtype)
     if layer_bias is not None:
         layer_bias = layer_bias.to(dtype=dtype)
-    if act_inputs is not None:
-        act_inputs = act_inputs.to(dtype=dtype)
     x = x.to(dtype=dtype)
 
-    fn = forward_implementations[implementation](layer_weight, layer_bias, activation, act_inputs)
+    fn = forward_implementations[implementation](layer_weight, layer_bias, activation, None)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
         fn = lambda tensor: run([tensor])[0]  # noqa: E731
 
-    value = benchmark(fn, x)
+    value = benchmark(fn, x)[0]
 
     assert_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)
 
