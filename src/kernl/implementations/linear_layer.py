@@ -363,6 +363,7 @@ class LinearLayer(torch.autograd.Function):
         assert bias is None or bias.shape[0] == weight.shape[0], "Incompatible dimensions in between weight and bias"
         assert weight.is_contiguous()
 
+        ctx.activation = activation
         M, K = x_.shape
         N, K = weight.shape
 
@@ -397,15 +398,13 @@ class LinearLayer(torch.autograd.Function):
 
         outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
         ctx.save_for_backward(weight, bias, x)
-        return outputs
+        return tuple[outputs, act_inputs]
 
     @staticmethod
     @custom_bwd
     def backward(
         ctx: FunctionCtx,
         grad_outputs: torch.Tensor,
-        weight: torch.Tensor,
-        activation: str = "id",
         act_inputs: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
@@ -413,13 +412,11 @@ class LinearLayer(torch.autograd.Function):
         This wrapper kicks the `kernel_fwd` Triton kernel
         :param ctx: context for autograd
         :param grad_outputs: input tensor
-        :param weight: weight matrix
         :param activation: Activation name. Needs to be a Triton kernel.
         :param act_inputs: an optional tensor to save the activation inputs (for backward)
         :return: result tensor
         """
-        assert activation in ["", "id", "gelu", "gelu_approx", "squared_relu"]
-
+        weight, bias, x = ctx.saved_tensors
         batch_shape, n = grad_outputs.shape[:-1], grad_outputs.shape[-1]
         batch_dim = batch_shape.numel()
         grad_output_reshaped = grad_outputs.reshape(batch_dim, n)
@@ -435,7 +432,7 @@ class LinearLayer(torch.autograd.Function):
         assert (
             grad_output_reshaped.shape[1] == weight.shape[0]
         ), f"Incompatible dimensions: {grad_output_reshaped.shape} - {weight.shape}"
-        if activation != "id":
+        if ctx.activation != "id":
             assert act_inputs is not None, f"act_input is required for activation {activation}"
 
         # M, N, K in bwd are different from M, N, K in fwd
@@ -464,7 +461,7 @@ class LinearLayer(torch.autograd.Function):
             stride_ik=grad_output_reshaped.stride(1),
             stride_wn=weight.stride(0),
             stride_wk=weight.stride(1),
-            ACTIVATION=activation,  # optional fused activation
+            ACTIVATION=ctx.activation,  # optional fused activation
             GROUP_M=8,  # speed optimization: group the programs
         )
 
