@@ -111,52 +111,52 @@ def _fwd_part_1(
     BLOCK_N_SIZE: tl.constexpr,
 ):
     # Index of the block on M axis (M axis is the rows of matrix K)
-    n_block_idx = tl.program_id(0)
-    m_block_idx = tl.program_id(1)
+    block_n_idx = tl.program_id(0)
+    block_m_idx = tl.program_id(1)
     head_idx = tl.program_id(2)
 
     # offsets
-    range_offs_m = tl.arange(0, BLOCK_M_SIZE)  # first block on M dimension
-    range_offs_n = tl.arange(0, BLOCK_N_SIZE)  # first block on N dimension
-    range_offs_d = tl.arange(0, BLOCK_DHEAD_SIZE)  # full head
+    m_range_offs = tl.arange(0, BLOCK_M_SIZE)  # first block on M dimension
+    n_range_offs = tl.arange(0, BLOCK_N_SIZE)  # first block on N dimension
+    d_range_offs = tl.arange(0, BLOCK_DHEAD_SIZE)  # full head
 
-    m_offs = m_block_idx * BLOCK_M_SIZE + range_offs_m  # rows offsets on M axis
+    m_offs = block_m_idx * BLOCK_M_SIZE + m_range_offs  # rows offsets on M axis
 
     current_batch_idx = head_idx // head_size
     current_head_idx = head_idx % head_size
     # memory offsets matrices on whole Q, K, V matrices
     # Offsets for the current block on matrix Q
-    offs_q = (
+    q_offs = (
         current_batch_idx * q_batch_stride
         + current_head_idx * q_head_stride
-        + (m_offs[:, None] * q_m_stride + range_offs_d[None, :] * q_k_stride)
+        + (m_offs[:, None] * q_m_stride + d_range_offs[None, :] * q_k_stride)
     )
 
     # Offsets for the first block on matrix K
-    offs_k = (
+    k_offs = (
         current_batch_idx * k_batch_stride
         + current_head_idx * k_head_stride
-        + (range_offs_n[:, None] * k_n_stride + range_offs_d[None, :] * k_k_stride)
+        + (n_range_offs[:, None] * k_n_stride + d_range_offs[None, :] * k_k_stride)
     )
 
     # Offsets for the first block on matrix V
-    offs_v = (
+    v_offs = (
         current_batch_idx * v_batch_stride
         + current_head_idx * v_head_stride
-        + (range_offs_n[:, None] * v_k_stride + range_offs_d[None, :] * v_n_stride)
+        + (n_range_offs[:, None] * v_k_stride + d_range_offs[None, :] * v_n_stride)
     )
 
     # pointers to blocks in Q, K, V
-    ptrs_q = q_ptr + offs_q
-    ptrs_k = k_ptr + offs_k
-    ptrs_v = v_ptr + offs_v
+    q_ptrs = q_ptr + q_offs
+    k_ptrs = k_ptr + k_offs
+    v_ptrs = v_ptr + v_offs
 
     # load q, a block of full rows of matrix q
     # it will stay in SRAM throughout
     if M_LOAD_MASK_NEEDED:
-        q = tl.load(ptrs_q, mask=m_offs[:, None] < m_size, eviction_policy="", other=0.0)
+        q = tl.load(q_ptrs, mask=m_offs[:, None] < m_size, eviction_policy="", other=0.0)
     else:
-        q = tl.load(ptrs_q, eviction_policy="")
+        q = tl.load(q_ptrs, eviction_policy="")
 
     if HAS_MASK:
         attention_mask_batch_idx = (current_batch_idx,)
@@ -172,23 +172,23 @@ def _fwd_part_1(
             + attention_mask_head_idx * attention_mask_head_stride
         )
 
-    block_n_start_idx = n_block_idx * BLOCK_N_SIZE
-    block_n_offs = block_n_start_idx + range_offs_n
+    block_n_start_idx = block_n_idx * BLOCK_N_SIZE
+    block_n_offs = block_n_start_idx + n_range_offs
 
     # We load the current block in K in SRAM
     # We do the first multiplication between the block in Q and the current block in K
     # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
     if N_LOAD_MASK_NEEDED:
         k_ptr_mask = block_n_offs[:, None] < n_size
-        k = tl.load(ptrs_k + block_n_start_idx * k_n_stride, mask=k_ptr_mask, eviction_policy="", other=0.0)
+        k = tl.load(k_ptrs + block_n_start_idx * k_n_stride, mask=k_ptr_mask, eviction_policy="", other=0.0)
     else:
-        k = tl.load(ptrs_k + block_n_start_idx * k_n_stride, eviction_policy="")
+        k = tl.load(k_ptrs + block_n_start_idx * k_n_stride, eviction_policy="")
 
     qk = tl.zeros((BLOCK_M_SIZE, BLOCK_N_SIZE), dtype=tl.float32)
 
     # required to fix a Triton compiler bug, if not done, there is a precision issue
     if N_LOAD_MASK_NEEDED:
-        qk = tl.where(range_offs_n[None, :] < n_size, qk, float("-inf"))
+        qk = tl.where(n_range_offs[None, :] < n_size, qk, float("-inf"))
     qk += tl.dot(q, k, trans_b=True)
     qk *= sm_scale
     if IS_CAUSAL:
@@ -233,7 +233,7 @@ def _fwd_part_1(
     maximums_offs = (
         current_batch_idx * maximums_batch_stride
         + current_head_idx * maximums_head_stride
-        + n_block_idx * maximums_step_stride
+        + block_n_idx * maximums_step_stride
         + m_offs * maximums_m_stride
     )
     maximums_ptrs = maximums_ptr + maximums_offs
@@ -242,7 +242,7 @@ def _fwd_part_1(
     sums_offs = (
         current_batch_idx * sums_batch_stride
         + current_head_idx * sums_head_stride
-        + n_block_idx * sums_step_stride
+        + block_n_idx * sums_step_stride
         + m_offs * sums_m_stride
     )
     sums_ptrs = sums_ptr + sums_offs
@@ -250,17 +250,17 @@ def _fwd_part_1(
 
     if N_LOAD_MASK_NEEDED:
         v_ptr_mask = block_n_offs[:, None] < n_size  # repeated otherwise triton segfault
-        v = tl.load(ptrs_v + block_n_start_idx * v_k_stride, mask=v_ptr_mask, other=0.0, eviction_policy="evict_first")
+        v = tl.load(v_ptrs + block_n_start_idx * v_k_stride, mask=v_ptr_mask, other=0.0, eviction_policy="evict_first")
     else:
-        v = tl.load(ptrs_v + block_n_start_idx * v_k_stride, eviction_policy="evict_first")
+        v = tl.load(v_ptrs + block_n_start_idx * v_k_stride, eviction_policy="evict_first")
 
     result = tl.dot(numerators.to(q_ptr.dtype.element_ty), v)
 
     output_offs = (
         current_batch_idx * output_batch_stride
         + current_head_idx * output_head_stride
-        + n_block_idx * output_step_stride
-        + (m_offs[:, None] * output_m_stride + range_offs_d[None, :] * output_n_stride)
+        + block_n_idx * output_step_stride
+        + (m_offs[:, None] * output_m_stride + d_range_offs[None, :] * output_n_stride)
     )
 
     output_ptrs = output_ptr + output_offs

@@ -45,7 +45,7 @@ def vec_mat(
     VEC_COL_ROUNDED_SIZE: tl.constexpr,
     N_SIZE: tl.constexpr,
 ):
-    n_block_idx = tl.program_id(0)
+    block_n_idx = tl.program_id(0)
     head_idx = tl.program_id(1)
     batch_idx = tl.program_id(2)
 
@@ -71,10 +71,10 @@ def vec_mat(
         batch_idx * matrix_batch_stride
         + head_idx * matrix_head_stride
         + vec_col_rounded_range_offs[:, None] * matrix_row_stride  # cols
-        + (n_block_idx * N_SIZE + n_range_offs)[None, :] * matrix_col_stride  # rows
+        + (block_n_idx * N_SIZE + n_range_offs)[None, :] * matrix_col_stride  # rows
     )
     matrix_ptr_mask = (vec_col_rounded_range_offs[:, None] < matrix_row_size) & (
-        (n_block_idx * N_SIZE + n_range_offs)[None, :] < matrix_col_size
+        (block_n_idx * N_SIZE + n_range_offs)[None, :] < matrix_col_size
     )
     matrix = tl.load(pointer=matrix_ptrs, mask=matrix_ptr_mask, other=0.0).to(tl.float32)
 
@@ -84,9 +84,9 @@ def vec_mat(
     output_ptrs = output_ptr + (
         batch_idx * output_batch_stride
         + head_idx * output_head_stride
-        + (n_block_idx * N_SIZE + n_range_offs) * output_col_stride
+        + (block_n_idx * N_SIZE + n_range_offs) * output_col_stride
     )
-    output_ptr_mask = (n_block_idx * N_SIZE + n_range_offs) < output_col_size
+    output_ptr_mask = (block_n_idx * N_SIZE + n_range_offs) < output_col_size
     tl.store(pointer=output_ptrs, value=result, mask=output_ptr_mask, eviction_policy="evict_first")
 
 

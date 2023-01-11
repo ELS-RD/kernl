@@ -69,11 +69,11 @@ def layer_norm_xformers(
     output_col_stride,
     a_row_stride,
     a_col_stride,
-    N,
+    N_SIZE,
     eps,
     HAS_BIAS: tl.constexpr,  # not used, just to make the signature similar to single pass
     IS_RMSNORM: tl.constexpr,  # not used, just to make the signature similar to single pass
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK_N_SIZE: tl.constexpr,
 ):
     """
     LayerNorm forward pass for a single feature.
@@ -85,8 +85,8 @@ def layer_norm_xformers(
     """
 
     row = tl.program_id(0)
-    cols = tl.arange(0, BLOCK_SIZE)
-    mask = cols < N
+    cols = tl.arange(0, BLOCK_N_SIZE)
+    mask = cols < N_SIZE
 
     x_ptrs = a_ptr + row * a_row_stride + cols * a_col_stride
 
@@ -95,11 +95,11 @@ def layer_norm_xformers(
     b = tl.load(bias_ptr + cols, mask=mask, other=0.0)
 
     # Compute mean and variance
-    mean = tl.sum(x, axis=0) / N
+    mean = tl.sum(x, axis=0) / N_SIZE
     x_zm = tl.where(mask, x - mean, 0.0)
     tl.store(mean_ptr + row, mean)
 
-    x_var = tl.sum(x_zm * x_zm, axis=0) / N
+    x_var = tl.sum(x_zm * x_zm, axis=0) / N_SIZE
     rstd = 1.0 / tl.sqrt(x_var + eps)
 
     # Normalize
@@ -123,11 +123,11 @@ def _layer_norm_fwd_fused_single_pass(
     output_col_stride,
     a_row_stride,
     a_col_stride,
-    N,
+    N_SIZE,
     eps,
     HAS_BIAS: tl.constexpr,
     IS_RMSNORM: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK_N_SIZE: tl.constexpr,
 ):
     """
     Layernorm based on Welford's variance computation algorithm.
@@ -141,26 +141,26 @@ def _layer_norm_fwd_fused_single_pass(
     :param mean_ptr: save mean tensor for backward
     :param rstd_ptr: save standard deviation tensor for backward
     :param a_row_stride: stride of the input tensor
-    :param N: number of elements per row in the input tensor
+    :param N_SIZE: number of elements per row in the input tensor
     :param eps: epsilon value to avoid division by zero
     :param HAS_BIAS: whether the bias is provided
     :param IS_RMSNORM: whether the normalization is rmsnorm (False == layernorm)
-    :param BLOCK_SIZE: number of threads per block
+    :param BLOCK_N_SIZE: number of threads per block
     :return: None
     """
     # position of elements processed by this program
     row_idx = tl.program_id(0)
 
     a_row_off = row_idx * a_row_stride
-    block_range_offs = tl.arange(0, BLOCK_SIZE)
+    block_range_offs = tl.arange(0, BLOCK_N_SIZE)
     # compute mean
     mean = 0.0
     var = 0.0
-    for block_n_start_idx in range(0, N, BLOCK_SIZE):
-        n_end_off = min((block_n_start_idx + BLOCK_SIZE), N)
+    for block_n_start_idx in range(0, N_SIZE, BLOCK_N_SIZE):
+        n_end_off = min((block_n_start_idx + BLOCK_N_SIZE), N_SIZE)
         block_cols_count = n_end_off - block_n_start_idx
         col_offs = block_n_start_idx + block_range_offs
-        a_ptr_mask = col_offs < N
+        a_ptr_mask = col_offs < N_SIZE
         # eviction policy below have little impact now because of new implementation. Kept as is.
         # float32 is used to avoid overflow because of the square operation
         a = tl.load(
@@ -179,7 +179,7 @@ def _layer_norm_fwd_fused_single_pass(
             mean += tl.sum((a - mean) * a_ptr_mask, axis=0) / n_end_off
             var += block_delta + delta_mean_sqr * (block_n_start_idx * block_cols_count) / n_end_off
 
-    var /= N
+    var /= N_SIZE
     rstd = 1 / tl.sqrt(var + eps)
 
     # write-back mean/rstd for backward pass
@@ -187,9 +187,9 @@ def _layer_norm_fwd_fused_single_pass(
     tl.store(rstd_ptr + row_idx, rstd)
 
     # multiply by weight and add bias
-    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+    for block_n_start_idx in range(0, N_SIZE, BLOCK_N_SIZE):
         col_offs = block_n_start_idx + block_range_offs
-        a_ptr_mask = col_offs < N
+        a_ptr_mask = col_offs < N_SIZE
         weight = tl.load(weight_ptr + col_offs, mask=a_ptr_mask)
 
         # eviction policy helps to keep weights in cache (reused by other threads)
@@ -217,11 +217,11 @@ def _layer_norm_fwd_fused_multi_pass(
     output_col_stride,
     a_row_stride,
     a_col_stride,
-    N,
+    N_SIZE,
     eps,
     IS_RMSNORM: tl.constexpr,  # not used, just to have the same signature than the single pass
     HAS_BIAS: tl.constexpr,  # not used, just to have the same signature than the single pass
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK_N_SIZE: tl.constexpr,
 ):
     """
     Implementation from triton tutorial:
@@ -232,28 +232,28 @@ def _layer_norm_fwd_fused_multi_pass(
     # position of elements processed by this program
     row_idx = tl.program_id(0)
     row_off = row_idx * a_row_stride
-    block_range_offs = tl.arange(0, BLOCK_SIZE)
+    block_range_offs = tl.arange(0, BLOCK_N_SIZE)
 
     # compute mean
-    mean_acc = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
-    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+    mean_acc = tl.zeros((BLOCK_N_SIZE,), dtype=tl.float32)
+    for block_n_start_idx in range(0, N_SIZE, BLOCK_N_SIZE):
         cols_offs = block_n_start_idx + block_range_offs
         a = tl.load(
-            a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last"
+            a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N_SIZE, other=0.0, eviction_policy="evict_last"
         ).to(tl.float32)
         mean_acc += a
-    mean = tl.sum(mean_acc, axis=0) / N
+    mean = tl.sum(mean_acc, axis=0) / N_SIZE
 
     # compute variance
-    var_acc = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
-    for block_n_start_idx in range(0, N, BLOCK_SIZE):
+    var_acc = tl.zeros((BLOCK_N_SIZE,), dtype=tl.float32)
+    for block_n_start_idx in range(0, N_SIZE, BLOCK_N_SIZE):
         cols_offs = block_n_start_idx + block_range_offs
         a = tl.load(
-            a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N, other=0.0, eviction_policy="evict_last"
+            a_ptr + row_off + cols_offs * a_col_stride, mask=cols_offs < N_SIZE, other=0.0, eviction_policy="evict_last"
         ).to(tl.float32)
-        a = tl.where(cols_offs < N, a - mean, 0.0)
+        a = tl.where(cols_offs < N_SIZE, a - mean, 0.0)
         var_acc += a * a
-    var = tl.sum(var_acc, axis=0) / N
+    var = tl.sum(var_acc, axis=0) / N_SIZE
 
     rstd = 1 / tl.sqrt(var + eps)
 
@@ -262,9 +262,9 @@ def _layer_norm_fwd_fused_multi_pass(
     tl.store(rstd_ptr + row_idx, rstd)
 
     # multiply by weight and add bias
-    for block_n_start_idx in range(0, N, BLOCK_SIZE):
-        cols_offs = block_n_start_idx + tl.arange(0, BLOCK_SIZE)
-        mask_ptr = cols_offs < N
+    for block_n_start_idx in range(0, N_SIZE, BLOCK_N_SIZE):
+        cols_offs = block_n_start_idx + tl.arange(0, BLOCK_N_SIZE)
+        mask_ptr = cols_offs < N_SIZE
         weight = tl.load(weight_ptr + cols_offs, mask=mask_ptr)
         bias = tl.load(bias_ptr + cols_offs, mask=mask_ptr)
         a = tl.load(
@@ -322,11 +322,11 @@ class LayerNorm(torch.autograd.Function):
             output_col_stride=out.stride(-1),
             a_row_stride=a_arg.stride(0),
             a_col_stride=a_arg.stride(1),
-            N=N,
+            N_SIZE=N,
             eps=eps,
             HAS_BIAS=bias is not None,
             IS_RMSNORM=use_rms_norm,
-            BLOCK_SIZE=BLOCK_SIZE,
+            BLOCK_N_SIZE=BLOCK_SIZE,
             num_warps=num_warps,
         )
         ctx.save_for_backward(x, mean, std, weight)

@@ -8,7 +8,7 @@ We prefer suffixes to prefixes because
 Suffixes list:
 - `_idx` integer representing an index
 - `_size` integer representing a size
-- `_off` integer reoresenting an offset
+- `_off` integer representing an offset
 - `_offs` vector or matrix of integers to be used as offset for pointers
 - `_ptrs` vector or matrix of pointers
 - `_ptr` single pointer
@@ -21,7 +21,7 @@ Suffixes list:
 ## Dimension naming
 - Dimension is singular
 - If dimension follows variable name from a formula. You can use this name. Example MNK for matmul
-- Use `col` or `row` singular if you don't have a new for the last two dimensions
+- Use `col` or `row` singular if you don't have a name for the last two dimensions
 
 ## Tensor Stride naming
 `p_d_stride`

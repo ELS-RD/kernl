@@ -145,14 +145,14 @@ def kernel_fma(
     width = GROUP_M * grid_n
     group_idx = program_idx // width
     group_size = min(grid_m - group_idx * GROUP_M, GROUP_M)
-    m_block_idx = group_idx * GROUP_M + (program_idx % group_size)
-    n_block_idx = (program_idx % width) // group_size
+    block_m_idx = group_idx * GROUP_M + (program_idx % group_size)
+    block_n_idx = (program_idx % width) // group_size
 
     # now compute the block that each program will go through
     # m_offs (resp. n_offs) denotes a range of indices
     # for rows (resp. col) of C
-    m_offs_untagged = m_block_idx * BLOCK_M + tl.arange(0, BLOCK_M)
-    n_offs_untagged = n_block_idx * BLOCK_N + tl.arange(0, BLOCK_N)
+    m_offs_untagged = block_m_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+    n_offs_untagged = block_n_idx * BLOCK_N + tl.arange(0, BLOCK_N)
 
     # trick to avoid masking on M and N axis byt tagging variables
     m_offs = tl.max_contiguous(tl.multiple_of(m_offs_untagged % M, BLOCK_M), BLOCK_M)
