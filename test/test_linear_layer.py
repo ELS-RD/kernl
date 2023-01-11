@@ -21,7 +21,7 @@ import torch
 from conftest import assert_all_close, set_seed
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
-from kernl.implementations.linear_layer import linear_layer_bwd, linear_layer_fwd
+from kernl.implementations.linear_layer import linear_layer
 
 
 def get_pytorch_activation(activation: str) -> Callable:
@@ -41,7 +41,7 @@ forward_implementations = {
     "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
         torch.nn.functional.linear(x, weight, bias)
     ),
-    "triton": lambda weight, bias, activation, act_inputs: lambda x: linear_layer_fwd(
+    "triton": lambda weight, bias, activation, act_inputs: lambda x: linear_layer(
         x, weight, bias, activation, act_inputs
     ),
 }
@@ -110,9 +110,9 @@ backward_implementations = {
     "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
         torch.nn.functional.linear(x, weight, bias).backward()
     ),
-    "triton": lambda weight, bias, activation, act_inputs: lambda x: linear_layer_bwd(
+    "triton": lambda weight, bias, activation, act_inputs: lambda x: linear_layer(
         x, weight, bias, activation, act_inputs
-    ),
+    ).backward(),
 }
 
 
@@ -151,7 +151,7 @@ def test_benchmark_linear_backward(
     layer_weight = torch.randn((N, K), **factory_kwargs)
     layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
     linear_output = torch.nn.functional.linear(x, layer_weight, layer_bias)
-    expected = linear_output.backward(linear_output, retain_graph=True)
+    linear_output.backward(linear_output, retain_graph=True)
 
     # tensors casting
     layer_weight = layer_weight.to(dtype=dtype)
@@ -166,4 +166,4 @@ def test_benchmark_linear_backward(
 
     value = benchmark(fn, x)
 
-    assert_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)
+    assert_all_close(linear_layer, value.float(), rtol=1e-1, atol=1e-1)
