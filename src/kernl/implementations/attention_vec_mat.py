@@ -9,54 +9,54 @@ from torch.cuda.amp import custom_fwd
 
 @triton.autotune(
     configs=[
-        triton.Config({"SIZE_N": 64}, num_warps=1, num_stages=1),
-        triton.Config({"SIZE_N": 32}, num_warps=1, num_stages=1),
-        triton.Config({"SIZE_N": 16}, num_warps=1, num_stages=1),
-        triton.Config({"SIZE_N": 8}, num_warps=1, num_stages=1),
-        triton.Config({"SIZE_N": 4}, num_warps=1, num_stages=1),
-        triton.Config({"SIZE_N": 2}, num_warps=1, num_stages=1),
-        triton.Config({"SIZE_N": 1}, num_warps=1, num_stages=1),
+        triton.Config({"N_SIZE": 64}, num_warps=1, num_stages=1),
+        triton.Config({"N_SIZE": 32}, num_warps=1, num_stages=1),
+        triton.Config({"N_SIZE": 16}, num_warps=1, num_stages=1),
+        triton.Config({"N_SIZE": 8}, num_warps=1, num_stages=1),
+        triton.Config({"N_SIZE": 4}, num_warps=1, num_stages=1),
+        triton.Config({"N_SIZE": 2}, num_warps=1, num_stages=1),
+        triton.Config({"N_SIZE": 1}, num_warps=1, num_stages=1),
     ],
-    key=["size_vec_cols", "size_mat_rows", "size_mat_cols", "size_out_cols"],
+    key=["vec_col_size", "matrix_row_size", "matrix_col_size", "output_col_size"],
 )
 @triton.jit
 def vec_mat(
-    size_vec_cols: tl.constexpr,
-    size_mat_rows: tl.constexpr,
-    size_mat_cols: tl.constexpr,
-    size_out_cols: tl.constexpr,
-    vec_tensor,
-    matrix_tensor,
-    out_tensor,
+    vec_col_size: tl.constexpr,
+    matrix_row_size: tl.constexpr,
+    matrix_col_size: tl.constexpr,
+    output_col_size: tl.constexpr,
+    vec_ptr,
     vec_batch_stride,
-    vec_n_head_stride,
-    vec_rows_stride,
-    vec_cols_stride,
+    vec_head_stride,
+    vec_row_stride,
+    vec_col_stride,
+    matrix_ptr,
     matrix_batch_stride,
-    matrix_n_head_stride,
-    matrix_rows_stride,
-    matrix_cols_stride,
-    out_batch_stride,
-    out_n_head_stride,
-    out_rows_stride,
-    out_cols_stride,
+    matrix_head_stride,
+    matrix_row_stride,
+    matrix_col_stride,
+    output_ptr,
+    output_batch_stride,
+    output_head_stride,
+    output_row_stride,
+    output_col_stride,
     SCALER: tl.constexpr,
     SHOULD_VEC_SOFTMAX: tl.constexpr,
-    VEC_COLS: tl.constexpr,
-    SIZE_N: tl.constexpr,
+    VEC_COL_ROUNDED_SIZE: tl.constexpr,
+    N_SIZE: tl.constexpr,
 ):
-    n_block_idx = tl.program_id(0)
-    n_head_idx = tl.program_id(1)
+    block_n_idx = tl.program_id(0)
+    head_idx = tl.program_id(1)
     batch_idx = tl.program_id(2)
 
-    range_offs_size_n = tl.arange(0, SIZE_N)
-    range_offs_vec = tl.arange(0, VEC_COLS)
+    n_range_offs = tl.arange(0, N_SIZE)
+    vec_col_rounded_range_offs = tl.arange(0, VEC_COL_ROUNDED_SIZE)
 
-    ptrs_vec = vec_tensor + (
-        batch_idx * vec_batch_stride + n_head_idx * vec_n_head_stride + vec_cols_stride * range_offs_vec[:, None]
+    vec_ptrs = vec_ptr + (
+        batch_idx * vec_batch_stride + head_idx * vec_head_stride + vec_col_stride * vec_col_rounded_range_offs[:, None]
     )
-    vec_mask = range_offs_vec[:, None] < size_vec_cols
-    vec = tl.load(pointer=ptrs_vec, mask=vec_mask, other=0.0).to(tl.float32)
+    vec_ptr_mask = vec_col_rounded_range_offs[:, None] < vec_col_size
+    vec = tl.load(pointer=vec_ptrs, mask=vec_ptr_mask, other=0.0).to(tl.float32)
 
     if SCALER != 1.0:
         vec = vec * SCALER
@@ -67,26 +67,27 @@ def vec_mat(
         vec = tl.exp(vec)
         vec = vec / tl.sum(vec, axis=0)[:, None]
 
-    ptrs_matrix = matrix_tensor + (
+    matrix_ptrs = matrix_ptr + (
         batch_idx * matrix_batch_stride
-        + n_head_idx * matrix_n_head_stride
-        + range_offs_vec[:, None] * matrix_rows_stride  # cols
-        + (n_block_idx * SIZE_N + range_offs_size_n)[None, :] * matrix_cols_stride  # rows
+        + head_idx * matrix_head_stride
+        + vec_col_rounded_range_offs[:, None] * matrix_row_stride  # cols
+        + (block_n_idx * N_SIZE + n_range_offs)[None, :] * matrix_col_stride  # rows
     )
-    matrix_mask = (range_offs_vec[:, None] < size_mat_rows) & (
-        (n_block_idx * SIZE_N + range_offs_size_n)[None, :] < size_mat_cols
+    matrix_ptr_mask = (vec_col_rounded_range_offs[:, None] < matrix_row_size) & (
+        (block_n_idx * N_SIZE + n_range_offs)[None, :] < matrix_col_size
     )
-    mat = tl.load(pointer=ptrs_matrix, mask=matrix_mask, other=0.0).to(tl.float32)
-    result = vec * mat
+    matrix = tl.load(pointer=matrix_ptrs, mask=matrix_ptr_mask, other=0.0).to(tl.float32)
+
+    result = vec * matrix
     result = tl.sum(input=result, axis=0)
 
-    ptrs_out = out_tensor + (
-        batch_idx * out_batch_stride
-        + n_head_idx * out_n_head_stride
-        + (n_block_idx * SIZE_N + range_offs_size_n) * out_cols_stride
+    output_ptrs = output_ptr + (
+        batch_idx * output_batch_stride
+        + head_idx * output_head_stride
+        + (block_n_idx * N_SIZE + n_range_offs) * output_col_stride
     )
-    out_mask = (n_block_idx * SIZE_N + range_offs_size_n) < size_out_cols
-    tl.store(pointer=ptrs_out, value=result, mask=out_mask, eviction_policy="evict_first")
+    output_ptr_mask = (block_n_idx * N_SIZE + n_range_offs) < output_col_size
+    tl.store(pointer=output_ptrs, value=result, mask=output_ptr_mask, eviction_policy="evict_first")
 
 
 def vec_mat_wrapper(
@@ -127,7 +128,7 @@ def vec_mat_wrapper(
     assert vec_cols == mat_rows
 
     def grid(args) -> Tuple[int, int, int]:
-        return triton.cdiv(mat_cols, args["SIZE_N"]), heads, batch
+        return triton.cdiv(mat_cols, args["N_SIZE"]), heads, batch
 
     vec_cols_pow_2 = triton.next_power_of_2(vec_cols)
 
@@ -137,10 +138,10 @@ def vec_mat_wrapper(
         mat_cols,
         out_cols,
         vec,
-        matrix,
-        output,
         *vec.stride(),
+        matrix,
         *matrix_stride,
+        output,
         *output.stride(),
         scaler,
         softmax_vec,

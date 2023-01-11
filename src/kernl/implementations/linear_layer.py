@@ -85,7 +85,7 @@ def get_configs_io_bound():
 )
 @triton.heuristics(
     {
-        "EVEN_K": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
+        "K_LOAD_MASK_NEEDED": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
     }
 )
 @triton.jit
@@ -105,12 +105,12 @@ def kernel_fma(
     # The stride variables represent how much to increase the ptr by when moving by 1
     # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
     # by to get the element one row down (A has M rows)
-    stride_om,
-    stride_on,
-    stride_im,
-    stride_ik,
-    stride_wn,
-    stride_wk,
+    output_m_stride,
+    output_n_stride,
+    a_m_stride,
+    a_k_stride,
+    b_n_stride,
+    b_k_stride,
     # Meta-parameters
     BLOCK_M: tl.constexpr,
     GROUP_M: tl.constexpr,
@@ -118,9 +118,9 @@ def kernel_fma(
     BLOCK_K: tl.constexpr,
     # split k not used, not performant with activation, kept because early_config_prune is expecting it
     SPLIT_K: tl.constexpr,
-    EVEN_K: tl.constexpr,
-    BIAS: tl.constexpr,
-    SAVE_ACT_INPUTS: tl.constexpr,
+    K_LOAD_MASK_NEEDED: tl.constexpr,
+    HAS_BIAS: tl.constexpr,
+    SHOULD_SAVE_ACT_INPUTS: tl.constexpr,
     ACTIVATION: tl.constexpr,
 ):
 
@@ -137,52 +137,53 @@ def kernel_fma(
 
     This kernel will consolidate over K
     """
-
-    pid = tl.program_id(axis=0)
+    program_idx = tl.program_id(axis=0)
 
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
     grid_n = (N + BLOCK_N - 1) // BLOCK_N
     # re-order program ID for better L2 performance
     width = GROUP_M * grid_n
-    group_id = pid // width
-    group_size = min(grid_m - group_id * GROUP_M, GROUP_M)
-    pid_m = group_id * GROUP_M + (pid % group_size)
-    pid_n = (pid % width) // (group_size)
+    group_idx = program_idx // width
+    group_size = min(grid_m - group_idx * GROUP_M, GROUP_M)
+    block_m_idx = group_idx * GROUP_M + (program_idx % group_size)
+    block_n_idx = (program_idx % width) // group_size
 
     # now compute the block that each program will go through
-    # rm (resp. rn) denotes a range of indices
+    # m_offs (resp. n_offs) denotes a range of indices
     # for rows (resp. col) of C
-    rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    # trick to avoid masking on M and N axis
-    ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
-    rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
-    rk = tl.arange(0, BLOCK_K)
+    m_offs_untagged = block_m_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+    n_offs_untagged = block_n_idx * BLOCK_N + tl.arange(0, BLOCK_N)
 
-    A = A + (ram[:, None] * stride_im + rk[None, :] * stride_ik)
-    B = B + (rk[:, None] * stride_wk + rbn[None, :] * stride_wn)
+    # trick to avoid masking on M and N axis byt tagging variables
+    m_offs = tl.max_contiguous(tl.multiple_of(m_offs_untagged % M, BLOCK_M), BLOCK_M)
+    n_offs = tl.max_contiguous(tl.multiple_of(n_offs_untagged % N, BLOCK_N), BLOCK_N)
+
+    k_range_offs = tl.arange(0, BLOCK_K)
+
+    A = A + (m_offs[:, None] * a_m_stride + k_range_offs[None, :] * a_k_stride)
+    B = B + (k_range_offs[:, None] * b_k_stride + n_offs[None, :] * b_n_stride)
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
-    if BIAS:
-        bias = tl.load(bias + rn, mask=rn < N, other=0.0).to(tl.float32)
+    if HAS_BIAS:
+        bias = tl.load(bias + n_offs, mask=n_offs < N, other=0.0).to(tl.float32)
         acc += bias[None, :]
 
     for k in range(K, 0, -BLOCK_K):
-        if EVEN_K:
+        if K_LOAD_MASK_NEEDED:
             a = tl.load(A)
             b = tl.load(B)
         else:
-            a = tl.load(A, mask=rk[None, :] < k, other=0.0)
-            b = tl.load(B, mask=rk[:, None] < k, other=0.0)
+            a = tl.load(A, mask=k_range_offs[None, :] < k, other=0.0)
+            b = tl.load(B, mask=k_range_offs[:, None] < k, other=0.0)
         acc += tl.dot(a, b)
 
-        A += BLOCK_K * stride_ik
-        B += BLOCK_K * stride_wk
+        A += BLOCK_K * a_k_stride
+        B += BLOCK_K * b_k_stride
 
     # optional: save the activation inputs
-    if SAVE_ACT_INPUTS:
-        act_in_ptrs = ACT_INPUTS + ram[:, None] * stride_om + rbn[None, :]
+    if SHOULD_SAVE_ACT_INPUTS:
+        act_in_ptrs = ACT_INPUTS + m_offs[:, None] * output_m_stride + n_offs[None, :]
         tl.store(act_in_ptrs, acc)
 
     # optional: fused activation (while the data is in shared memory)
@@ -194,14 +195,11 @@ def kernel_fma(
         acc = activation_func.fast_gelu(acc)
     if ACTIVATION == "relu":
         acc = activation_func.relu(acc)
-    # rematerialize rm and rn to save registers
-    rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
 
     # write back result
-    C = C + rm[:, None] * stride_om + rn[None, :] * stride_on
-    mask = (rm < M)[:, None] & (rn < N)[None, :]
-    tl.store(C, acc, mask=mask)
+    C = C + m_offs[:, None] * output_m_stride + n_offs[None, :] * output_n_stride
+    c_ptr_mask = (m_offs < M)[:, None] & (n_offs < N)[None, :]
+    tl.store(C, acc, mask=c_ptr_mask)
 
 
 class LinearLayer(torch.autograd.Function):
@@ -257,14 +255,14 @@ class LinearLayer(torch.autograd.Function):
             M // 32,  # key for triton cache (limit number of compilations)
             N // 32,
             K // 32,
-            stride_om=outputs.stride(0),  # strides
-            stride_on=outputs.stride(1),
-            stride_im=x_.stride(0),
-            stride_ik=x_.stride(1),
-            stride_wn=weight.stride(0),
-            stride_wk=weight.stride(1),
-            BIAS=bias is not None,  # optional fused bias
-            SAVE_ACT_INPUTS=act_inputs is not None,  # optional save activation inputs
+            output_m_stride=outputs.stride(0),  # strides
+            output_n_stride=outputs.stride(1),
+            a_m_stride=x_.stride(0),
+            a_k_stride=x_.stride(1),
+            b_n_stride=weight.stride(0),
+            b_k_stride=weight.stride(1),
+            HAS_BIAS=bias is not None,  # optional fused bias
+            SHOULD_SAVE_ACT_INPUTS=act_inputs is not None,  # optional save activation inputs
             ACTIVATION=activation if not None else x,  # optional fused activation
             GROUP_M=8,  # speed optimization: group the programs
         )
