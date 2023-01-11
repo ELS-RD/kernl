@@ -330,7 +330,7 @@ def kernel_bwd(
     tl.store(C, acc, mask=mask)
 
 
-class LinearLayer(torch.autograd.Function):
+class LinearLayerFwd(torch.autograd.Function):
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
     def forward(
@@ -398,6 +398,20 @@ class LinearLayer(torch.autograd.Function):
         outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
         ctx.save_for_backward(weight, bias, x)
         return outputs
+
+
+class LinearLayerBwd(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd(cast_inputs=torch.float16)
+    def forward(
+        ctx: FunctionCtx,
+        x: torch.Tensor,
+        weight: torch.Tensor,
+        bias: Optional[torch.Tensor],
+        activation: str,
+        act_inputs: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        LinearLayerFwd.forward(ctx, x, weight, bias, activation, act_inputs)
 
     @staticmethod
     @custom_bwd
@@ -478,13 +492,14 @@ def linear_layer_fwd(
     activation="",
     act_inputs: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    return LinearLayer.forward(x, weight, bias, activation, act_inputs)
+    return LinearLayerFwd.apply(x, weight, bias, activation, act_inputs)
 
 
 def linear_layer_bwd(
     grad_output: torch.Tensor,
     weight: torch.Tensor,
+    bias: Optional[torch.Tensor] = None,
     activation="",
     act_inputs: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    return LinearLayer.backward(grad_output, weight, activation, act_inputs)
+    return LinearLayerBwd.apply(grad_output, weight, bias, activation, act_inputs)

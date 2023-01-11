@@ -21,7 +21,7 @@ import torch
 from conftest import assert_all_close, set_seed
 
 from kernl.implementations.cuda_graph import cuda_graphs_wrapper
-from kernl.implementations.linear_layer import linear_layer_fwd
+from kernl.implementations.linear_layer import linear_layer_bwd, linear_layer_fwd
 
 
 def get_pytorch_activation(activation: str) -> Callable:
@@ -41,13 +41,16 @@ forward_implementations = {
     "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
         torch.nn.functional.linear(x, weight, bias)
     ),
-    "triton": lambda weight, bias, activation: lambda x: linear_layer_fwd(x, weight, bias, activation),
+    "triton": lambda weight, bias, activation, act_inputs: lambda x: linear_layer_fwd(
+        x, weight, bias, activation, act_inputs
+    ),
 }
 
 
 @set_seed()
 @pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
 @pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
+@pytest.mark.parametrize("act_inputs", [True, False], ids=["with_act_inputs", "no_act_inputs"])
 @pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
 @pytest.mark.parametrize(
     "shape",
@@ -66,6 +69,7 @@ def test_benchmark_linear_forward(
     bias: bool,
     activation: str,
     contiguous: bool,
+    act_inputs: bool,
 ):
     batch, M, N, K = shape
 
@@ -79,6 +83,7 @@ def test_benchmark_linear_forward(
     factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
     layer_weight = torch.randn((N, K), **factory_kwargs)
     layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
+    act_inputs = torch.zeros((M, N), **factory_kwargs) if act_inputs else None
     pytorch_layer_activation = get_pytorch_activation(activation)
     expected = pytorch_layer_activation(torch.nn.functional.linear(x, layer_weight, layer_bias))
 
@@ -86,9 +91,74 @@ def test_benchmark_linear_forward(
     layer_weight = layer_weight.to(dtype=dtype)
     if layer_bias is not None:
         layer_bias = layer_bias.to(dtype=dtype)
+    if act_inputs is not None:
+        act_inputs = act_inputs.to(dtype=dtype)
     x = x.to(dtype=dtype)
 
-    fn = forward_implementations[implementation](layer_weight, layer_bias, activation)
+    fn = forward_implementations[implementation](layer_weight, layer_bias, activation, act_inputs)
+    if cuda_graphs:
+        run = cuda_graphs_wrapper(model=fn, inputs=[x])
+        # CUDA graphs wraps output in a tuple
+        fn = lambda tensor: run([tensor])[0]  # noqa: E731
+
+    value = benchmark(fn, x)
+
+    assert_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)
+
+
+backward_implementations = {
+    "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
+        torch.nn.functional.linear(x, weight, bias).backward()
+    ),
+    "triton": lambda weight, bias, activation, act_inputs: lambda x: linear_layer_bwd(
+        x, weight, bias, activation, act_inputs
+    ),
+}
+
+
+@set_seed()
+@pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
+@pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
+@pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
+@pytest.mark.parametrize(
+    "shape",
+    [(1, 8, 8, 8)] + [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
+    ids=lambda s: "x".join(map(str, s)),
+)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
+@pytest.mark.parametrize("cuda_graphs", [False], ids=["no_cuda_graphs"])
+@pytest.mark.parametrize("implementation", ["triton", "pytorch"])
+def test_benchmark_linear_backward(
+    benchmark,
+    implementation: str,
+    cuda_graphs: bool,
+    shape: Tuple[int, int, int, int],
+    dtype: torch.dtype,
+    bias: bool,
+    activation: str,
+    contiguous: bool,
+):
+    batch, M, N, K = shape
+
+    # order of dimensions is wrong so we force contiguous call
+    x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=True)
+    x = x.mT
+    if contiguous:
+        x = x.contiguous()
+    else:
+        assert not x.is_contiguous()
+    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": True}
+    layer_weight = torch.randn((N, K), **factory_kwargs)
+    layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
+    linear_output = torch.nn.functional.linear(x, layer_weight, layer_bias)
+    expected = linear_output.backward(linear_output, retain_graph=True)
+
+    # tensors casting
+    layer_weight = layer_weight.to(dtype=dtype)
+    act_inputs = torch.zeros((M, N), **factory_kwargs)
+    x = x.to(dtype=dtype)
+
+    fn = backward_implementations[implementation](layer_weight, layer_bias, activation, act_inputs)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
