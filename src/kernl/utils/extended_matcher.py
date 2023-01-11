@@ -451,8 +451,9 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
     # As we progressively replace nodes, we'll need to keep track of how the match results should change
     match_changed_node: Dict[Node, Node] = {}
 
+    replacement_graph_module: GraphModule = symbolic_trace(replacement)
     for match in _matches:
-        replacement_graph: Graph = symbolic_trace(replacement).graph
+        replacement_graph = copy.deepcopy(replacement_graph_module).graph
         replacement_placeholders = [n for n in replacement_graph.nodes if n.op == "placeholder"]
 
         # CHANGE HERE
