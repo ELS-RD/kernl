@@ -4,3 +4,6 @@ venv/
 __pycache__/
 *.egg-info/
 site/
+
+# Misc
+.DS_Store
