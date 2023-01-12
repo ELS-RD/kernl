@@ -56,9 +56,7 @@ If you intend to **make non-trivial changes to existing implementations**, we re
 
 If you would like to **add or improve documentation** or **tutorials**,
 but are not planning to open a Pull Request, you can **[open a dedicated issue](todo)**.
-You can also use the **[discussion forum](todo)** to discuss this topic.
-
-!!! example "@reviewer: see [documentation template](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/documentation.yml)"
+You can also use the **[discussion forum](https://github.com/ELS-RD/kernl/discussions)** to discuss this topic.
 
 ## Development
 
