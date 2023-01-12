@@ -46,9 +46,7 @@ Bug reports without a reproduction will be immediately closed.
 
 If you would like to **request a new feature** or **an enhancement**, 
 but are not planning to open a Pull Request, you can **[open a dedicated issue](todo)**.
-You can also use the **[discussion forum](todo)** for feature requests that you would like to discuss.
-
-!!! example "@reviewer: see [feature request template](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/feature.yml)"
+You can also use the **[discussion forum](https://github.com/ELS-RD/kernl/discussions)** for feature requests that you would like to discuss.
 
 #### Proposals
 
