@@ -111,8 +111,8 @@ You want to contribute by opening a Pull Request, we appreciate it. We'll do our
 
 - Any new Pull Request must be **created from the `main` branch**.
 - The **name** of the new branch must **follow the [standardization](#standardization-of-branch-names)**
-- A PR should be kept as **small as possible**. Smaller PRs are much easier to examine and merge.
-- Make sure the PR only does **one thing**, otherwise split it up.
+- A **PR** should be kept as **small as possible**. Smaller PRs are much easier to examine and merge.
+- Make sure the **PR** only does **one thing**, otherwise split it up.
 - Write a **descriptive title**. It is recommended to **follow this [commit message style](#semantic-commit-messages)**.
 - The **description should be clear and structured** to improve readability.
 - When relevant, remember to **reference the issue** with `fix #issue_number`.
