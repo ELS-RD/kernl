@@ -24,7 +24,7 @@ Contributing does not necessarily mean that you have to know how to code. Code i
 There are a lot of things to do like :
 
 - **Adding and fixing code**: This is the most obvious when you think about contributing. You can fix bugs, optimize already supported models, optimize new ones, add new features, etc.
-- **Reporting bugs**: If you find a bug, you can report it in the [issue tracker](https://github.com/ELS-RD/kernl/issues) and help us fix it.
+- **Reporting bugs**: If you find a bug, you can report it in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)** and help us fix it.
 - **Improve documentation**: Documentation is essential for our users. You can help develop it, improve it, correct it. 
 - **Manage contributions**: Of course, depending on your skills, you can help manage contributions. You can for example sort issues, answer questions, do code reviews, etc.
 - **Submit ideas**: You can also submit ideas for new features, new models to optimize, etc.
