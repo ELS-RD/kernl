@@ -81,7 +81,7 @@ The name of a new branch must respect the following format:
 
     - `feat`: new functionality, optimization or implementation of a proposal.
     - `fix`: bug fix.
-    - `docs`: ajout ou modification de la documentation.
+    - `docs`: addition or modification of the documentation.
     - `refactor`: a change in the code that does not result in any difference in behavior.
     - `test`: adding tests, refactoring tests. No production code change.
     - `chore`: upgrading dependencies, releasing new versions. Tasks that are regularly done for maintenance purposes.
@@ -95,7 +95,7 @@ The name of a new branch must respect the following format:
         - feat/debugger
         - feat/backward_layernorm
         - refactor/refactor-kernels
-        - docs/contribution-guide-doc
+        - docs/contribution-guide
 
 ### Installation
 
