@@ -1,0 +1,64 @@
+name: 💅 Feature
+description: Submit a detailed feature request with a concrete proposal.
+title: "feature: "
+labels: [feature, "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your help to improve kernl.
+        
+        Important stuff:
+
+        - We expect you to submit a real feature request and not just a basic idea.
+        - The proposal doesn't have to be perfect, but it does have to be sufficiently elaborate. We will discuss and correct it if necessary.
+        - For a more "casual" feature request, consider using the discussion forum.
+
+  - type: textarea
+    attributes:
+      label: Description
+      description: A clear and concise description of what the feature is (be as complete as possible).
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Is this request already on the discussion forum?
+      description: Please post the link, it is useful to determine the interest in this feature.
+
+  - type: textarea
+    attributes:
+      label: Motivation
+      description: Please outline the motivation for the proposal and why it should be implemented.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Have you tried to implement it?
+      description: |
+        Please explain how you tried to create this feature by yourself and how you succeeded.
+
+        If you can't create it yourself for technical reasons, please tell us why. We are ready to help you.
+
+        > If your feature request is just an idea at the moment, please use the discussion forum.
+
+  - type: checkboxes
+    attributes:
+      label: Self-service
+      description: |
+        If you answered the above question with "no" because you think you can contribute directly to the repository, please check the box below. This lets us know that someone wants to work on it.
+        If you check this box, please send a Pull Request within 7 days of a maintainer's approval so we can delegate this task.
+
+        > Note that for feature issues, we always ask that you fill out this form completely so that we can reach a consensus and not waste your time.
+      options:
+        - label: I would be willing to contribute to this feature myself.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this feature, you agree to follow our [Code of Conduct](https://www.kernl.ai/contribution-guide/code-of-conduct/)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

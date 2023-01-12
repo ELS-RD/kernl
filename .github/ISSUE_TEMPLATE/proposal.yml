@@ -1,0 +1,47 @@
+name: 💥 Proposal
+description: Propose a non-trivial change to kernl
+title: "proposal: "
+labels: [proposal, 'status: needs triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your help to improve kernl.
+        
+        An example of a proposal might be:
+
+        - A significant improvement.
+        - Significant refactoring.
+        - A major version upgrade of a critical dependency.
+        - ...
+
+        You are free to write a proposal. But you must explain why you think this change is really beneficial, and what steps we should take to make it happen.
+
+        > This is not a feature request, or a bug fix.
+
+  - type: textarea
+    attributes:
+      label: Motivation
+      description: A clear and concise description of what the proposal is.
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: Self-service
+      description: |
+        If you feel like you could contribute to this proposal, please check the box below. This lets us know that someone wants to work on it.
+        If you check this box, please send a Pull Request within 7 days of a maintainer's approval so we can delegate this task.
+
+        > Proposals usually involve significant changes to the code. Please reach a consensus with those responsible before implementing them.
+      options:
+        - label: I would be willing to contribute to this proposal myself.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this proposal, you agree to follow our [Code of Conduct](https://www.kernl.ai/contribution-guide/code-of-conduct/)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
