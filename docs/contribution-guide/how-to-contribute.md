@@ -52,8 +52,6 @@ You can also use the **[discussion forum](https://github.com/ELS-RD/kernl/discus
 
 If you intend to **make non-trivial changes to existing implementations**, we recommend that you **file an Issue** with the **[proposal template](todo)**. This allows us to reach agreement on your proposal before you put any effort into it.
 
-!!! example "@reviewer: see [proposal template](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/proposal.yml)"
-
 #### Documentation
 
 If you would like to **add or improve documentation** or **tutorials**,
