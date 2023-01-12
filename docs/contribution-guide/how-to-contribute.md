@@ -22,19 +22,7 @@ Use (**[Markdown](https://www.markdownguide.org/basic-syntax/)**) to structure y
 
 ### Ask a question / share your ideas or new features
 
-If you have a question, an idea for a new feature, or an optimization, you can **use the dedicated [discussion forum](todo)**.
-
-??? example "@reviewer: proposal to be validated"
-    ```
-    @team:  what about creating a dedicated discussion forum?
-            like Remix: https://github.com/remix-run/remix/discussions or Vite for example
-                Proposed categories:
-                - General (That's what we communicate)
-                - Ideas (open to ideas in general)
-                - Q&A
-                - Feature discussion (dedicated to features)
-            @todo:  If you agree, create the discussion forum and add the link above.
-    ```
+If you have a question, an idea for a new feature, or an optimization, you can **use the dedicated [discussion forum](https://github.com/ELS-RD/kernl/discussions)**.
 
 ### Issues
 
