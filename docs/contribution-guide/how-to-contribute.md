@@ -33,7 +33,7 @@ If you have a question, an idea for a new feature, or an optimization, you can *
 If you think you've found a bug but don't have the time to send a PR, please:
 
 - First, **make sure the bug has not already been reported** in the **[issue tracker](https://github.com/ELS-RD/kernl/issues)**.
-- If you don't find a similar Issue, **[open a new one](todo)**.
+- If you don't find a similar Issue, **[open a new one](https://github.com/ELS-RD/kernl/issues/new/choose)**.
 
 Bug reports without a reproduction will be immediately closed.
 
@@ -45,17 +45,17 @@ Bug reports without a reproduction will be immediately closed.
 #### Feature requests
 
 If you would like to **request a new feature** or **an enhancement**, 
-but are not planning to open a Pull Request, you can **[open a dedicated issue](todo)**.
+but are not planning to open a Pull Request, you can **[open a dedicated issue](https://github.com/ELS-RD/kernl/issues/new/choose)**.
 You can also use the **[discussion forum](https://github.com/ELS-RD/kernl/discussions)** for feature requests that you would like to discuss.
 
 #### Proposals
 
-If you intend to **make non-trivial changes to existing implementations**, we recommend that you **file an Issue** with the **[proposal template](todo)**. This allows us to reach agreement on your proposal before you put any effort into it.
+If you intend to **make non-trivial changes to existing implementations**, we recommend that you **file an Issue** with the **[proposal template](https://github.com/ELS-RD/kernl/issues/new/choose)**. This allows us to reach agreement on your proposal before you put any effort into it.
 
 #### Documentation
 
 If you would like to **add or improve documentation** or **tutorials**,
-but are not planning to open a Pull Request, you can **[open a dedicated issue](todo)**.
+but are not planning to open a Pull Request, you can **[open a dedicated issue](https://github.com/ELS-RD/kernl/issues/new/choose)**.
 You can also use the **[discussion forum](https://github.com/ELS-RD/kernl/discussions)** to discuss this topic.
 
 ## Development
