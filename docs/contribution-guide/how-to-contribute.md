@@ -42,8 +42,6 @@ Bug reports without a reproduction will be immediately closed.
     - [x] Give a concise and explicit title to the problem so that you can quickly understand what it is about.
     - [x] Describe the problem clearly and in detail. Explain what is not working as expected, what you expected to happen and what happened instead. Include as much information as possible, all the steps you need to take to reproduce the bug, etc. If you have ideas on how to fix the problem, feel free to include them in your description.
 
-!!! example "@reviewer: see bug [report template](https://github.com/ELS-RD/kernl/blob/feat/contribution-guide-doc/.github/ISSUE_TEMPLATE/bug.yml)"
-
 #### Feature requests
 
 If you would like to **request a new feature** or **an enhancement**, 
