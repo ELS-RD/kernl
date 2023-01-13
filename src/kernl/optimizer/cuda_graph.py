@@ -39,17 +39,19 @@ def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
     cuda_graph_input: list[torch.Tensor] = list()
     for index, original_tensor in enumerate(model_inputs):
         storage_size = triton.next_power_of_2(len(original_tensor.untyped_storage()))
-        key = (storage_size, original_tensor.dtype)
-        if len(static_inputs_clone[key]) > 0:
-            static_tensor = static_inputs_clone[key].popleft()
+        tensor_pool_key = (storage_size, original_tensor.dtype)
+        if len(static_inputs_clone[tensor_pool_key]) > 0:
+            static_tensor = static_inputs_clone[tensor_pool_key].popleft()
         else:
             static_tensor = torch.empty((storage_size,), dtype=original_tensor.dtype, device=original_tensor.device)
-            static_inputs_pool[key].append(static_tensor)
+            static_inputs_pool[tensor_pool_key].append(static_tensor)
 
         # storage offset should not be used below... otherwise it changes cuda address
+        before_ptr = static_tensor.data_ptr()
         static_tensor = torch.as_strided(static_tensor, original_tensor.size(), original_tensor.stride())
         static_tensor.copy_(original_tensor)
         cuda_graph_input.append(static_tensor)
+        assert before_ptr == static_tensor.data_ptr(), f"should be equal: {before_ptr} != {static_tensor.data_ptr()}"
 
     return cuda_graph_input
 
@@ -63,7 +65,7 @@ def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple
     """
 
     assert isinstance(inputs, (list, tuple))
-    # if using fake tensors, defer cudagraphs until we get real inputs at runtime
+    # if using fake tensors, defer CUDA graphs until we get real inputs at runtime
     if not any(isinstance(inp, FakeTensor) for inp in inputs):
         inputs = get_static_inputs(inputs)
         model(*inputs)  # additional warmup needed when input is mutated by some kernel

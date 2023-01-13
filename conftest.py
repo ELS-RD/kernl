@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-
+import gc
 import random
 from contextlib import contextmanager
 
@@ -32,15 +32,21 @@ def set_seed(seed: int = 0):
     yield
 
 
-@contextmanager
-def setup_dynamo():
+@pytest.fixture(autouse=True)
+def reset_kernl_state():
     cache_limit = dynamo.config.cache_size_limit
     dynamo.config.cache_size_limit = 512
-    static_inputs_pool.clear()
     dynamo.reset()
-    yield
     static_inputs_pool.clear()
+    torch.cuda.synchronize()
+    gc.collect()
+    torch.cuda.empty_cache()
+    yield
     dynamo.config.cache_size_limit = cache_limit
+    static_inputs_pool.clear()
+    torch.cuda.synchronize()
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 @pytest.fixture(scope="function")
