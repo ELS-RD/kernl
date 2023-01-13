@@ -22,6 +22,7 @@ from _pytest.python import Function
 
 from kernl.benchmark.benchmark_data import BenchmarkData
 from kernl.benchmark.benchmark_result import BenchmarkResult
+from kernl.optimizer.cuda_graph import static_inputs_pool
 
 
 class BenchmarkFixture(object):
@@ -113,7 +114,7 @@ class BenchmarkFixture(object):
             torch.cuda.synchronize()
             cpu_times.append((perf_counter_ns() - start) * 1e-6)  # convert to ms
         cpu_data = BenchmarkData(torch.Tensor(cpu_times))
-
+        static_inputs_pool.clear()
         gc.collect()
         torch.cuda.empty_cache()
 
