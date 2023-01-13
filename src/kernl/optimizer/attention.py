@@ -12,32 +12,46 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
+from typing import Optional
 
 import torch
 
 from kernl.implementations.attention import attention_forward, attention_reference
+from kernl.implementations.attention_vec_mat import attention_vec_mat_forward
 from kernl.utils.extended_matcher import replace_pattern
 
 
-def attention_wrapper(q, k, v, output, sm_scale, is_causal, attention_mask):
+def attention_wrapper(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    output: torch.Tensor,
+    sm_scale: float,
+    is_causal: bool,
+    attention_mask: Optional[torch.Tensor],
+) -> torch.Tensor:
     # When tensors are shaped for bmm, first dimension is used for both batch and heads. Our kernel supports tensors
     # with 4 dimensions, so we add another dimension of size 1 for heads.
+
     extend_head = q.dim() == 3
     if extend_head:
-        q = q.view(q.size(0), 1, q.size(-2), q.size(-1))
-        k = k.view(k.size(0), 1, k.size(-2), k.size(-1))
-        v = v.view(v.size(0), 1, v.size(-2), v.size(-1))
-        output = output.view(output.size(0), 1, output.size(-2), output.size(-1))
+        q = q.unsqueeze(dim=1)
+        k = k.unsqueeze(dim=1)
+        v = v.unsqueeze(dim=1)
+        output = output.unsqueeze(dim=1)
 
     # When there is a large difference between those dimensions, our kernel become inefficient
     # (almost no parallelization), so we use pytorch instead
     if q.size(-2) == 1 and k.size(-2) > 50:
-        attention_reference(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+        if (attention_mask is None) and (not is_causal):
+            attention_vec_mat_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
+        else:
+            attention_reference(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
     else:
         attention_forward(q, k, v, output, sm_scale, is_causal=is_causal, attention_mask=attention_mask)
 
     if extend_head:
-        return output.view(q.size(0), q.size(-2), q.size(-1))
+        output = output.squeeze(dim=1)
     return output
 
 
