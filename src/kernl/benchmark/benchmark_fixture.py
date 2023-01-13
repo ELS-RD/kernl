@@ -113,7 +113,6 @@ class BenchmarkFixture(object):
             torch.cuda.synchronize()
             cpu_times.append((perf_counter_ns() - start) * 1e-6)  # convert to ms
         cpu_data = BenchmarkData(torch.Tensor(cpu_times))
-
         gc.collect()
         torch.cuda.empty_cache()
 
