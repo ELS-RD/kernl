@@ -16,13 +16,13 @@
 # This source code is licensed under the BSD license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
-from torch.cuda.amp import custom_bwd, custom_fwd
+from torch.cuda.amp import custom_fwd
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
 from kernl.implementations import activation_func
@@ -306,7 +306,7 @@ def kernel_bwd(
         B += BLOCK_K * stride_wk
 
     # optional: fused activation (while the data is in shared memory)
-    if ACTIVATION not in ["", "id"]:
+    if ACTIVATION != "":
         act_in_ptrs = ACT_INPUT + ram[:, None] * stride_om + rbn[None, :] * stride_on
         act_input = tl.load(act_in_ptrs).to(acc.dtype)
     if ACTIVATION == "tanh":
@@ -365,7 +365,7 @@ class LinearLayer(torch.autograd.Function):
         M, K = x_.shape
         N, K = weight.shape
 
-        outputs = torch.empty((M, N), device=x.device, dtype=x.dtype)
+        outputs = torch.empty((M, N), device=x.device, dtype=x.dtype, requires_grad=True)
 
         # 1D launch kernel where each block gets its own program.
         grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
@@ -396,25 +396,22 @@ class LinearLayer(torch.autograd.Function):
 
         outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
         ctx.save_for_backward(weight, bias, x)
-        return outputs, act_inputs
+        return outputs
 
     @staticmethod
-    @custom_bwd
     def backward(
         ctx: FunctionCtx,
-        grad_outputs: torch.Tensor,
-        act_inputs: Optional[torch.Tensor] = None,
+        *grad_outputs: Any,
     ) -> torch.Tensor:
         """
         Compute e = activation(grad_output @ weight + bias).
         This wrapper kicks the `kernel_fwd` Triton kernel
         :param ctx: context for autograd
         :param grad_outputs: input tensor
-        :param activation: Activation name. Needs to be a Triton kernel.
-        :param act_inputs: an optional tensor to save the activation inputs (for backward)
         :return: result tensor
         """
-        weight, bias, x = ctx.saved_tensors
+        weight, bias, act_inputs = ctx.saved_tensors
+        grad_outputs = grad_outputs[0]
         batch_shape, n = grad_outputs.shape[:-1], grad_outputs.shape[-1]
         batch_dim = batch_shape.numel()
         grad_output_reshaped = grad_outputs.reshape(batch_dim, n)
@@ -431,7 +428,7 @@ class LinearLayer(torch.autograd.Function):
             grad_output_reshaped.shape[1] == weight.shape[0]
         ), f"Incompatible dimensions: {grad_output_reshaped.shape} - {weight.shape}"
         if ctx.activation != "id":
-            assert act_inputs is not None, f"act_input is required for activation {activation}"
+            assert act_inputs is not None, f"act_input is required for activation {ctx.activation}"
 
         # M, N, K in bwd are different from M, N, K in fwd
         M, K = grad_output_reshaped.shape
@@ -463,7 +460,7 @@ class LinearLayer(torch.autograd.Function):
             GROUP_M=8,  # speed optimization: group the programs
         )
 
-        return grad_input.reshape(*batch_shape, grad_input.shape[-1])
+        return grad_input.reshape(*batch_shape, grad_input.shape[-1]), None, None, None, None
 
 
 def linear_layer(
