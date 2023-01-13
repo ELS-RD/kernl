@@ -66,7 +66,7 @@ def closest_power_of_2(n: int, min_range: int = 16, max_range: int = 128) -> Lis
     n = max(min(n, max_range), min_range)
     min_range = math.floor(math.log2(n - 1))
     max_range = math.ceil(math.log2(n + 1))
-    ranges = [2 ** i for i in range(min_range, max_range + 1)]
+    ranges = [2**i for i in range(min_range, max_range + 1)]
     return ranges
 
 
