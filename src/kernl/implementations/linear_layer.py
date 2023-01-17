@@ -410,10 +410,13 @@ class LinearLayer(torch.autograd.Function):
         :param grad_outputs: input tensor
         :return: result tensor
         """
+        print("Entering custom backward")
         weight, bias, act_inputs = ctx.saved_tensors
+        print(f"x is leaf: {act_inputs.is_leaf}")
+        print(f"weight: {weight} \n bias: {bias} \n act_inputs: {act_inputs}\n activation: {ctx.activation}")
         grad_outputs = grad_outputs[0]
         batch_shape, n = grad_outputs.shape[:-1], grad_outputs.shape[-1]
-        batch_dim = batch_shape.numel()
+        batch_dim = batch_shape[0] * batch_shape[1]
         grad_output_reshaped = grad_outputs.reshape(batch_dim, n)
 
         if grad_output_reshaped.stride(0) > 1 and grad_output_reshaped.stride(1) > 1:
@@ -459,8 +462,8 @@ class LinearLayer(torch.autograd.Function):
             ACTIVATION=ctx.activation,  # optional fused activation
             GROUP_M=8,  # speed optimization: group the programs
         )
-
-        return grad_input.reshape(*batch_shape, grad_input.shape[-1]), None, None, None, None
+        print(f"grad input {grad_input}")
+        return grad_input.reshape(*batch_shape, grad_input.shape[-1]), weight, bias, None, None
 
 
 def linear_layer(
