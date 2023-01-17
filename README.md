@@ -27,6 +27,7 @@ pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://down
 ```
 
 This project requires `Python` >= 3.9.
+Furthermore, the library requires an Ampere GPU and CUDA to be installed. 
 
 ## Getting started
 
