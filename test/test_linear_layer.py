@@ -120,9 +120,9 @@ backward_implementations = {
     [(1, 8, 8, 8)] + [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
     ids=lambda s: "x".join(map(str, s)),
 )
-@pytest.mark.parametrize("dtype", [torch.float32], ids=["fp32"])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
 @pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
-@pytest.mark.parametrize("implementation", ["triton"])
+@pytest.mark.parametrize("implementation", ["triton", "pytorch"])
 def test_benchmark_linear_backward(
     benchmark,
     implementation: str,
