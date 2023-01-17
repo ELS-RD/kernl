@@ -186,9 +186,9 @@ def _fwd_kernel(
                    ┌────────────┐
                │   │            │
     M Dimension│   ├────────────┤     ┌───┐
-      m_size   │   │            │     │   │ BLOCK_M
+      m_size   │   │            │     │   │ BLOCK_M_SIZE
                │   ├────────────┤     └───┘
-               │   │            │    BLOCK_N
+               │   │            │    BLOCK_N_SIZE
                │   │            │
                    └────────────┘
 
