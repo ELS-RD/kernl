@@ -1,4 +1,4 @@
-# Naming conventions
+# Kernel writing conventions
 ## Variable suffixes
 We prefer suffixes to prefixes because
 - avoids looking at the middle of the variable to find the interesting part. 
