@@ -33,6 +33,7 @@ Suffixes list:
 ## Tensor Stride naming
 
 `p_d_stride`
+
 - `p` is the name of the tensor
 - `d` is the name of the dimension
 
@@ -44,6 +45,7 @@ For example:
 ## Tensor Size naming
 
 `p_d_size`
+
 - `p` is the name of the tensor
 - `d` is the name of the dimension
 
