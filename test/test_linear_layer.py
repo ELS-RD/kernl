@@ -18,6 +18,7 @@ from typing import Callable, Tuple
 
 import pytest
 import torch
+from torch.cuda.amp import autocast
 from torch.nn import MSELoss
 
 from conftest import assert_all_close, set_seed
@@ -133,31 +134,35 @@ def test_benchmark_linear_backward(
     contiguous: bool,
 ):
     batch, M, N, K = shape
-
+    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": True}
     # order of dimensions is wrong so we force contiguous call
-    x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=True)
+    x = torch.randn((batch, K, M), **factory_kwargs)
     x = x.mT
     if contiguous:
         x = x.contiguous()
     else:
         assert not x.is_contiguous()
-    x.retain_grad()  # force saving grad
-    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": True}
-    layer_weight = torch.randn((N, K), **factory_kwargs)
-    layer_bias = torch.randn((K,), **factory_kwargs)
-    # tensors casting
-    layer_weight = layer_weight.to(dtype=dtype)
-    layer_bias = layer_bias.to(dtype=dtype)
     x = x.to(dtype=dtype)
+    x.retain_grad()  # force saving grad
+
+    layer_weight = torch.randn((N, K), **factory_kwargs)
+    layer_weight = layer_weight.to(dtype=dtype)
+    layer_bias = torch.randn((K,), **factory_kwargs)
+    layer_bias = layer_bias.to(dtype=dtype)
+
     x_triton = torch.clone(x)
     x_triton = x_triton.to(dtype=dtype)
+    assert x_triton.is_contiguous() == x.is_contiguous()
     x_triton.retain_grad()
 
     pytorch_layer_activation = get_pytorch_activation(activation)
     pytorch_fwd_output = pytorch_layer_activation(torch.nn.functional.linear(x, layer_weight, layer_bias))
     random_output = torch.randn(pytorch_fwd_output.shape, **factory_kwargs)
+    random_output = random_output.to(dtype=dtype)
     loss = MSELoss()
-    loss(pytorch_fwd_output, random_output).backward()
+
+    with autocast(dtype=dtype):
+        loss(pytorch_fwd_output, random_output).backward()
     fn = backward_implementations[implementation](layer_weight, layer_bias, activation, random_output)
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x_triton])

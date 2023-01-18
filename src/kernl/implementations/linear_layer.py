@@ -22,7 +22,7 @@ import torch
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
-from torch.cuda.amp import custom_fwd
+from torch.cuda.amp import custom_bwd, custom_fwd
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
 from kernl.implementations import activation_func
@@ -399,6 +399,7 @@ class LinearLayer(torch.autograd.Function):
         return outputs
 
     @staticmethod
+    @custom_bwd
     def backward(
         ctx: FunctionCtx,
         *grad_outputs: Any,
@@ -410,10 +411,7 @@ class LinearLayer(torch.autograd.Function):
         :param grad_outputs: input tensor
         :return: result tensor
         """
-        print("Entering custom backward")
         weight, bias, act_inputs = ctx.saved_tensors
-        print(f"x is leaf: {act_inputs.is_leaf}")
-        print(f"weight: {weight} \n bias: {bias} \n act_inputs: {act_inputs}\n activation: {ctx.activation}")
         grad_outputs = grad_outputs[0]
         batch_shape, n = grad_outputs.shape[:-1], grad_outputs.shape[-1]
         batch_dim = batch_shape[0] * batch_shape[1]
@@ -462,8 +460,7 @@ class LinearLayer(torch.autograd.Function):
             ACTIVATION=ctx.activation,  # optional fused activation
             GROUP_M=8,  # speed optimization: group the programs
         )
-        print(f"grad input {grad_input}")
-        return grad_input.reshape(*batch_shape, grad_input.shape[-1]), weight, bias, None, None
+        return grad_input.reshape(*batch_shape, grad_input.shape[-1]), None, None, None, None
 
 
 def linear_layer(
