@@ -4,23 +4,9 @@
 
 To avoid any breaking change, we target a specific version.
 
-For the preview (`doc/Dockerfile.mkdocstrings`)
-```dockerfile
-FROM ghcr.io/els-rd/mkdocs-material-insiders:version
-```
-```yaml
-# Ex.
-FROM ghcr.io/els-rd/mkdocs-material-insiders:4.28.0
-```
+For the preview (`doc/Dockerfile.mkdocstrings`),
+and in the Github Action workflow (`.github/workflows/deploy-static-site.yml`)
 
-In the Github Action workflow (`.github/workflows/deploy-static-site.yml`)
-```yaml
-run: pip install git+https://${{secrets.GH_TOKEN}}@github.com/squidfunk/mkdocs-material-insiders.git@version "mkdocstrings[python]"
-```
-```yaml
-# Ex.:
-run: pip install git+https://${{secrets.GH_TOKEN}}@github.com/squidfunk/mkdocs-material-insiders.git@9.0.5-insiders-4.28.0 "mkdocstrings[python]"
-```
 
 ### How to upgrade version
 
