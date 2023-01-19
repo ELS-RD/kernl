@@ -27,6 +27,7 @@ pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://down
 ```
 
 This project requires `Python` >= 3.9.
+Furthermore, the library requires an Ampere GPU and CUDA to be installed. 
 
 ## Getting started
 
@@ -175,3 +176,11 @@ We leverage mostly 3 technologies:
 ## Acknowledgments
 
 Code of OpenAI Triton kernels takes inspiration from examples from OpenAI Triton tutorials or xformers library.  
+
+## Contributing
+
+If you would like to contribute, for example to code or documentation, please see our [contribution guide](https://www.kernl.ai/contribution-guide/contributing/).
+
+## Code of Conduct
+
+Please see our [Code of Conduct](https://www.kernl.ai/contribution-guide/code-of-conduct/) for any questions about the community we are trying to build and what to do if you need help with someone who is acting unprofessionally.

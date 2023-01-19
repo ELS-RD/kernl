@@ -9,6 +9,7 @@ from kernl.model_optimization import optimize_model
 
 
 torchdynamo.config.cache_size_limit = 512
+torch.set_float32_matmul_precision("high")
 
 audio_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 

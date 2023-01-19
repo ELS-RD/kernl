@@ -51,6 +51,7 @@ theme:
     # - navigation.instant
     - navigation.tracking
     - navigation.tabs
+    - navigation.footer
     # - navigation.tabs.sticky
     - navigation.sections
     # - navigation.expand
@@ -166,6 +167,9 @@ nav:
       - Debugger: reference/debugger.md
       - Graph Pattern Matching: reference/extended_matcher.md
   - Contribution guide:
-      - Page 1: contribution-guide/page.md
+      - Contributing: contribution-guide/contributing.md
+      - Code of conduct: contribution-guide/code-of-conduct.md
+      - Contributing guidelines: contribution-guide/how-to-contribute.md
+      - Kernel writing conventions: contribution-guide/kernel-writing-conventions.md
   - Changelog & FAQ:
       - Page 1: changelog/page.md

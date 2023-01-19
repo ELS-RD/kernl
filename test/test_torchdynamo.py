@@ -29,7 +29,7 @@ import pytest
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, WhisperForConditionalGeneration, WhisperProcessor
 
-from conftest import assert_all_close, set_seed, setup_dynamo
+from conftest import assert_all_close, set_seed
 
 from kernl.model_optimization import optimize_model
 
@@ -57,7 +57,6 @@ def reference_fp32(request):
     return get_model_from_hf(request.param)
 
 
-@setup_dynamo()
 @set_seed()
 @pytest.mark.parametrize(
     "reference_fp32",
@@ -84,7 +83,6 @@ def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int),
         assert_all_close(value["pooler_output"].float(), expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
 
 
-@setup_dynamo()
 @set_seed()
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_support_shape_change(implementation):
@@ -102,7 +100,6 @@ def test_support_shape_change(implementation):
         )
 
 
-@setup_dynamo()
 def test_t5():
     tokenizer = AutoTokenizer.from_pretrained("t5-small", model_max_length=512)
     model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
@@ -134,7 +131,6 @@ def test_t5():
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
 
-@setup_dynamo()
 @pytest.mark.parametrize("num_beam", [1, 5])
 @pytest.mark.parametrize("implementation", ["reference", "optimized"])
 def test_whisper_hf(benchmark, implementation, num_beam):

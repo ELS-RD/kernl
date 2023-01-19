@@ -1,0 +1,81 @@
+name: 🐛 Bug Report
+description: Submit a bug report to help us improve.
+title: "bug: "
+labels:
+  - ["bug:unverified", 'status:needs triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for your help in improving kernl by reporting bugs.
+        
+        Before you create your issue.
+        
+          - Make sure the bug has not already been reported in the issue tracker.
+          - Make sure it is reproducible.
+          - Make sure you have enough material to fuel the search and resolution.
+        
+        Please fill out the form below to help us better understand the problem.
+
+  - type: textarea
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: Steps to reproduce the bug.
+      placeholder: |
+        1. Step 1...
+        2. Step 2...
+        3. Step 3...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Expected Behavior
+      description: A concise description of what you expected to happen.
+      placeholder: Write what you thought would happen.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Actual Behavior
+      description: A concise description of what you're experiencing.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Your environment
+      description: Include as many relevant details about the environment you experienced the bug in.
+      value: |
+        - Operating system and version (e.g. Ubuntu 20.04.2 LTS):
+        - Python version (e.g. Python 3.8.10):
+        - Python package manager (e.g. pip 21.1.2):
+        - etc.
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: Self-service
+      description: |
+        If you think you can help fix this bug, please check the box below. This lets us know that someone wants to work on it.
+        If you check this box, please send a Pull Request within 7 days of a maintainer's approval so we can delegate this task.
+      options:
+        - label: I would be willing to help fix this bug myself.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://www.kernl.ai/contribution-guide/code-of-conduct/)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
