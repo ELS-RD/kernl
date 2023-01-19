@@ -12,7 +12,7 @@ and in the Github Action workflow (`.github/workflows/deploy-static-site.yml`)
 
 To take advantage of the latest features, check the [online changelog](https://squidfunk.github.io/mkdocs-material/insiders/changelog/).
 
-According to it, **synchronize the fork**, **update the docker image** and **the project**.
+According to it, **synchronize the fork**, **update the docker image** and **the workflow**.
 
 If necessary, take into account the breaking change by consulting [How to upgrade](https://squidfunk.github.io/mkdocs-material/upgrade/).
 
