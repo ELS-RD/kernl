@@ -24,14 +24,16 @@ The second step eliminates most of the CPU overhead but we won't elaborate on th
 ### Inspecting the FX Graph
 
 First, a few words about [Torch FX](https://pytorch.org/docs/1.13/fx.html).
-Torch FX is a torch module to module transformation toolkit. It can trace a torch module (or a function) execution. All the operations are then recorded into a list of nodes that are represented as an FX Graph. From this graph, Torch FX generates python code matching the graph's semantics. Both graph and python code are accessible from the Torch FX GraphModule, which is also a torch module instance. Torch FX allows us to play with FX graphs but stay at the torch module level.
+Torch FX is a torch module to module transformation toolkit. It can trace a torch module (or a function) execution. All the operations are then recorded into a graph of nodes. From this graph, Torch FX generates python code matching the graph's semantics. Both graph and python code are accessible from the Torch FX GraphModule, which is also a torch module instance. Torch FX allows us to play with FX graphs but stay at the torch module level.
 
 <figure markdown>
   ![Torch FX](torchfx.drawio.svg){ lazyload=true }
   <figcaption>Torch FX</figcaption>
 </figure>
 
-With a FX GraphModule, we can inspect both the FX Graph and the generated code, with `.graph` and `.code` respectively. For better readability, one may want to use `#!python graph_report(gm)` that print the FX Graph in a tabular way (similarly to [Torch FX `print_tabular` method](https://pytorch.org/docs/1.13/fx.html#torch.fx.Graph.print_tabular)).
+With a FX GraphModule, we can inspect both the FX Graph and the generated code, with `.graph` and `.code` respectively. For better readability, one may want to use `#!python graph_report(gm)` that print the FX Graph in a tabular way (similarly to [Torch FX `print_tabular` method](https://pytorch.org/docs/1.13/fx.html#torch.fx.Graph.print_tabular))[^1].
+
+[^1]: Aditionnaly, we can enable [TorchDynamo](https://github.com/pytorch/torchdynamo)'s tracing with `#!python torch._dynamo.config.log_level = logging.DEBUG` to display the compiled graph. Enabling `#!python torch._dynamo.config.output_graph_code` displays the graph's code instead. See [TorchDynamo's configuration](https://github.com/pytorch/pytorch/blob/ebeecbf833dfbeba07bd5d88e2bb24f63240bfa4/torch/_dynamo/config.py) for details.
 
 `#!python graph_report(gm)` lists all the operations during the execution. Each line corresponds to a node from the FX Graph with the given information:
 
@@ -153,7 +155,6 @@ tanh     Tanh()
 fc2      Linear(in_features=10, out_features=1, bias=True)
 sigmoid  Sigmoid()
 ```
-
 We see that the graph is a straightforward sequence of operations. To replace the first layer and its activation function, we just need to match the highlighted subgraph. To achieve that we create a simple torch module with a linear module and the tanh activation function.
 
 ``` { .py }
@@ -185,9 +186,9 @@ linear      Linear(in_features=1, out_features=1, bias=True)
 activation  Tanh()
 ```
 
-We don't need the node names to be the same as the ones in the graph we want to match, what is important is that we match the same node pattern.
+We don't need the node names to be the same as the ones in the graph we want to match, what is important is that we match the same node pattern. In our example, the node names differ (`fc1` and `tanh` in the graph, `linear` and `activation` in the pattern subgraph), but the modules called are identical (`Linear` and `Tanh`).
 
-We may now write our replacement subgraph with the ReLU activation function and display its FX Graph.
+We have our pattern subgraph, we may now write our replacement subgraph with the ReLU activation function and display its FX Graph.
 
 ``` { .py }
 class Replacement(torch.nn.Module):
