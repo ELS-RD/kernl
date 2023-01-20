@@ -414,7 +414,7 @@ class LinearLayer(torch.autograd.Function):
         weight, bias, act_inputs = ctx.saved_tensors
         grad_outputs = grad_outputs[0]
         batch_shape, n = grad_outputs.shape[:-1], grad_outputs.shape[-1]
-        batch_dim = batch_shape[0] * batch_shape[1]
+        batch_dim = batch_shape.numel()
         grad_output_reshaped = grad_outputs.reshape(batch_dim, n)
 
         if grad_output_reshaped.stride(0) > 1 and grad_output_reshaped.stride(1) > 1:

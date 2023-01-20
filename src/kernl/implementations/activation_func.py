@@ -47,7 +47,7 @@ def relu(x):
 @triton.jit
 def relu_grad(x):
     """Relu derivative function"""
-    return tl.maximum(0, x)
+    return tl.maximum(0, 1)
 
 
 @triton.jit
