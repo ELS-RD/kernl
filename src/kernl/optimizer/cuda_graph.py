@@ -17,8 +17,8 @@ from typing import Callable, Union
 
 import torch
 import triton
+from torch._dynamo import utils as dynamo_utils
 from torch._inductor.compile_fx import cudagraphify_impl
-from torch._inductor.utils import dynamo_utils
 from torch._subclasses import FakeTensor
 
 
