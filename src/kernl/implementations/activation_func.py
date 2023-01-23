@@ -23,7 +23,6 @@ import triton.language as tl
 
 sqrt2pi = math.sqrt(2.0 / math.pi)
 sqrt2 = math.sqrt(2.0)
-sqrt1_2 = math.sqrt(1.0 / 2)
 gaussian_pdf_normalization = 1.0 / math.sqrt(2 * math.pi)
 
 
@@ -75,6 +74,6 @@ def gelu(x):
 @triton.jit
 def gelu_grad(x):
     """Derivative of Gaussian Error Linear Unit (GELU)"""
-    cdf = 0.5 * (1.0 + tl.libdevice.erf(x * sqrt1_2))
+    cdf = 0.5 * (1.0 + tl.libdevice.erf(x / sqrt2))
     pdf = tl.exp(-0.5 * x * x) * gaussian_pdf_normalization
     return cdf + x * pdf
