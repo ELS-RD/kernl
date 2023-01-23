@@ -157,10 +157,11 @@ watch:
 # Page tree
 nav:
   - Home: index.md
-  - Get Started:
-      - Get started: get-started/start.md
-  - How it works:
-      - Page 1: how-it-works/page.md
+  - How to:
+      - Get Started: how-to-guides/get-started.md
+      - How to support a new model: how-to-guides/support-new-model.md
+  - Tutorials:
+      - Page 1: tutorials/page.md
   - Code Reference:
       - Model Optimization: reference/model_optimization.md
       - Debugger: reference/debugger.md
