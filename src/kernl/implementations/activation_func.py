@@ -35,7 +35,8 @@ def tanh(x):
 @triton.jit
 def tanh_grad(x):
     """Tanh derivative function"""
-    return 1 - tl.libdevice.pow(tl.libdevice.tanh(x), 2)
+    tanh_x = tanh(x)
+    return 1 - tanh_x * tanh_x
 
 
 @triton.jit
