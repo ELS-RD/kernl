@@ -104,10 +104,10 @@ def test_benchmark_linear_forward(
 
 
 backward_implementations = {
-    "pytorch": lambda weight, bias, activation, random_output: lambda x: MSELoss(reduction='sum')(
+    "pytorch": lambda weight, bias, activation, random_output: lambda x: MSELoss(reduction="sum")(
         get_pytorch_activation(activation)(torch.nn.functional.linear(x, weight, bias)), random_output
     ).backward(),
-    "triton": lambda weight, bias, activation, random_output: lambda x: MSELoss(reduction='sum')(
+    "triton": lambda weight, bias, activation, random_output: lambda x: MSELoss(reduction="sum")(
         linear_layer(x, weight, bias, activation, None), random_output
     ).backward(),
 }

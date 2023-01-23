@@ -182,7 +182,7 @@ def kernel_fma(
 
     # optional: save the activation inputs
     if SAVE_ACT_INPUTS:
-        act_in_ptrs = ACT_INPUTS + ram[:, None] * stride_om + rbn[None, :]
+        act_in_ptrs = ACT_INPUTS + ram[:, None] * stride_om + rbn[None, :] * stride_on
         tl.store(act_in_ptrs, acc)
 
     # optional: fused activation (while the data is in shared memory)
@@ -455,8 +455,8 @@ class LinearLayer(torch.autograd.Function):
             stride_on=grad_input.stride(1),
             stride_im=grad_output_reshaped.stride(0),
             stride_ik=grad_output_reshaped.stride(1),
-            stride_wn=weight.stride(0),
-            stride_wk=weight.stride(1),
+            stride_wn=weight.stride(1),
+            stride_wk=weight.stride(0),
             ACTIVATION=ctx.activation,  # optional fused activation
             GROUP_M=8,  # speed optimization: group the programs
         )
