@@ -365,7 +365,7 @@ class LinearLayer(torch.autograd.Function):
         M, K = x_.shape
         N, K = weight.shape
 
-        outputs = torch.empty((M, N), device=x.device, dtype=x.dtype, requires_grad=True)
+        outputs = torch.empty((M, N), device=x.device, dtype=x.dtype)
 
         # 1D launch kernel where each block gets its own program.
         grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa

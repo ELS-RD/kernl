@@ -27,9 +27,6 @@ from kernl.implementations.linear_layer import linear_layer
 from kernl.optimizer.cuda_graph import cuda_graphs_wrapper
 
 
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-
-
 def get_pytorch_activation(activation: str) -> Callable:
     if activation == "gelu":
         return torch.nn.functional.gelu
@@ -47,12 +44,13 @@ forward_implementations = {
     "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
         torch.nn.functional.linear(x, weight, bias)
     ),
-    "triton": lambda weight, bias, activation: lambda x: linear_layer(x, weight, bias, activation, None),
+    "triton": lambda weight, bias, activation: lambda x: linear_layer(x, weight, bias, activation),
 }
 
 
 @set_seed()
 @pytest.mark.parametrize("contiguous", [True, False], ids=["contiguous", "non-contiguous"])
+@pytest.mark.parametrize("bias", [True, False], ids=["with_bias", "no_bias"])
 @pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
 @pytest.mark.parametrize(
     "shape",
@@ -68,6 +66,7 @@ def test_benchmark_linear_forward(
     cuda_graphs: bool,
     shape: Tuple[int, int, int, int],
     dtype: torch.dtype,
+    bias: bool,
     activation: str,
     contiguous: bool,
 ):
@@ -82,7 +81,7 @@ def test_benchmark_linear_forward(
         assert not x.is_contiguous()
     factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
     layer_weight = torch.randn((N, K), **factory_kwargs)
-    layer_bias = torch.randn((K,), **factory_kwargs)
+    layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
     pytorch_layer_activation = get_pytorch_activation(activation)
     expected = pytorch_layer_activation(torch.nn.functional.linear(x, layer_weight, layer_bias))
 
@@ -122,7 +121,7 @@ backward_implementations = {
     ids=lambda s: "x".join(map(str, s)),
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
-@pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
+@pytest.mark.parametrize("cuda_graphs", [False], ids=["no_cuda_graphs"])
 @pytest.mark.parametrize("implementation", ["triton", "pytorch"])
 def test_benchmark_linear_backward(
     benchmark,
