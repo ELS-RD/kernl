@@ -14,8 +14,8 @@ max_len = 50
 num_beams = 5
 model_name = "openai/whisper-large-v2"
 
-audio_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-# audio_dataset = load_dataset("librispeech_asr", "clean", split="test")
+# audio_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+audio_dataset = load_dataset("librispeech_asr", "clean", split="test")
 
 
 def get_tokens(item: dict[str, dict]) -> torch.Tensor:
@@ -91,20 +91,23 @@ print("torch.cuda.memory_allocated: %fGB" % (torch.cuda.memory_allocated(0) / 10
 print("torch.cuda.memory_reserved: %fGB" % (torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024))
 print("torch.cuda.max_memory_reserved: %fGB" % (torch.cuda.max_memory_reserved(0) / 1024 / 1024 / 1024))
 
-# before modification without stride fix
-# difference between original and optimzed model:
-# optimized model modifies 31.83% (# 834 examples) of the dataset
-# [original] average: 1.0774035485646196s / complete: 2822.7972972393036s
-# [optimized] average: 0.45561475826583747s / complete: 1193.7106666564941s
-# torch.cuda.memory_allocated: 10.874530GB
-# torch.cuda.memory_reserved: 14.064453GB
-# torch.cuda.max_memory_reserved: 14.064453GB
-# after modification
-# difference between original and optimzed model:
-# time to warmup: 694.1382637023926
-# optimized model modifies 2.06% (# 54/2620 examples)
-# [original] average: 1.0491925114893732s / complete: 2748.8843801021576s
-# [optimized] average: 0.4339728889574531s / complete: 1137.0089690685272s
+# appeler nvidia smi pour voir le modèle de GPU
+# install
+# 9997  pip install datasets
+# 9998  pip install soundfile
+# 9999  pip install librosa
+
+# Downloading: 100%|██████████| 1.97k/1.97k [00:00<00:00, 1.29MB/s]
+# Downloading: 100%|██████████| 6.17G/6.17G [02:05<00:00, 49.3MB/s]
+# difference between original and optimized model:
+# time to warmup: 747.70s
+# timings
+# [original] average: 1.1075821416068623s / complete: 2901.8652110099792s
+# [optimized] average: 0.45707741284188425s / complete: 1197.5428216457367s
+# output differences: 34/2620 (1.30%)
+# memory footprint
 # torch.cuda.memory_allocated: 10.873960GB
 # torch.cuda.memory_reserved: 13.365234GB
 # torch.cuda.max_memory_reserved: 13.853516GB
+#
+# Process finished with exit code 0

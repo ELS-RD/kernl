@@ -312,7 +312,9 @@ def _fwd_kernel(
 
     block_n_end = n_size
     if IS_CAUSAL:
-        block_n_end = (block_m_idx + 1) * BLOCK_M_SIZE
+        # in causal mode, we expect that BLOCK_M_SIZE == BLOCK_N_SIZE
+        # autotune will prune shapes not matching this rule
+        block_n_end = (block_m_idx + 1) * BLOCK_N_SIZE
 
     if HAS_MASK:
         attention_mask_batch_idx = (current_batch_idx,)
