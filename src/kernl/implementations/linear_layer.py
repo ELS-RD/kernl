@@ -230,7 +230,7 @@ def kernel_fma(
 )
 @triton.heuristics(
     {
-        "EVEN_K": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
+        "K_LOAD_MASK_NEEDED": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
     }
 )
 @triton.jit
@@ -249,12 +249,12 @@ def kernel_bwd(
     # The stride variables represent how much to increase the ptr by when moving by 1
     # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
     # by to get the element one row down (A has M rows)
-    stride_om,
-    stride_on,
-    stride_im,
-    stride_ik,
-    stride_wn,
-    stride_wk,
+    output_m_stride,
+    output_n_stride,
+    a_m_stride,
+    a_k_stride,
+    w_n_stride,
+    w_k_stride,
     # Meta-parameters
     BLOCK_M: tl.constexpr,
     GROUP_M: tl.constexpr,
@@ -262,50 +262,51 @@ def kernel_bwd(
     BLOCK_K: tl.constexpr,
     # split k not used, not performant with activation, kept because early_config_prune is expecting it
     SPLIT_K: tl.constexpr,
-    EVEN_K: tl.constexpr,
+    K_LOAD_MASK_NEEDED: tl.constexpr,
     ACTIVATION: tl.constexpr,
 ):
-    pid = tl.program_id(axis=0)
+    program_idx = tl.program_id(axis=0)
 
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
     grid_n = (N + BLOCK_N - 1) // BLOCK_N
     # re-order program ID for better L2 performance
     width = GROUP_M * grid_n
-    group_id = pid // width
-    group_size = min(grid_m - group_id * GROUP_M, GROUP_M)
-    pid_m = group_id * GROUP_M + (pid % group_size)
-    pid_n = (pid % width) // (group_size)
+    group_idx = program_idx // width
+    group_size = min(grid_m - group_idx * GROUP_M, GROUP_M)
+    block_m_idx = group_idx * GROUP_M + (program_idx % group_size)
+    block_n_idx = (program_idx % width) // (group_size)
 
     # now compute the block that each program will go through
-    # rm (resp. rn) denotes a range of indices
+    # m_offs_untagged (resp. n_offs_untagged) denotes a range of indices
     # for rows (resp. col) of C
-    rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    # trick to avoid masking on M and N axis
-    ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
-    rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
-    rk = tl.arange(0, BLOCK_K)
+    m_offs_untagged = block_m_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+    n_offs_untagged = block_n_idx * BLOCK_N + tl.arange(0, BLOCK_N)
 
-    A = A + (ram[:, None] * stride_im + rk[None, :] * stride_ik)
-    B = B + (rk[:, None] * stride_wk + rbn[None, :] * stride_wn)
+    # trick to avoid masking on M and N axis
+    m_offs = tl.max_contiguous(tl.multiple_of(m_offs_untagged % M, BLOCK_M), BLOCK_M)
+    n_offs = tl.max_contiguous(tl.multiple_of(n_offs_untagged % N, BLOCK_N), BLOCK_N)
+    k_range_offs = tl.arange(0, BLOCK_K)
+
+    A = A + (m_offs[:, None] * a_m_stride + k_range_offs[None, :] * a_k_stride)
+    B = B + (k_range_offs[:, None] * w_k_stride + n_offs[None, :] * w_n_stride)
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
     for k in range(K, 0, -BLOCK_K):
-        if EVEN_K:
+        if K_LOAD_MASK_NEEDED:
             a = tl.load(A)
             b = tl.load(B)
         else:
-            a = tl.load(A, mask=rk[None, :] < k, other=0.0)
-            b = tl.load(B, mask=rk[:, None] < k, other=0.0)
+            a = tl.load(A, mask=k_range_offs[None, :] < k, other=0.0)
+            b = tl.load(B, mask=k_range_offs[:, None] < k, other=0.0)
         acc += tl.dot(a, b)
 
-        A += BLOCK_K * stride_ik
-        B += BLOCK_K * stride_wk
+        A += BLOCK_K * a_k_stride
+        B += BLOCK_K * w_k_stride
 
     # optional: fused activation (while the data is in shared memory)
     if ACTIVATION != "":
-        act_in_ptrs = ACT_INPUT + ram[:, None] * stride_om + rbn[None, :] * stride_on
+        act_in_ptrs = ACT_INPUT + m_offs[:, None] * output_m_stride + n_offs[None, :] * output_n_stride
         act_input = tl.load(act_in_ptrs).to(acc.dtype)
     if ACTIVATION == "tanh":
         acc *= activation_func.tanh_grad(act_input)
@@ -316,13 +317,9 @@ def kernel_bwd(
     if ACTIVATION == "relu":
         acc *= activation_func.relu_grad(act_input)
 
-    # rematerialize rm and rn to save registers
-    rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-
     # write back result
-    C = C + rm[:, None] * stride_om + rn[None, :] * stride_on
-    mask = (rm < M)[:, None] & (rn < N)[None, :]
+    C = C + m_offs_untagged[:, None] * output_m_stride + n_offs_untagged[None, :] * output_n_stride
+    mask = (m_offs_untagged < M)[:, None] & (n_offs_untagged < N)[None, :]
     tl.store(C, acc, mask=mask)
 
 
@@ -449,12 +446,12 @@ class LinearLayer(torch.autograd.Function):
             M // 32,  # key for triton cache (limit number of compilations)
             N // 32,
             K // 32,
-            stride_om=grad_input.stride(0),  # strides
-            stride_on=grad_input.stride(1),
-            stride_im=grad_output_reshaped.stride(0),
-            stride_ik=grad_output_reshaped.stride(1),
-            stride_wn=weight.stride(1),
-            stride_wk=weight.stride(0),
+            output_m_stride=grad_input.stride(0),  # strides
+            output_n_stride=grad_input.stride(1),
+            a_m_stride=grad_output_reshaped.stride(0),
+            a_k_stride=grad_output_reshaped.stride(1),
+            w_n_stride=weight.stride(1),
+            w_k_stride=weight.stride(0),
             ACTIVATION=ctx.activation,  # optional fused activation
             GROUP_M=8,  # speed optimization: group the programs
         )
