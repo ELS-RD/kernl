@@ -29,6 +29,16 @@ pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://down
 This project requires `Python` >= 3.9.
 Furthermore, the library requires an Ampere GPU and CUDA to be installed. 
 
+If you prefer `Docker`:
+
+```shell
+# build
+make docker_build
+DOCKER_BUILDKIT=1 docker build -t kernl .
+# run
+docker run --rm -it --gpus all -v $(pwd):/kernl kernl
+```
+
 ## Getting started
 
 ```python
