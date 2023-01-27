@@ -104,7 +104,7 @@ def prune(configs, named_args):
         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=4),
         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=4),
         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=4),
-        # triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=8),
+        triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=8),
         # triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 256}, num_stages=1, num_warps=8),
         # triton.Config({"BLOCK_M_SIZE": 256, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=8),
         # triton.Config({"BLOCK_M_SIZE": 256, "BLOCK_N_SIZE": 256}, num_stages=1, num_warps=16),
@@ -124,6 +124,8 @@ def _fwd_kernel(
     head_size,
     m_size,
     n_size,
+    cache_key_m_size,
+    cache_key_n_size,
     q_ptr,
     k_ptr,
     v_ptr,
@@ -510,6 +512,8 @@ class Attention(torch.autograd.Function):
             head_size,  # heads
             m_size,  # m_size
             n_size,  # n_size
+            m_size // 32,  # cache_key_m_size
+            n_size // 32,  # cache_key_n_size
             q,  # Q
             k,  # K
             v,  # V
