@@ -18,7 +18,8 @@ RUN apt-get install -y git \
     python3.9 \
     python3.9-distutils \
     python3.9-venv \
-    python3.9-dev
+    python3.9-dev \
+    nano
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.9 2 && \
