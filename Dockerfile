@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.6.1-devel-ubuntu20.04
+FROM nvidia/cuda:12.0.0-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 ENV CUDA_INSTALL_PATH=/usr/local/cuda/
@@ -21,10 +21,10 @@ RUN apt-get install -y git \
     python3.9-dev \
     nano
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 && \
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.9 2 && \
   update-alternatives --set python /usr/bin/python3.9 && \
-  update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1 && \
+  update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
   update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 2 && \
   update-alternatives --set python3 /usr/bin/python3.9
 
