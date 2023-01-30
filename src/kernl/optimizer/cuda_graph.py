@@ -12,48 +12,121 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from collections import defaultdict, deque
+import math
 from typing import Callable, Union
 
 import torch
-import triton
 from torch._dynamo import utils as dynamo_utils
 from torch._inductor.compile_fx import cudagraphify_impl
 from torch._subclasses import FakeTensor
 
+from kernl.optimizer.pool_cuda_graphs import CudaGraphPool, get_aligned_size
 
-static_inputs_pool: dict[(int, torch.dtype), deque[torch.Tensor]] = defaultdict(deque)
+
+# TODO add tests include tests on multiple pools
+# a = torch.tensor([1, 2, 3])
+# b = torch.tensor([4, 5, 6, 7], dtype=torch.bfloat16)
+# c = torch.tensor([8])
+# d = torch.tensor([9, 10, 11, 12], dtype=torch.double)
+# e = torch.tensor([13, 14], dtype=torch.int8)
+# f = torch.tensor([15], dtype=torch.float32)
+# g = torch.tensor([16], dtype=torch.int64)
+#
+# all_inputs = [a, b, c, d, e, f, g]
+# all_pools = [CudaGraphPool(31, device=a.device)]
+#
+# new_tensors = prepare_inputs(inputs=all_inputs, pools=all_pools)
+#
+# for new_copy in new_tensors:
+#     print(
+#         new_copy,
+#         new_copy.data_ptr(),
+#         new_copy.dtype,
+#         new_copy.device,
+#         new_copy.size(),
+#         new_copy.stride(),
+#         new_copy.storage_offset(),
+#     )
+
+# avec :
+# time to warmup: 12.41min
+# Kernl speedup: 2.5X (0.5 VS 1.3 min)
+# # different outputs: 0/73 (0.00%)
+#
+# memory footprint:
+# * allocated: 8.6GB
+# * reserved: 11.3GB
+# * max reserved: 13.6GB
+#
+# sans :
+# time to warmup: 12.42min
+# Kernl speedup: 2.4X (0.5 VS 1.3 min)
+# # different outputs: 0/73 (0.00%)
+#
+# memory footprint:
+# * allocated: 10.9GB
+# * reserved: 13.4GB
+# * max reserved: 13.9GB
+#
+# ======================================================================= 2859 passed, 80 warnings in 8342.38s (2:19:02) ========================================================================
+#
+static_inputs_pool = []
 
 
-def get_static_inputs(model_inputs: list[torch.Tensor]) -> list[torch.Tensor]:
+def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> list[torch.Tensor]:
     """
-    Copy input tensors to a managed pool of tensors (to limit memory footprint).
-    All tensors need to be declared as static inputs to CUDA graph.
+    Copy the inputs in the CUDA graphs memory pool and return tensor copies.
+    Follows a greedy bin packing algorithm (first-fit decreasing) to minimize the number of pools:
+    - sort the items in decreasing order of size ;
+    - insert them one by one into the first bin that has room for it.
 
-    @param model_inputs: list of inputs
-    @return: list of inputs to be used in CUDA graphs
+    :param inputs: list of tensors to copy in the pool
+    :param pools: list of available pools
+    :return: list of tensors that are copies of the inputs in the pool
     """
-    static_inputs_clone: dict[(int, torch.dtype), deque[torch.Tensor]] = defaultdict(deque)
-    for k, v in static_inputs_pool.items():
-        static_inputs_clone[k] = v.copy()
-    cuda_graph_input: list[torch.Tensor] = list()
-    for index, original_tensor in enumerate(model_inputs):
-        storage_size = triton.next_power_of_2(len(original_tensor.untyped_storage()))
-        tensor_pool_key = (storage_size, original_tensor.dtype)
-        if len(static_inputs_clone[tensor_pool_key]) > 0:
-            static_tensor = static_inputs_clone[tensor_pool_key].popleft()
-        else:
-            static_tensor = torch.empty((storage_size,), dtype=original_tensor.dtype, device=original_tensor.device)
-            static_inputs_pool[tensor_pool_key].append(static_tensor)
+    inputs_copy = list(inputs).copy()
+    # add position meta
+    for index, t in enumerate(inputs_copy):
+        t.position = index
 
-        # storage offset should not be used below... otherwise it changes cuda address
-        before_ptr = static_tensor.data_ptr()
-        static_tensor = torch.as_strided(static_tensor, original_tensor.size(), original_tensor.stride())
-        static_tensor.copy_(original_tensor)
-        cuda_graph_input.append(static_tensor)
-        assert before_ptr == static_tensor.data_ptr(), f"should be equal: {before_ptr} != {static_tensor.data_ptr()}"
+    # reset pool offsets
+    for p in pools:
+        p.reset()
 
-    return cuda_graph_input
+    pools.sort(key=lambda x: x.size, reverse=False)
+    inputs_copy.sort(key=lambda x: x.numel(), reverse=True)
+
+    to_add_new_pool: list[torch.Tensor] = list()
+    outputs: list[torch.Tensor] = list()
+    for t in inputs_copy:
+        new_pool = True
+        for pool in pools:
+            if pool.can_store(t):
+                new_pool = False
+                new_t = pool.copy_to_pool(t)
+                new_t.position = t.position
+                outputs.append(new_t)
+                break
+        if new_pool:
+            to_add_new_pool.append(t)
+
+    if len(to_add_new_pool) > 0:
+        total_input_size = sum([get_aligned_size(t) for t in to_add_new_pool])
+        if len(static_inputs_pool) > 0:
+            total_input_size = max(total_input_size, *([p.size for p in static_inputs_pool]))
+        if total_input_size < 1024 * 1024 * 1024:
+            total_input_size = 2 ** math.ceil(math.log2(total_input_size))
+        new_pool = CudaGraphPool(total_input_size, device=inputs[0].device)  # size in bytes
+        pools.append(new_pool)
+
+        for t in to_add_new_pool:
+            assert new_pool.can_store(t)
+            new_t = new_pool.copy_to_pool(t)
+            new_t.position = t.position
+            outputs.append(new_t)
+
+    outputs.sort(key=lambda x: x.position, reverse=False)
+    return outputs
 
 
 def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]]) -> Callable:
@@ -67,17 +140,17 @@ def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple
     assert isinstance(inputs, (list, tuple))
     # if using fake tensors, defer CUDA graphs until we get real inputs at runtime
     if not any(isinstance(inp, FakeTensor) for inp in inputs):
-        inputs = get_static_inputs(inputs)
+        inputs = prepare_inputs(inputs=inputs, pools=static_inputs_pool)
         model(*inputs)  # additional warmup needed when input is mutated by some kernel
         f = cudagraphify_impl(
             model=lambda args: model(*args), inputs=inputs, static_input_idxs=tuple(range(len(inputs)))
         )
-        return lambda *args: f(get_static_inputs(args))
+        return lambda *args: f(prepare_inputs(inputs=args, pools=static_inputs_pool))
 
     compiled_fn = None
 
     def run(*new_inputs):
-        new_inputs = get_static_inputs(list(new_inputs))
+        new_inputs = prepare_inputs(inputs=list(new_inputs), pools=static_inputs_pool)
         nonlocal compiled_fn
         if compiled_fn is None:
             with dynamo_utils.preserve_rng_state():
