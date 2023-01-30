@@ -24,10 +24,22 @@ Please install it first.
 
 ```shell
 pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+# or for local dev, after git clone ...
+pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 This project requires `Python` >= 3.9.
 Furthermore, the library requires an Ampere GPU and CUDA to be installed. 
+
+If you prefer `Docker`:
+
+```shell
+# build
+make docker_build
+DOCKER_BUILDKIT=1 docker build -t kernl .
+# run
+docker run --rm -it --gpus all -v $(pwd):/kernl kernl
+```
 
 ## Getting started
 
@@ -36,7 +48,7 @@ import torch
 from transformers import AutoModel
 from kernl.model_optimization import optimize_model
 
-model = AutoModel.from_pretrained(model_name).eval().cuda()
+model = AutoModel.from_pretrained("model_name").eval().cuda()
 optimize_model(model)
 
 inputs = ...
