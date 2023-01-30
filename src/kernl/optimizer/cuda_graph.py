@@ -23,31 +23,6 @@ from torch._subclasses import FakeTensor
 from kernl.optimizer.pool_cuda_graphs import CudaGraphPool, get_aligned_size
 
 
-# TODO add tests include tests on multiple pools
-# a = torch.tensor([1, 2, 3])
-# b = torch.tensor([4, 5, 6, 7], dtype=torch.bfloat16)
-# c = torch.tensor([8])
-# d = torch.tensor([9, 10, 11, 12], dtype=torch.double)
-# e = torch.tensor([13, 14], dtype=torch.int8)
-# f = torch.tensor([15], dtype=torch.float32)
-# g = torch.tensor([16], dtype=torch.int64)
-#
-# all_inputs = [a, b, c, d, e, f, g]
-# all_pools = [CudaGraphPool(31, device=a.device)]
-#
-# new_tensors = prepare_inputs(inputs=all_inputs, pools=all_pools)
-#
-# for new_copy in new_tensors:
-#     print(
-#         new_copy,
-#         new_copy.data_ptr(),
-#         new_copy.dtype,
-#         new_copy.device,
-#         new_copy.size(),
-#         new_copy.stride(),
-#         new_copy.storage_offset(),
-#     )
-
 # avec :
 # time to warmup: 12.41min
 # Kernl speedup: 2.5X (0.5 VS 1.3 min)
@@ -68,7 +43,9 @@ from kernl.optimizer.pool_cuda_graphs import CudaGraphPool, get_aligned_size
 # * reserved: 13.4GB
 # * max reserved: 13.9GB
 #
-# ======================================================================= 2859 passed, 80 warnings in 8342.38s (2:19:02) ========================================================================
+# =======================================================================
+# 2859 passed, 80 warnings in 8342.38s (2:19:02)
+# ========================================================================
 #
 static_inputs_pool = []
 
