@@ -35,7 +35,6 @@ If you prefer `Docker`:
 
 ```shell
 # build
-make docker_build
 DOCKER_BUILDKIT=1 docker build -t kernl .
 # run
 docker run --rm -it --gpus all -v $(pwd):/kernl kernl
