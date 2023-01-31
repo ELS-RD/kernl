@@ -13,15 +13,15 @@ def test_aligned_size():
 
 
 def test_cuda_graph_pool():
-    a = torch.tensor([1, 2, 3])
-    b = torch.tensor([4, 5, 6, 7], dtype=torch.bfloat16)
-    c = torch.tensor([8])
-    d = torch.tensor([9, 10, 11, 12], dtype=torch.double)
-    e = torch.tensor([13, 14], dtype=torch.int8)
-    f = torch.tensor([15], dtype=torch.float32)
-    g = torch.tensor([16], dtype=torch.int64)
-
-    all_inputs = [a, b, c, d, e, f, g]
+    all_inputs = [
+        torch.tensor([1, 2, 3]),
+        torch.tensor([4, 5, 6, 7], dtype=torch.bfloat16),
+        torch.tensor([8]),
+        torch.tensor([9, 10, 11, 12], dtype=torch.double),
+        torch.tensor([13, 14], dtype=torch.int8),
+        torch.tensor([15], dtype=torch.float32),
+        torch.tensor([16], dtype=torch.int64),
+    ]
     all_pools = [CudaGraphPool(30), CudaGraphPool(50)]
 
     new_tensors = prepare_inputs(inputs=all_inputs, pools=all_pools)
