@@ -23,30 +23,6 @@ from torch._subclasses import FakeTensor
 from kernl.optimizer.pool_cuda_graphs import CudaGraphPool, get_aligned_size
 
 
-# avec :
-# time to warmup: 12.41min
-# Kernl speedup: 2.5X (0.5 VS 1.3 min)
-# # different outputs: 0/73 (0.00%)
-#
-# memory footprint:
-# * allocated: 8.6GB
-# * reserved: 11.3GB
-# * max reserved: 13.6GB
-#
-# sans :
-# time to warmup: 12.42min
-# Kernl speedup: 2.4X (0.5 VS 1.3 min)
-# # different outputs: 0/73 (0.00%)
-#
-# memory footprint:
-# * allocated: 10.9GB
-# * reserved: 13.4GB
-# * max reserved: 13.9GB
-#
-# =======================================================================
-# 2859 passed, 80 warnings in 8342.38s (2:19:02)
-# ========================================================================
-#
 static_inputs_pool = []
 
 
