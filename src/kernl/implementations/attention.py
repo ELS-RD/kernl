@@ -75,7 +75,10 @@ def prune(configs, named_args):
     pruned_configs = []
     sizes_m = closest_power_of_2(named_args["m_size"])
     sizes_n = closest_power_of_2(named_args["n_size"])
+    is_causal = named_args["IS_CAUSAL"]
     for c in configs:
+        if is_causal and c.kwargs["BLOCK_M_SIZE"] != c.kwargs["BLOCK_N_SIZE"]:
+            continue
         if c.kwargs["BLOCK_M_SIZE"] in sizes_m and c.kwargs["BLOCK_N_SIZE"] in sizes_n:
             pruned_configs.append(c)
 
@@ -107,9 +110,9 @@ def prune(configs, named_args):
         # triton.Config({"BLOCK_M_SIZE": 256, "BLOCK_N_SIZE": 256}, num_stages=1, num_warps=16),
     ],
     prune_configs_by={"early_config_prune": prune, "perf_model": None, "top_k": None},
-    key=["cache_key_m_size", "cache_key_n_size", "head_size", "HAS_MASK", "IS_MATRIX_MASK", "IS_CAUSAL"],
+    key=["m_size", "n_size", "head_size", "HAS_MASK", "IS_MATRIX_MASK", "IS_CAUSAL"],
 )
-@triton.heuristics(  # order should be the same than in function args, otherwise expect strange bugs
+@triton.heuristics(  # order should be the same as in function args, otherwise expect strange bugs
     {
         # load mask is needed if one dim (n_size / m_size) of tensors do not align with block size
         "M_LOAD_MASK_NEEDED": lambda args: args["m_size"] % args["BLOCK_M_SIZE"] != 0,
@@ -311,7 +314,9 @@ def _fwd_kernel(
 
     block_n_end = n_size
     if IS_CAUSAL:
-        block_n_end = (block_m_idx + 1) * BLOCK_M_SIZE
+        # in causal mode, we expect that BLOCK_M_SIZE == BLOCK_N_SIZE
+        # autotune will prune shapes not matching this rule
+        block_n_end = (block_m_idx + 1) * BLOCK_N_SIZE
 
     if HAS_MASK:
         attention_mask_batch_idx = (current_batch_idx,)
