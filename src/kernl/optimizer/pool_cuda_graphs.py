@@ -6,15 +6,12 @@ class CudaGraphPool:
     Memory pool for CUDA graphs.
     """
 
-    def __init__(self, size, dtype=torch.int8, device="cuda"):  # TODO change device to cuda
+    def __init__(self, size, device="cuda"):
         """
-        :param size: size of the pool in bytes. Must be a multiple of the dtype size.
-        :param dtype: dtype of the pool
+        :param size: size of the pool in bytes.
         """
-        assert size > 8, "Size must be at least 8 bytes"
-        element_size = torch.tensor([], dtype=dtype).element_size()
-        assert size % element_size == 0, "Size must be a multiple of the dtype size"
-        self.pool: torch.Tensor = torch.empty(size // element_size, dtype=dtype, device=device)
+        assert size > 0, "Size must be positive"
+        self.pool: torch.Tensor = torch.empty(size, dtype=torch.int8, device=device)
         self.size = len(self.pool.untyped_storage())
         self.offset = 0
 
@@ -53,7 +50,7 @@ class CudaGraphPool:
         self.offset = 0
 
 
-def get_aligned_size(t: torch.Tensor, alignment=64) -> int:
+def get_aligned_size(t: torch.Tensor, alignment=8) -> int:
     """
     Get the aligned size of the tensor t.
     :param t: tensor to get the aligned size of

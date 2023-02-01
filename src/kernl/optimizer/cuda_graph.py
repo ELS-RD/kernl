@@ -26,6 +26,24 @@ from kernl.optimizer.pool_cuda_graphs import CudaGraphPool, get_aligned_size
 static_inputs_pool = []
 
 
+def get_pool_size(inputs: list[torch.Tensor], existing_pools: list[CudaGraphPool]) -> int:
+    """
+    Get the size of the pool to use for the CUDA graphs:
+    - pool size should be at least as big as the largest existing pool size
+    - if pool size < 1Gb, increase its size up to next power of 2 to avoid having many unusuable small pools
+
+    :param inputs: list of inputs to be copied in the pool
+    :param existing_pools: list of existing pools
+    :return: size of the pool in bytes
+    """
+    size = sum([get_aligned_size(p) for p in inputs])
+    size = max(size, *([p.size for p in existing_pools] + [0]))
+
+    if size < 1024 * 1024 * 1024:
+        size = 2 ** math.ceil(math.log2(size))
+    return size
+
+
 def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> list[torch.Tensor]:
     """
     Copy the inputs in the CUDA graphs memory pool and return tensor copies.
@@ -35,7 +53,7 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
 
     :param inputs: list of tensors to copy in the pool
     :param pools: list of available pools
-    :return: list of tensors that are copies of the inputs in the pool
+    :return: copy of input tensors having their underlying storage in the memory pool
     """
     inputs_copy = list(inputs).copy()
     # add position meta
@@ -64,12 +82,8 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
             to_add_new_pool.append(t)
 
     if len(to_add_new_pool) > 0:
-        total_input_size = sum([get_aligned_size(t) for t in to_add_new_pool])
-        if len(static_inputs_pool) > 0:
-            total_input_size = max(total_input_size, *([p.size for p in static_inputs_pool]))
-        if total_input_size < 1024 * 1024 * 1024:
-            total_input_size = 2 ** math.ceil(math.log2(total_input_size))
-        new_pool = CudaGraphPool(total_input_size, device=inputs[0].device)  # size in bytes
+        pool_size = get_pool_size(inputs=to_add_new_pool, existing_pools=pools)
+        new_pool = CudaGraphPool(pool_size, device=inputs[0].device)
         pools.append(new_pool)
 
         for t in to_add_new_pool:
