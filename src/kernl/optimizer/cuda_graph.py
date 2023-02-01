@@ -72,7 +72,7 @@ def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple
         f = cudagraphify_impl(
             model=lambda args: model(*args), inputs=inputs, static_input_idxs=tuple(range(len(inputs)))
         )
-        return lambda args: f(get_static_inputs(args))
+        return lambda *args: f(get_static_inputs(args))
 
     compiled_fn = None
 

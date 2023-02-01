@@ -94,7 +94,7 @@ def test_benchmark_linear_forward(
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
-        fn = lambda tensor: run([tensor])[0]  # noqa: E731
+        fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
 
