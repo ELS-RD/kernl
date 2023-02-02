@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 import math
-from typing import Callable, Union
+from typing import Callable, Iterable, Optional, Union
 
 import torch
 from torch._dynamo import utils as dynamo_utils
@@ -44,6 +44,16 @@ def get_pool_size(inputs: list[torch.Tensor], existing_pools: list[CudaGraphPool
     return size
 
 
+def argsort(iterable: Iterable, key: Callable) -> list[int]:
+    """
+    Sort the list of tensors following provided lambda function.
+    :param iterable: iterable object to sort
+    :param key: lambda function to sort the iterable object
+    :return: indices to sort the iterable object
+    """
+    return [idx for idx, _ in sorted(enumerate(iterable), key=lambda x: key(x[1]))]
+
+
 def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> list[torch.Tensor]:
     """
     Copy the inputs in the CUDA graphs memory pool and return tensor copies.
@@ -60,11 +70,9 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
         p.reset()
 
     pools.sort(key=lambda x: x.size, reverse=False)
-    inputs_size_order = [idx for idx, _ in sorted(enumerate(inputs), key=lambda x: len(x[1].untyped_storage()))]
+    inputs_size_order = argsort(inputs, key=lambda x: x.untyped_storage().size())
 
-    to_add_new_pool: list[torch.Tensor] = list()
-    input_copies: list[torch.Tensor] = list()
-    existing_pool_index = list()
+    input_copies: list[Optional[torch.Tensor]] = [None] * len(inputs)
     new_pool_index = list()
     for idx in inputs_size_order:
         t = inputs[idx]
@@ -73,26 +81,21 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
             if pool.can_store(t):
                 new_pool = False
                 new_t = pool.copy_to_pool(t)
-                input_copies.append(new_t)
-                existing_pool_index.append(idx)
+                input_copies[idx] = new_t
                 break
         if new_pool:
-            to_add_new_pool.append(t)
             new_pool_index.append(idx)
 
-    if len(to_add_new_pool) > 0:
-        pool_size = get_pool_size(inputs=to_add_new_pool, existing_pools=pools)
+    if len(new_pool_index) > 0:
+        pool_size = get_pool_size(inputs=[inputs[i] for i in new_pool_index], existing_pools=pools)
         new_pool = CudaGraphPool(pool_size, device=inputs[0].device)
         pools.append(new_pool)
 
-        for t in to_add_new_pool:
+        for idx in new_pool_index:
+            t = inputs[idx]
             assert new_pool.can_store(t)
             new_t = new_pool.copy_to_pool(t)
-            input_copies.append(new_t)
-    # sort inputs in the same order as original inputs
-    input_copies = [
-        x for _, x in sorted(zip(existing_pool_index + new_pool_index, input_copies), key=lambda pair: pair[0])
-    ]
+            input_copies[idx] = new_t
 
     return input_copies
 
