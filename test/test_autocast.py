@@ -32,7 +32,7 @@ def test_autocast():
         # when we're not using kernl autocast
         (False, False, None, None, False, None, torch.float32),
         (False, False, None, None, False, torch.bfloat16, torch.float32),
-        (True, False, torch.float16, None, False, None, torch.float16),
+        (True, False, torch.float16, None, False, None, torch.float32),
         (True, False, torch.float16, None, False, torch.bfloat16, torch.bfloat16),
         # we check @custom_fwd without torch autocast
         (False, True, None, torch.float16, False, None, torch.float16),

@@ -4,7 +4,8 @@ import torch
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
-from torch.cuda.amp import custom_fwd
+
+from kernl.autocast import custom_fwd
 
 
 @triton.autotune(
@@ -152,7 +153,7 @@ def vec_mat_wrapper(
 
 class AttentionVecMat(torch.autograd.Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float16)
+    @custom_fwd()
     def forward(
         ctx: FunctionCtx,
         q: torch.Tensor,

@@ -18,7 +18,8 @@ import torch
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
-from torch.cuda.amp import custom_fwd
+
+from kernl.autocast import custom_fwd
 
 
 def attention_split_1_reference(

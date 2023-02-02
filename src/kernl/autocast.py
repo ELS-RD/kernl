@@ -101,8 +101,6 @@ def custom_fwd(fwd=None, **kwargs):
 
     @functools.wraps(fwd)
     def decorate_fwd(*args, **kwargs):
-
-        print(f"cast_inputs: {cast_inputs}")
         inputs = cast_inputs
         if inputs is None:
             if is_autocast_enabled():
@@ -111,19 +109,16 @@ def custom_fwd(fwd=None, **kwargs):
                         inputs = torch.get_autocast_gpu_dtype()
                 else:
                     inputs = get_autocast_dtype()
-            else:
-                if torch.is_autocast_enabled():
-                    inputs = torch.get_autocast_gpu_dtype()
-        print(f"cast_inputs 2: {inputs}")
-        args[0]._fwd_used_autocast = torch.is_autocast_enabled()
         if inputs is None:
+            args[0]._fwd_used_autocast = torch.is_autocast_enabled()
             return fwd(*args, **kwargs)
         else:
-            autocast_context = torch.is_autocast_enabled()
+            autocast_context = torch.is_autocast_enabled() or is_autocast_enabled()
+            args[0]._fwd_used_autocast = torch.is_autocast_enabled()
             if autocast_context:
                 with torch.cuda.amp.autocast(enabled=False):
                     return fwd(*_cast(args, inputs), **_cast(kwargs, inputs))
-            if inputs is None:
+            else:
                 return fwd(*args, **kwargs)
 
     return decorate_fwd
@@ -132,7 +127,6 @@ def custom_fwd(fwd=None, **kwargs):
 # Casts Tensors and containers of Tensors.  Special-cases passthroughs for strings and np.ndarrays, which
 # may be falsely detected as "Iterables."
 def _cast(value, dtype):
-    print(f"to {dtype}")
     if isinstance(value, torch.Tensor):
         is_eligible = value.is_floating_point() and value.is_cuda and (value.dtype is not torch.float64)
         return value.to(dtype) if is_eligible else value
