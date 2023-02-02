@@ -89,7 +89,7 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
             assert new_pool.can_store(t)
             new_t = new_pool.copy_to_pool(t)
             input_copies.append(new_t)
-
+    # sort inputs in the same order as original inputs
     input_copies = [
         x for _, x in sorted(zip(existing_pool_index + new_pool_index, input_copies), key=lambda pair: pair[0])
     ]
