@@ -44,7 +44,7 @@ class MemoryMap:
         return registered_storage
 
     def add_tensor(self, t: torch.Tensor):
-        storage = t._storage()
+        storage = t.untyped_storage()
         self.storages.append(RegisteredStorage(storage, t.dtype, storage.size(), storage.data_ptr()))
         return t.data_ptr()
 
