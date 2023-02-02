@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: ❓ Simple question - GitHub Discussions
+    url: https://github.com/ELS-RD/kernl/discussions
+    about: This issue tracker is not for technical support. Please use the discussion forum, and ask the community for help.
+  - name: ❓ Advanced question - GitHub Discussions
+    url: https://github.com/ELS-RD/kernl/discussions
+    about: Use the discussion forum for advanced and unanswered questions only, requiring a maintainer's answer. Make sure the question wasn't already asked.
+  - name: 🚀 Feature request or proposals - GitHub Discussions
+    url: https://github.com/ELS-RD/kernl/discussions
+    about: The discussion forum is preferred for submitting requests or proposals for features that you have an idea for but not a concrete design proposal.
+  - name: ❓ Other - GitHub Discussions
+    url: https://github.com/ELS-RD/kernl/discussions
+    about: For anything else about kernl that you would like to talk about, use the discussion forum.

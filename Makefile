@@ -6,7 +6,7 @@ source_code_check_format:
 
 .PHONY: source_code_format
 source_code_format:
-	black --line-length 120 --target-version py37 . && \
+	black --line-length 120 --target-version py39 . && \
 	isort .
 	$(MAKE) source_code_check_format
 

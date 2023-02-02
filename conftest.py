@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-
+import gc
 import random
 from contextlib import contextmanager
 
@@ -22,6 +22,7 @@ import torch._dynamo as dynamo
 
 from kernl.benchmark.benchmark_fixture import BenchmarkFixture
 from kernl.benchmark.benchmark_session import BenchmarkSession
+from kernl.optimizer.cuda_graph import static_inputs_pool
 
 
 @contextmanager
@@ -31,13 +32,25 @@ def set_seed(seed: int = 0):
     yield
 
 
-@contextmanager
-def setup_dynamo():
+@pytest.fixture(autouse=True)
+def reset_kernl_state():
     cache_limit = dynamo.config.cache_size_limit
-    dynamo.config.cache_size_limit = 512
-    dynamo.reset()
-    yield
-    dynamo.config.cache_size_limit = cache_limit
+    try:
+        dynamo.config.cache_size_limit = 512
+        dynamo.reset()
+        static_inputs_pool.clear()
+        torch.cuda.synchronize()
+        gc.collect()
+        torch.cuda.empty_cache()
+        yield {}
+    except RuntimeError as err:
+        raise err
+    finally:
+        dynamo.config.cache_size_limit = cache_limit
+        static_inputs_pool.clear()
+        torch.cuda.synchronize()
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 @pytest.fixture(scope="function")

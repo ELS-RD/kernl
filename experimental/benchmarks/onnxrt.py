@@ -78,7 +78,6 @@ def build_onnx(
 
 
 def get_model_optim_fp16_onnx(model: PreTrainedModel, model_path: str) -> Callable:
-
     model_onnx = build_onnx(model, model_path)
     binding: IOBinding = model_onnx.io_binding()
     expected_input_names = [i.name for i in model_onnx.get_inputs()]
@@ -103,7 +102,6 @@ def create_model_for_provider(path: str) -> InferenceSession:
 def inference_onnx_binding(
     model_onnx: InferenceSession, binding: IOBinding, inputs: Dict[str, torch.Tensor]
 ) -> Dict[str, torch.Tensor]:
-
     device = "cuda"
     device_id = 0
     bs, seq_len = inputs["input_ids"].shape
@@ -124,7 +122,6 @@ def inference_onnx_binding(
 
     outputs: dict[str, torch.Tensor] = dict()
     for out in model_onnx.get_outputs():
-
         if out.name == "last_hidden_state":
             output_tensor = torch.empty((bs, seq_len, 768), dtype=torch.float16, device="cuda")
         elif out.name == "1525":  # pooler_output

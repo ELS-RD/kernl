@@ -37,7 +37,6 @@ def kernel(
     D_HEAD: tl.constexpr,
     IS_DOT: tl.constexpr,
 ):
-
     size_m_arange = tl.arange(0, SIZE_M)
     d_head_arange = tl.arange(0, D_HEAD)
     # transpose matrix

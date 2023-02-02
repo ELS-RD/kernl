@@ -18,7 +18,6 @@ import torch
 
 from conftest import assert_all_close, set_seed
 
-from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.implementations.layer_norm import (
     _layer_norm_fwd_fused_multi_pass,
     _layer_norm_fwd_fused_single_pass,
@@ -27,6 +26,7 @@ from kernl.implementations.layer_norm import (
     pytorch_naive_layernorm,
     pytorch_naive_rmsnorm,
 )
+from kernl.optimizer.cuda_graph import cuda_graphs_wrapper
 
 
 implementations_layer_norm = {
@@ -67,7 +67,7 @@ def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, i
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
-        fn = lambda tensor: run([tensor])[0]  # noqa: E731
+        fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
     assert_all_close(value.float(), expected, atol=1e-1)
@@ -101,7 +101,7 @@ def test_benchmark_rms_norm(benchmark, shape: int, dtype, cuda_graphs: bool, imp
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
-        fn = lambda tensor: run([tensor])[0]  # noqa: E731
+        fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
     assert_all_close(value.float(), expected, atol=1e-1)

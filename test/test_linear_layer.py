@@ -20,8 +20,8 @@ import torch
 
 from conftest import assert_all_close, set_seed
 
-from kernl.implementations.cuda_graph import cuda_graphs_wrapper
 from kernl.implementations.linear_layer import linear_layer
+from kernl.optimizer.cuda_graph import cuda_graphs_wrapper
 
 
 def get_pytorch_activation(activation: str) -> Callable:
@@ -92,7 +92,7 @@ def test_benchmark(
     if cuda_graphs:
         run = cuda_graphs_wrapper(model=fn, inputs=[x])
         # CUDA graphs wraps output in a tuple
-        fn = lambda tensor: run([tensor])[0]  # noqa: E731
+        fn = lambda tensor: run(tensor)[0]  # noqa: E731
 
     value = benchmark(fn, x)
 

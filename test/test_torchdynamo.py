@@ -29,7 +29,7 @@ import pytest
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, WhisperForConditionalGeneration, WhisperProcessor
 
-from conftest import assert_all_close, set_seed, setup_dynamo
+from conftest import assert_all_close, set_seed
 
 from kernl.model_optimization import optimize_model
 
@@ -57,7 +57,6 @@ def reference_fp32(request):
     return get_model_from_hf(request.param)
 
 
-@setup_dynamo()
 @set_seed()
 @pytest.mark.parametrize(
     "reference_fp32",
@@ -84,7 +83,6 @@ def test_benchmark_implementations(benchmark, reference_fp32, shape: (int, int),
         assert_all_close(value["pooler_output"].float(), expected["pooler_output"].float(), rtol=1e-1, atol=1e-1)
 
 
-@setup_dynamo()
 @set_seed()
 @pytest.mark.parametrize("implementation", implementations, ids=lambda v: v.name)
 def test_support_shape_change(implementation):
@@ -102,7 +100,6 @@ def test_support_shape_change(implementation):
         )
 
 
-@setup_dynamo()
 def test_t5():
     tokenizer = AutoTokenizer.from_pretrained("t5-small", model_max_length=512)
     model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
@@ -134,10 +131,24 @@ def test_t5():
         assert "La maison est merveilleuse." in tokenizer.batch_decode(output_sequences, skip_special_tokens=True)[0]
 
 
-@setup_dynamo()
+@pytest.mark.parametrize("num_beam", [1, 5])
 @pytest.mark.parametrize("implementation", ["reference", "optimized"])
-def test_whisper_hf(benchmark, implementation):
+def test_whisper_hf(benchmark, implementation, num_beam):
+    if implementation == "optimized":
+
+        @staticmethod
+        def fix_reorder_cache(past, beam_idx):
+            reordered_past = ()
+            for layer_past in past:
+                reordered_past += (
+                    tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                )
+            return reordered_past
+
+        WhisperForConditionalGeneration._reorder_cache = fix_reorder_cache
+
     model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").to("cuda")
+
     if implementation == "optimized":
         optimize_model(model.model.encoder)
         optimize_model(model.model.decoder)
@@ -145,8 +156,10 @@ def test_whisper_hf(benchmark, implementation):
     processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
     inputs = torch.load("test/data/whisper_input.pt")
     with torch.inference_mode(), torch.autocast(dtype=torch.float16, cache_enabled=True, device_type="cuda"):
-        predicted_ids = benchmark(model.generate, inputs, min_length=25, max_length=25, num_beams=2, do_sample=False)
+        predicted_ids = benchmark(
+            model.generate, inputs, min_length=25, max_length=25, num_beams=num_beam, do_sample=False
+        )
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True, normalize=True)[0]
         assert (
-            transcription == "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel" == transcription
         )

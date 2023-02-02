@@ -20,10 +20,10 @@ import torch
 
 from conftest import assert_all_close, set_seed
 from src.kernl.implementations.attention_skinny import skinny_attention_forward
-from src.kernl.implementations.cuda_graph import cuda_graphs_wrapper
 
 from kernl.implementations.attention import attention_forward, attention_reference, closest_power_of_2
 from kernl.implementations.attention_vec_mat import attention_vec_mat_forward
+from kernl.optimizer.cuda_graph import cuda_graphs_wrapper
 
 
 implementations = {
@@ -180,8 +180,8 @@ implementations_skinny_cross_attention = {
 @set_seed()
 @pytest.mark.parametrize(
     "shape",
-    [(1, 6, 1500, 64), (1, 16, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)],
-    ids=["tiny", "medium", "large-beam-1", "large-beam-5"],
+    [(1, 6, 1500, 64), (5, 6, 1500, 64), (1, 16, 1500, 64), (5, 16, 1500, 64), (1, 20, 1500, 64), (5, 20, 1500, 64)],
+    ids=["tiny-beam-1", "tiny-beam-5", "medium-beam-1", "medium-beam-5", "large-beam-1", "large-beam-5"],
 )
 @pytest.mark.parametrize("implementation", implementations_skinny_cross_attention.keys())
 def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
@@ -189,6 +189,9 @@ def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
     q = torch.rand((batch, head, 1, dhead), dtype=torch.float16, device="cuda")
     k = torch.rand((batch, head, seqlen, dhead), dtype=torch.float16, device="cuda")
     v = torch.rand_like(k)
+    if "vec-mat-mul" in implementation:
+        # change layout from row major (default) to col major to make coalesced memory access in Triton kernel
+        v = v.permute(0, 1, 3, 2).contiguous().permute(0, 1, 3, 2)
     sm_scale = 0.3
 
     expected = attention_reference(
@@ -203,7 +206,7 @@ def test_benchmark_skinny_cross_attention(benchmark, implementation, shape):
     output = torch.empty_like(q)
     fn = implementations_skinny_cross_attention[implementation](output, sm_scale)
     r = cuda_graphs_wrapper(fn, [q, k, v])
-    _ = r([q, k, v])[0]
-    result = benchmark(r, [q, k, v])[0]
+    _ = r(q, k, v)[0]
+    result = benchmark(r, q, k, v)[0]
 
     assert_all_close(a=expected, b=result.float(), atol=1e-2)
