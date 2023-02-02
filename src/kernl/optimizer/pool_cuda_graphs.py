@@ -21,11 +21,12 @@ class CudaGraphPool:
         :param t: tensor to copy in the pool
         :return: tensor copy (that is a view of the pool)
         """
+
         assert t.device == self.pool.device
+        assert self.can_store(t)
         # 64 bits alignment
         tensor_aligned_size = get_aligned_size(t)
         new_offset = self.offset + tensor_aligned_size
-        assert new_offset <= self.size, "Memory pool is full"
         # offset is expressed in t.dtype number of elements
         new_t = torch.as_strided(
             self.pool.view(t.dtype), size=t.size(), stride=t.stride(), storage_offset=self.offset // t.element_size()

@@ -318,7 +318,6 @@ for bs in [1, 8, 32]:
     )
 
     for seq_len in seq_len_to_test:
-
         inputs = {
             "input_ids": torch.ones((bs, seq_len), dtype=torch.int64, device="cuda"),
             "attention_mask": torch.ones((bs, seq_len), dtype=torch.int64, device="cuda"),
