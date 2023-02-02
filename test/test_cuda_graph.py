@@ -22,18 +22,18 @@ def test_cuda_graph_pool_e2e():
         torch.tensor([15], dtype=torch.float32),
         torch.tensor([16], dtype=torch.int64),
     ]
-    all_pools = [CudaGraphPool(32, device="cpu"), CudaGraphPool(48, device="cpu")]
+    all_pools: list[CudaGraphPool] = [CudaGraphPool(32, device="cpu"), CudaGraphPool(48, device="cpu")]
 
-    new_tensors = prepare_inputs(inputs=all_inputs, pools=all_pools)
+    new_tensors: list[torch.Tensor] = prepare_inputs(inputs=all_inputs, pools=all_pools)
     assert len(new_tensors) == len(all_inputs)
     assert len(all_pools) == 3
     for original, copy in zip(all_inputs, new_tensors):
-        assert torch.all(original == copy)
-        assert original.data_ptr() != copy.data_ptr()
+        assert original.shape == copy.shape
+        assert original.stride() == copy.stride()
         assert original.dtype == copy.dtype
         assert original.device == copy.device
-        assert original.size() == copy.size()
-        assert original.stride() == copy.stride()
+        assert torch.all(original == copy)
+        assert original.data_ptr() != copy.data_ptr()
 
 
 def test_cuda_graph_pool():

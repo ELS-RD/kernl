@@ -55,31 +55,30 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
     :param pools: list of available pools
     :return: copy of input tensors having their underlying storage in the memory pool
     """
-    inputs_copy = list(inputs).copy()
-    # add position meta
-    for index, t in enumerate(inputs_copy):
-        t.position = index
-
     # reset pool offsets
     for p in pools:
         p.reset()
 
     pools.sort(key=lambda x: x.size, reverse=False)
-    inputs_copy.sort(key=lambda x: len(x.untyped_storage()), reverse=True)
+    inputs_size_order = [idx for idx, _ in sorted(enumerate(inputs), key=lambda x: len(x[1].untyped_storage()))]
 
     to_add_new_pool: list[torch.Tensor] = list()
-    outputs: list[torch.Tensor] = list()
-    for t in inputs_copy:
+    input_copies: list[torch.Tensor] = list()
+    existing_pool_index = list()
+    new_pool_index = list()
+    for idx in inputs_size_order:
+        t = inputs[idx]
         new_pool = True
         for pool in pools:
             if pool.can_store(t):
                 new_pool = False
                 new_t = pool.copy_to_pool(t)
-                new_t.position = t.position
-                outputs.append(new_t)
+                input_copies.append(new_t)
+                existing_pool_index.append(idx)
                 break
         if new_pool:
             to_add_new_pool.append(t)
+            new_pool_index.append(idx)
 
     if len(to_add_new_pool) > 0:
         pool_size = get_pool_size(inputs=to_add_new_pool, existing_pools=pools)
@@ -89,11 +88,13 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
         for t in to_add_new_pool:
             assert new_pool.can_store(t)
             new_t = new_pool.copy_to_pool(t)
-            new_t.position = t.position
-            outputs.append(new_t)
+            input_copies.append(new_t)
 
-    outputs.sort(key=lambda x: x.position, reverse=False)
-    return outputs
+    input_copies = [
+        x for _, x in sorted(zip(existing_pool_index + new_pool_index, input_copies), key=lambda pair: pair[0])
+    ]
+
+    return input_copies
 
 
 def cuda_graphs_wrapper(model: Callable, inputs: Union[list[torch.Tensor], tuple[torch.Tensor]]) -> Callable:
