@@ -37,8 +37,8 @@ def test_cuda_graph_pool_e2e():
 
 
 def test_cuda_graph_pool():
-    c = CudaGraphPool(10, device="cpu")
-    t = torch.ones((20,), dtype=torch.int64)
+    c = CudaGraphPool(8, device="cpu")
+    t = torch.ones((16,), dtype=torch.int64)
     assert not c.can_store(t)
     t = torch.ones((1,), dtype=torch.int8)
     assert c.can_store(t)
