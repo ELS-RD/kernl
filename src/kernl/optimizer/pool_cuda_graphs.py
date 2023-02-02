@@ -41,8 +41,7 @@ class CudaGraphPool:
         :param t: tensor to check
         :return: True if the tensor can be stored in the pool
         """
-
-        return self.size - self.offset >= get_aligned_size(t)
+        return (self.pool.device == t.device) and (self.size - self.offset >= get_aligned_size(t))
 
     def reset(self):
         """

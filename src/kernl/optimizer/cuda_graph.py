@@ -65,7 +65,7 @@ def prepare_inputs(inputs: list[torch.Tensor], pools: list[CudaGraphPool]) -> li
         p.reset()
 
     pools.sort(key=lambda x: x.size, reverse=False)
-    inputs_copy.sort(key=lambda x: x.numel(), reverse=True)
+    inputs_copy.sort(key=lambda x: len(x.untyped_storage()), reverse=True)
 
     to_add_new_pool: list[torch.Tensor] = list()
     outputs: list[torch.Tensor] = list()

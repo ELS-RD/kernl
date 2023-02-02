@@ -12,7 +12,7 @@ def test_aligned_size():
     assert get_aligned_size(t, alignment=8) == 8
 
 
-def test_cuda_graph_pool():
+def test_cuda_graph_pool_e2e():
     all_inputs = [
         torch.tensor([1, 2, 3]),
         torch.tensor([4, 5, 6, 7], dtype=torch.bfloat16),
@@ -34,3 +34,25 @@ def test_cuda_graph_pool():
         assert original.device == copy.device
         assert original.size() == copy.size()
         assert original.stride() == copy.stride()
+
+
+def test_cuda_graph_pool():
+    c = CudaGraphPool(10, device="cpu")
+    t = torch.ones((20,), dtype=torch.int64)
+    assert not c.can_store(t)
+    t = torch.ones((1,), dtype=torch.int8)
+    assert c.can_store(t)
+    assert c.offset == 0
+    c.copy_to_pool(t)
+    assert c.offset > 0
+    t = t.cuda()
+    assert not c.can_store(t)
+    c.reset()
+    assert c.offset == 0
+
+
+def test_exact_cg_copy():
+    pool = CudaGraphPool(16)
+    tensor = torch.tensor([1, 1, 1, 1], dtype=torch.float32, device="cuda")
+    assert len(tensor.untyped_storage()) == 16
+    pool.copy_to_pool(tensor)
