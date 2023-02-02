@@ -1,7 +1,11 @@
 import torch
 
-from kernl.optimizer.cuda_graph import prepare_inputs
+from kernl.optimizer.cuda_graph import argsort, prepare_inputs
 from kernl.optimizer.pool_cuda_graphs import CudaGraphPool, get_aligned_size
+
+
+def test_argsort():
+    assert argsort(iterable=[1, 5, 3, 4, 5], key=lambda x: x) == [0, 2, 3, 1, 4]
 
 
 def test_aligned_size():
