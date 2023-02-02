@@ -79,7 +79,6 @@ class MemoryMap:
         return block
 
     def store(self, pointer: torch.Tensor, value: torch.Tensor, mask=None):
-
         assert 0 < pointer.dim() < 3
         assert pointer.dtype == torch.int64
 

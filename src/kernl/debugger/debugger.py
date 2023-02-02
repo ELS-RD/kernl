@@ -35,7 +35,7 @@ def attach_triton(module, proxy):
 
 
 def detach_triton(module):
-    for (name, method) in tl_method_backup.items():
+    for name, method in tl_method_backup.items():
         setattr(module, name, method)
 
 
@@ -54,7 +54,7 @@ class DebuggerFunction:
 
     def _get_constexpr(self):
         result = []
-        for (name, annotation) in self.func.__annotations__.items():
+        for name, annotation in self.func.__annotations__.items():
             if annotation is triton.language.core.constexpr:
                 result.append(name)
         return result
