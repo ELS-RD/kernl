@@ -22,7 +22,7 @@ def test_cuda_graph_pool_e2e():
         torch.tensor([15], dtype=torch.float32),
         torch.tensor([16], dtype=torch.int64),
     ]
-    all_pools = [CudaGraphPool(30), CudaGraphPool(50)]
+    all_pools = [CudaGraphPool(32, device="cpu"), CudaGraphPool(48, device="cpu")]
 
     new_tensors = prepare_inputs(inputs=all_inputs, pools=all_pools)
     assert len(new_tensors) == len(all_inputs)

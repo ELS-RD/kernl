@@ -10,7 +10,7 @@ class CudaGraphPool:
         """
         :param size: size of the pool in bytes.
         """
-        assert size > 0, "Size must be positive"
+        assert (size > 0) and (size % 8 == 0), f"Size must be positive and multiple of 8, got {size}"
         self.pool: torch.Tensor = torch.empty(size, dtype=torch.int8, device=device)
         self.size = len(self.pool.untyped_storage())
         self.offset = 0
@@ -28,6 +28,7 @@ class CudaGraphPool:
         tensor_aligned_size = get_aligned_size(t)
         new_offset = self.offset + tensor_aligned_size
         # offset is expressed in t.dtype number of elements
+        print("test", self.offset, t.element_size(), t.size(), t.stride(), self.pool.size())
         new_t = torch.as_strided(
             self.pool.view(t.dtype), size=t.size(), stride=t.stride(), storage_offset=self.offset // t.element_size()
         )
