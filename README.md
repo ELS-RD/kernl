@@ -21,13 +21,13 @@ A list of Examples contains how to use kernl with Pytorch.
 
 | Topic                                                                                                         | Notebook                                                                                   |
 |---------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
-| **Tiled matmul**: Matrix multiplication implementation in `CUDA` style                                        | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/1%20-%20tiled%20matmul.ipynb)    |
-| **Online softmax**: Parallelized softmax computation, a key ingredient of Flash Attention                     | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/3%20-%20online%20softmax.ipynb)  |
-| **Flash Attention**: Attention computation without saving attention matrix to global memory                   | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/4%20-%20flash%20attention.ipynb) |
-| **Matmul offsets**: Detailed explanations related to a performance trick                                      | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/2%20-%20matmul%20offsets.ipynb)  |
-| **XNLI classification**: Classification with / without optimizations (`Roberta` + `XNLI` classification task) | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/bert%20e2e.ipynb)                |
+| **Tiled matmul**: matrix multiplication implementation in `CUDA` style                                        | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/1%20-%20tiled%20matmul.ipynb)    |
+| **Matmul offsets**: detailed explanations related to a performance trick used in Triton matmul implementation | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/2%20-%20matmul%20offsets.ipynb)  |
+| **Online softmax**: parallelized softmax computation, a key ingredient of `Flash Attention`                   | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/3%20-%20online%20softmax.ipynb)  |
+| **`Flash Attention`**: attention computation without saving attention matrix to global memory                 | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/4%20-%20flash%20attention.ipynb) |
+| **XNLI classification**: classification with / without optimizations (`Roberta` + `XNLI` classification task) | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/bert%20e2e.ipynb)                |
 | **Text generation**: with/without optimizations (`T5`)                                                        | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/t5%20e2e.ipynb)                  |
-| **Transcription generation**: with/without optimizations (`Whisper large`)                                    | [link](https://github.com/ELS-RD/kernl/blob/main/experimental/whisper/speedup.ipynb)       |
+| **Transcription generation**: with/without optimizations (`Whisper`)                                          | [link](https://github.com/ELS-RD/kernl/blob/main/experimental/whisper/speedup.ipynb)       |
 
 ## Installation
 
