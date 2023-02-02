@@ -15,7 +15,19 @@ Kernl is the first OSS inference engine written in ~~CUDA C~~ [OpenAI Triton](ht
 a new language designed by OpenAI to make it easier to write GPU kernels.  
 Each kernel is less than 200 lines of code, and is **easy to understand** and modify.
 
-🎅🎄 Training support comming soon... 🤯
+## Tutorials - End to End Use Cases
+
+A list of Examples contains how to use kernl with Pytorch.
+
+| Topic                                                                                                         | Notebook                                                                                   |
+|---------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| **tiled matmul: Matrix multiplication implementation in `CUDA` style**                                        | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/1%20-%20tiled%20matmul.ipynb)    |
+| **online softmax: Parallelized softmax computation, a key ingredient of Flash Attention**                     | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/3%20-%20online%20softmax.ipynb)  |
+| **Flash Attention: Attention computation without saving attention matrix to global memory**                   | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/4%20-%20flash%20attention.ipynb) |
+| **Matmul offsets: Detailed explanations related to a performance trick**                                      | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/2%20-%20matmul%20offsets.ipynb)  |
+| **XNLI classification: Classification with / without optimizations (`Roberta` + `XNLI` classification task)** | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/bert%20e2e.ipynb)                |
+| **Text generation with/without optimizations (`T5`)**                                                         | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/t5%20e2e.ipynb)                  |
+| **Transcription generation with/without optimizations (`Whisper large`)**                                     | [link](https://github.com/ELS-RD/kernl/blob/main/experimental/whisper/speedup.ipynb)       |
 
 ## Installation
 
