@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block scripts %}
+<!-- Add scripts that need to run before here -->
+{{ super() }}
+{% if page and page.is_homepage %}
+<script type="module" src="./javascripts/charts.js"></script>
+{% endif %}
+{% endblock %}

@@ -165,7 +165,6 @@ class SubgraphMatcher:
         return non_overlapping_matches
 
     def _match_nodes(self, pn: Node, gn: Node, match: InternalMatch) -> bool:
-
         # Check if we've already matched these nodes in the current
         # traversal
         if pn in match.nodes_map:
@@ -203,29 +202,36 @@ class SubgraphMatcher:
         """
         Returns:
             The matched subgraphs.
-            Thre returned subgraph would be fully self-contained, meaning the nodes (except placeholder
-            and nodes returned by output) can only be consumed by nodes within the matched subgraph.
+                Thre returned subgraph would be fully self-contained, meaning the nodes (except placeholder
+                and nodes returned by output) can only be consumed by nodes within the matched subgraph.
+
         Subgraph pattern matcher is implemented with the backtracking style in the following steps:
+
         1. We first identify all the anchor nodes in the pattern graph. The anchor nodes
         are the "sinks" (nodes with no user other than the output node) of the pattern graph.
         One pattern graph could have multiple anchors if it has multiple return values.
+
         2. In the target graph, we identify the potential candidate nodes that can be matched
         with each anchor. These anchor-candidate pairs are the starting points for
         pairwise per-node matching.
+
         3. For each anchor-candidate pair, we simultaneously traverse backwards (DFS) in both
         pattern and target graphs. For every pattern nodes along traversal path, we compare it
         against the target nodes. In case any comparison failed, the match for this anchor-candidate
         pair fails. A match is found when DFS completes traversing the graph. See `self._match_nodes`
         for more details.
+
         4. In the case of multiple anchors, every anchor will need to find a match using step 3.
         In addition, the matches found between anchors need to have a common intersection node
         in order for the match to be valid. This is implemented with backtracking. See `backtracking`
         for more details.
-        Notice: graph traversal must be done in the reverser order because a tensor can have multiple
-        consumers, but can only have a single producer. Only with reverser order, we can we jointly
-        traverse the pattern and target graph in a deterministic path.
-        Warning: In theory, this backtracking algorithm have an **exponential** time complexity. However,
-        in practice, it's unlikely to blow up.
+
+        Note:
+            graph traversal must be done in the reverser order because a tensor can have multiple
+            consumers, but can only have a single producer. Only with reverser order, we can we jointly
+            traverse the pattern and target graph in a deterministic path.
+            Warning: In theory, this backtracking algorithm have an **exponential** time complexity. However,
+            in practice, it's unlikely to blow up.
         """
 
         # find candidate nodes to match with pattern anchors
@@ -335,42 +341,46 @@ def _replace_submodules(gm: GraphModule, replacement: torch.nn.Module) -> None:
 
 
 def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -> List[Match]:
-    """
-    Matches all possible non-overlapping sets of operators and their
+    """Matches all possible non-overlapping sets of operators and their
     data dependencies (``pattern``) in the Graph of a GraphModule
     (``gm``), then replaces each of these matched subgraphs with another
     subgraph (``replacement``).
+
     Args:
-        ``gm``: The GraphModule that wraps the Graph to operate on
-        ``pattern``: The subgraph to match in ``gm`` for replacement
-        ``replacement``: The subgraph to replace ``pattern`` with
+        gm: The GraphModule that wraps the Graph to operate on
+        pattern: The subgraph to match in ``gm`` for replacement
+        replacement: The subgraph to replace ``pattern`` with
+
     Returns:
         List[Match]: A list of ``Match`` objects representing the places
-        in the original graph that ``pattern`` was matched to. The list
-        is empty if there are no matches. ``Match`` is defined as:
-        .. code-block:: python
+            in the original graph that ``pattern`` was matched to. The list
+            is empty if there are no matches. ``Match`` is defined as:
+            ``` { .py }
             class Match(NamedTuple):
                 # Node from which the match was found
                 anchor: Node
                 # Maps nodes in the pattern subgraph to nodes in the larger graph
                 nodes_map: Dict[Node, Node]
+            ```
+
     Examples:
-    .. code-block:: python
-        import torch
-        from torch.fx import symbolic_trace, subgraph_rewriter
-        class M(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-            def forward(self, x, w1, w2):
-                m1 = torch.cat([w1, w2]).sum()
-                m2 = torch.cat([w1, w2]).sum()
-                return x + torch.max(m1) + torch.max(m2)
-        def pattern(w1, w2):
-            return torch.cat([w1, w2]).sum()
-        def replacement(w1, w2):
-            return torch.stack([w1, w2])
-        traced_module = symbolic_trace(M())
-        subgraph_rewriter.replace_pattern(traced_module, pattern, replacement)
+    ``` { .py }
+    import torch
+    from torch.fx import symbolic_trace, subgraph_rewriter
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+        def forward(self, x, w1, w2):
+            m1 = torch.cat([w1, w2]).sum()
+            m2 = torch.cat([w1, w2]).sum()
+            return x + torch.max(m1) + torch.max(m2)
+    def pattern(w1, w2):
+        return torch.cat([w1, w2]).sum()
+    def replacement(w1, w2):
+        return torch.stack([w1, w2])
+    traced_module = symbolic_trace(M())
+    subgraph_rewriter.replace_pattern(traced_module, pattern, replacement)
+    ```
     The above code will first match ``pattern`` in the ``forward``
     method of ``traced_module``. Pattern-matching is done based on
     use-def relationships, not node names. For example, if you had
@@ -381,6 +391,7 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
     value only; it may or may not match to the ``return`` statement in
     the larger graph. In other words, the pattern doesn't have to extend
     to the end of the larger graph.
+
     When the pattern is matched, it will be removed from the larger
     function and replaced by ``replacement``. If there are multiple
     matches for ``pattern`` in the larger function, each non-overlapping
@@ -390,6 +401,7 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
     of the Nodes' use-def relationships. In most cases, the first Node
     is the parameter that appears directly after ``self``, while the
     last Node is whatever the function returns.)
+
     One important thing to note is that the parameters of the
     ``pattern`` Callable must be used in the Callable itself,
     and the parameters of the ``replacement`` Callable must match
@@ -398,29 +410,32 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
     ``pattern`` function only has parameters ``w1, w2``. ``pattern``
     doesn't use ``x``, so it shouldn't specify ``x`` as a parameter.
     As an example of the second rule, consider replacing
-    .. code-block:: python
-        def pattern(x, y):
-            return torch.neg(x) + torch.relu(y)
+    ``` { .py }
+    def pattern(x, y):
+        return torch.neg(x) + torch.relu(y)
+    ```
     with
-    .. code-block:: python
-        def replacement(x, y):
-            return torch.relu(x)
+    ``` { .py }
+    def replacement(x, y):
+        return torch.relu(x)
+    ```
     In this case, ``replacement`` needs the same number of parameters
     as ``pattern`` (both ``x`` and ``y``), even though the parameter
     ``y`` isn't used in ``replacement``.
     After calling ``subgraph_rewriter.replace_pattern``, the generated
     Python code looks like this:
-    .. code-block:: python
-        def forward(self, x, w1, w2):
-            stack_1 = torch.stack([w1, w2])
-            sum_1 = stack_1.sum()
-            stack_2 = torch.stack([w1, w2])
-            sum_2 = stack_2.sum()
-            max_1 = torch.max(sum_1)
-            add_1 = x + max_1
-            max_2 = torch.max(sum_2)
-            add_2 = add_1 + max_2
-            return add_2
+    ``` { .py }
+    def forward(self, x, w1, w2):
+        stack_1 = torch.stack([w1, w2])
+        sum_1 = stack_1.sum()
+        stack_2 = torch.stack([w1, w2])
+        sum_2 = stack_2.sum()
+        max_1 = torch.max(sum_1)
+        add_1 = x + max_1
+        max_2 = torch.max(sum_2)
+        add_2 = add_1 + max_2
+        return add_2
+    ```
     """
 
     # Get the graphs for `gm`, `pattern`, `replacement`
@@ -435,8 +450,9 @@ def replace_pattern(gm: GraphModule, pattern: Callable, replacement: Callable) -
     # As we progressively replace nodes, we'll need to keep track of how the match results should change
     match_changed_node: Dict[Node, Node] = {}
 
+    replacement_graph_module: GraphModule = symbolic_trace(replacement)
     for match in _matches:
-        replacement_graph: Graph = symbolic_trace(replacement).graph
+        replacement_graph = copy.deepcopy(replacement_graph_module).graph
         replacement_placeholders = [n for n in replacement_graph.nodes if n.op == "placeholder"]
 
         # CHANGE HERE

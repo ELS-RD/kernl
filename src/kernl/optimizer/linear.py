@@ -22,16 +22,23 @@ from kernl.utils.extended_matcher import replace_pattern
 
 
 def linear_wrapper(v: torch.Tensor, linear: torch.nn.Linear, activation=""):
-    # small hack to avoid casting weights/bias at each call
-    if linear.weight.dtype == torch.float32:
-        linear.weight.data = linear.weight.data.half()
-    if linear.bias is not None and linear.bias.dtype == torch.float32:
-        linear.bias.data = linear.bias.data.half()
-
-    return linear_layer(v, linear.weight, linear.bias, activation=activation)
+    return linear_wrapper_functional(v, linear.weight, linear.bias, activation=activation)
 
 
 torch.fx.wrap("linear_wrapper")
+
+
+def linear_wrapper_functional(v: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, activation=""):
+    # small hack to avoid casting weights/bias at each call
+    if weight.dtype == torch.float32:
+        weight.data = weight.data.half()
+    if bias is not None and bias.dtype == torch.float32:
+        bias.data = bias.data.half()
+
+    return linear_layer(v, weight, bias, activation=activation)
+
+
+torch.fx.wrap("linear_wrapper_functional")
 
 
 def replace_linear_activation(gm: torch.fx.GraphModule, activation_module: Callable, activation: str):
@@ -76,8 +83,33 @@ def replace_linear(gm: torch.fx.GraphModule):
     replace_pattern(gm, Pattern(), Replacement())
 
 
+def replace_linear_fn(gm: torch.fx.GraphModule):
+    def pattern(v, weight, bias):
+        return torch.nn.functional.linear(v, weight, bias)
+
+    def replace(v, weight, bias):
+        output = linear_wrapper_functional(v, weight, bias)
+        return output
+
+    replace_pattern(gm, pattern, replace)
+
+
+# Todo: to be removed when we support dynamic constant match
+def replace_linear_fn_constant_match(gm: torch.fx.GraphModule):
+    def pattern(v, weight):
+        return torch.nn.functional.linear(v, weight, None)
+
+    def replace(v, weight):
+        output = linear_wrapper_functional(v, weight, None)
+        return output
+
+    replace_pattern(gm, pattern, replace)
+
+
 def replace_all_linear(gm: torch.fx.GraphModule):
     replace_linear_activation(gm, torch.nn.Tanh(), "tanh")
     replace_linear_activation(gm, torch.nn.ReLU(), "relu")
     replace_linear_activation(gm, torch.nn.functional.gelu, "gelu")
     replace_linear(gm)
+    replace_linear_fn(gm)
+    replace_linear_fn_constant_match(gm)

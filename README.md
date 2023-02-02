@@ -15,7 +15,19 @@ Kernl is the first OSS inference engine written in ~~CUDA C~~ [OpenAI Triton](ht
 a new language designed by OpenAI to make it easier to write GPU kernels.  
 Each kernel is less than 200 lines of code, and is **easy to understand** and modify.
 
-🎅🎄 Training support comming soon... 🤯
+## Tutorials - End to End Use Cases
+
+A list of Examples contains how to use kernl with Pytorch.
+
+| Topic                                                                                                         | Notebook                                                                                   |
+|---------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| **Tiled matmul**: matrix multiplication implementation in `CUDA` style                                        | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/1%20-%20tiled%20matmul.ipynb)    |
+| **Matmul offsets**: detailed explanations related to a performance trick used in Triton matmul implementation | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/2%20-%20matmul%20offsets.ipynb)  |
+| **Online softmax**: parallelized softmax computation, a key ingredient of `Flash Attention`                   | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/3%20-%20online%20softmax.ipynb)  |
+| **`Flash Attention`**: attention computation without saving attention matrix to global memory                 | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/4%20-%20flash%20attention.ipynb) |
+| **XNLI classification**: classification with / without optimizations (`Roberta` + `XNLI` classification task) | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/bert%20e2e.ipynb)                |
+| **Text generation**: with/without optimizations (`T5`)                                                        | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/t5%20e2e.ipynb)                  |
+| **Transcription generation**: with/without optimizations (`Whisper`)                                          | [link](https://github.com/ELS-RD/kernl/blob/main/experimental/whisper/speedup.ipynb)       |
 
 ## Installation
 
@@ -24,9 +36,21 @@ Please install it first.
 
 ```shell
 pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+# or for local dev, after git clone ...
+pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 This project requires `Python` >= 3.9.
+Furthermore, the library requires an Ampere GPU and CUDA to be installed. 
+
+If you prefer `Docker`:
+
+```shell
+# build
+DOCKER_BUILDKIT=1 docker build -t kernl .
+# run
+docker run --rm -it --gpus all -v $(pwd):/kernl kernl
+```
 
 ## Getting started
 
@@ -35,7 +59,7 @@ import torch
 from transformers import AutoModel
 from kernl.model_optimization import optimize_model
 
-model = AutoModel.from_pretrained(model_name).eval().cuda()
+model = AutoModel.from_pretrained("model_name").eval().cuda()
 optimize_model(model)
 
 inputs = ...
@@ -175,3 +199,11 @@ We leverage mostly 3 technologies:
 ## Acknowledgments
 
 Code of OpenAI Triton kernels takes inspiration from examples from OpenAI Triton tutorials or xformers library.  
+
+## Contributing
+
+If you would like to contribute, for example to code or documentation, please see our [contribution guide](https://www.kernl.ai/contribution-guide/contributing/).
+
+## Code of Conduct
+
+Please see our [Code of Conduct](https://www.kernl.ai/contribution-guide/code-of-conduct/) for any questions about the community we are trying to build and what to do if you need help with someone who is acting unprofessionally.
