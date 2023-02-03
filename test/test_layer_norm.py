@@ -17,7 +17,6 @@ import pytest
 import torch
 
 from conftest import assert_all_close, set_seed
-
 from kernl.implementations.layer_norm import (
     _layer_norm_fwd_fused_multi_pass,
     _layer_norm_fwd_fused_single_pass,
@@ -82,7 +81,7 @@ implementations_rms_norm = {
 
 
 @pytest.mark.parametrize("cuda_graphs", [True, False], ids=["cuda_graphs", "no_cuda_graphs"])
-@pytest.mark.parametrize("dtype", [torch.float16, torch.float32], ids=["fp16", "fp32"])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32], ids=["fp16", "bf16", "fp32"])
 @pytest.mark.parametrize("shape", [128, 512, 1024, 2048, 4096], ids=lambda x: f"shape={x}x{x}")
 @pytest.mark.parametrize("implementation", implementations_rms_norm.keys())
 def test_benchmark_rms_norm(benchmark, shape: int, dtype, cuda_graphs: bool, implementation: str):
