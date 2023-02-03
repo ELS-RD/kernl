@@ -165,7 +165,6 @@ class SubgraphMatcher:
         return non_overlapping_matches
 
     def _match_nodes(self, pn: Node, gn: Node, match: InternalMatch) -> bool:
-
         # Check if we've already matched these nodes in the current
         # traversal
         if pn in match.nodes_map:

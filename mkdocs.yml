@@ -164,7 +164,6 @@ nav:
       - Page 1: tutorials/page.md
   - Code Reference:
       - Model Optimization: reference/model_optimization.md
-      - Debugger: reference/debugger.md
       - Graph Pattern Matching: reference/extended_matcher.md
   - Contribution guide:
       - Contributing: contribution-guide/contributing.md

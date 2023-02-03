@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.6.1-devel-ubuntu20.04
+FROM nvidia/cuda:12.0.0-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 ENV CUDA_INSTALL_PATH=/usr/local/cuda/
@@ -21,19 +21,19 @@ RUN apt-get install -y git \
     python3.9-dev \
     nano
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 && \
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.9 2 && \
   update-alternatives --set python /usr/bin/python3.9 && \
-  update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1 && \
+  update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
   update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 2 && \
   update-alternatives --set python3 /usr/bin/python3.9
 
-RUN python3.9 -m ensurepip --default-pip --upgrade
+RUN python3.9 -m ensurepip --default-pip --upgrade && \
+    pip install --upgrade pip
 
-RUN pip install --pre torch==2.0.0.dev20230119+cu117 --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+RUN pip install --pre torch==2.0.0.dev20230128+cu117 --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 
-
-WORKDIR /syncback
+RUN mkdir /syncback
 WORKDIR /kernl
 
 COPY ./setup.py ./setup.py
