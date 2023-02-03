@@ -123,7 +123,6 @@ def kernel_fma(
     SHOULD_SAVE_ACT_INPUTS: tl.constexpr,
     ACTIVATION: tl.constexpr,
 ):
-
     """
     Kernel for computing Out = activation(A x W + C)
 
