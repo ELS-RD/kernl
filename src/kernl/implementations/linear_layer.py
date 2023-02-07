@@ -25,6 +25,7 @@ from torch.autograd.function import FunctionCtx
 from torch.cuda.amp import custom_fwd
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
+from kernl.autotune import kernl_autotune, kernl_heuristics
 from kernl.implementations import activation_func
 
 
@@ -57,7 +58,7 @@ def get_configs_io_bound():
     return configs
 
 
-@triton.autotune(
+@kernl_autotune(
     configs=[
         triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=3, num_warps=8),
         triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=3, num_warps=8),
@@ -83,12 +84,11 @@ def get_configs_io_bound():
     key=["CACHE_KEY_M", "CACHE_KEY_N", "CACHE_KEY_K"],
     prune_configs_by={"early_config_prune": early_config_prune, "perf_model": estimate_matmul_time, "top_k": 10},
 )
-@triton.heuristics(
+@kernl_heuristics(
     {
         "K_LOAD_MASK_NEEDED": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
     }
 )
-@triton.jit
 def kernel_fma(
     C,  # Pointers to matrices
     ACT_INPUTS,
