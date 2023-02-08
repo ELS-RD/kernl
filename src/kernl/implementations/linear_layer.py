@@ -107,6 +107,8 @@ def kernel_fma(
     # by to get the element one row down (A has M rows)
     output_m_stride,
     output_n_stride,
+    act_inputs_m_stride,
+    act_inputs_n_stride,
     a_m_stride,
     a_k_stride,
     b_n_stride,
@@ -182,7 +184,7 @@ def kernel_fma(
 
     # optional: save the activation inputs
     if SHOULD_SAVE_ACT_INPUTS:
-        act_in_ptrs = ACT_INPUTS + m_offs[:, None] * output_m_stride + n_offs[None, :]
+        act_in_ptrs = ACT_INPUTS + m_offs[:, None] * act_inputs_m_stride + n_offs[None, :] * act_inputs_n_stride
         tl.store(act_in_ptrs, acc)
 
     # optional: fused activation (while the data is in shared memory)
@@ -256,6 +258,8 @@ class LinearLayer(torch.autograd.Function):
             K // 32,
             output_m_stride=outputs.stride(0),  # strides
             output_n_stride=outputs.stride(1),
+            act_inputs_m_stride=act_inputs.stride(0) if act_inputs is not None else 0,
+            act_inputs_n_stride=act_inputs.stride(1)if act_inputs is not None else 0,
             a_m_stride=x_.stride(0),
             a_k_stride=x_.stride(1),
             b_n_stride=weight.stride(0),
