@@ -259,7 +259,7 @@ class LinearLayer(torch.autograd.Function):
             output_m_stride=outputs.stride(0),  # strides
             output_n_stride=outputs.stride(1),
             act_inputs_m_stride=act_inputs.stride(0) if act_inputs is not None else 0,
-            act_inputs_n_stride=act_inputs.stride(1)if act_inputs is not None else 0,
+            act_inputs_n_stride=act_inputs.stride(1) if act_inputs is not None else 0,
             a_m_stride=x_.stride(0),
             a_k_stride=x_.stride(1),
             b_n_stride=weight.stride(0),
