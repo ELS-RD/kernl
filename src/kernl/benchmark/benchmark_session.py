@@ -111,6 +111,6 @@ class BenchmarkSession(object):
 
     def finish(self):
         grouped = self.get_groups(self.benchmarks, self.config.option.benchmark_group_by)
-        for (group, benchmarks) in grouped:
+        for group, benchmarks in grouped:
             print("\n" + group)
             self.print_results(benchmarks)

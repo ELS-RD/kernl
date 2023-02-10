@@ -1,0 +1,14 @@
+on:
+  push:
+    branches:
+      - main
+name: release-please
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/release-please-action@v3
+        with:
+          release-type: python
+          package-name: kernl
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }} # We must use a custom token because of a limitation of Github (workflows can't trigger other workflows)

@@ -1,4 +1,4 @@
-FROM squidfunk/mkdocs-material
+FROM ghcr.io/els-rd/mkdocs-material-insiders:4.28.1
 
 RUN pip install --no-cache-dir \
   pip install mkdocstrings[python]
