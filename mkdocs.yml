@@ -144,6 +144,12 @@ markdown_extensions:
 
 plugins:
   - search
+  - gen-files:
+      scripts:
+      - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.txt
+#  - section-index # section-index plugin not working
   - mkdocstrings:
       custom_templates: templates
       default_handler: python
@@ -151,6 +157,7 @@ plugins:
         python:
           options:
             show_source: false
+
 watch:
   - src/kernl
 
@@ -162,9 +169,8 @@ nav:
       - How to support a new model: how-to-guides/support-new-model.md
   - Tutorials:
       - Page 1: tutorials/page.md
-  - Code Reference:
-      - Model Optimization: reference/model_optimization.md
-      - Graph Pattern Matching: reference/extended_matcher.md
+  # defer to gen-files + literate-nav
+  - Code Reference: reference/
   - Contribution guide:
       - Contributing: contribution-guide/contributing.md
       - Code of conduct: contribution-guide/code-of-conduct.md
