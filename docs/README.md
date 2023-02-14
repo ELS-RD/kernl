@@ -4,9 +4,9 @@
 
 To avoid any breaking change, we target a specific version.
 
-For the preview ([`docs/Dockerfile.mkdocstrings`](Dockerfile.mkdocstrings)),
+For the preview ([`Dockerfile.mkdocstrings`](Dockerfile.mkdocstrings)),
 and in the Github Action
-workflow ([`.github/workflows/deploy-static-site.yml`](../.github/workflows/deploy-static-site.yml))
+workflow ([`deploy-static-site.yml`](../.github/workflows/deploy-static-site.yml))
 
 ### How to upgrade version
 
