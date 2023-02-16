@@ -12,7 +12,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 }
 
 :root > * {
-    --md-primary-fg-color: rgba(67, 81, 232, 0.2);
+    --md-primary-fg-color: rgb(219, 221, 251);
 }
 
 /* ----- ----- ----- ----- ----- */
