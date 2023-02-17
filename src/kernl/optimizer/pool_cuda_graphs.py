@@ -27,9 +27,11 @@ class CudaGraphPool:
         # 64 bits alignment
         tensor_aligned_size = get_aligned_size(t)
         new_offset = self.offset + tensor_aligned_size
+        # removes 0s from stride
+        stride_fixed = tuple(i if i > 0 else 1 for i in t.stride())
         # offset is expressed in t.dtype number of elements
         new_t = torch.as_strided(
-            self.pool.view(t.dtype), size=t.size(), stride=t.stride(), storage_offset=self.offset // t.element_size()
+            self.pool.view(t.dtype), size=t.size(), stride=stride_fixed, storage_offset=self.offset // t.element_size()
         )
         new_t.copy_(t)
         self.offset = new_offset
