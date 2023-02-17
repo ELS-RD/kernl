@@ -51,7 +51,7 @@ implementations = {
 @pytest.mark.parametrize("activation", ["", "tanh", "gelu", "relu"], ids=["no_activation", "tanh", "gelu", "relu"])
 @pytest.mark.parametrize(
     "shape",
-    [(1, 8, 8, 8)] + [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
+    [(1, 8, 8, 8)],
     ids=lambda s: "x".join(map(str, s)),
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])

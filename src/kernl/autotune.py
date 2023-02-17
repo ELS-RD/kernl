@@ -1,26 +1,24 @@
-import ast
 import builtins
 import copy
-import inspect
+import hashlib
+import json
 import logging
+import os.path
 import re
-import textwrap
 import threading
-from collections import namedtuple
-from typing import Dict, List, Optional
+from typing import List, Dict, Optional
 
 import torch
-import triton
-from triton import Config, cdiv
-from triton.runtime.jit import KernelInterface, get_cuda_stream
-from triton.testing import do_bench
 
+import triton
+from triton import cdiv, Config
+from triton.runtime.jit import get_cuda_stream, KernelInterface
+
+from utils.autotuner_helper import type_of, key_of
 
 log = logging.getLogger(__name__)
 
-
-class KernlAutotuner(KernelInterface):
-
+class Autotuner(KernelInterface):
     """
     Simplified version of Triton autotuner.
     Unlike the main triton Autotuner, this version can precompile all
@@ -28,17 +26,15 @@ class KernlAutotuner(KernelInterface):
     """
 
     def __init__(self, fn, configs, key, reset_to_zero, prune_configs_by: Dict = None):
+        super().__init__()
+        self.launchers = []
         if not configs:
             self.configs = [Config(dict(), num_warps=4, num_stages=2)]
         else:
             self.configs = configs
-        self.fn = fn
-        self.src = textwrap.dedent(inspect.getsource(fn))
-        self.src = self.src[self.src.find("def") :]
-        self.signature = inspect.signature(fn)
-        self.arg_names = [v.name for v in self.signature.parameters.values()]
+        self.arg_names = fn.arg_names
         self.key_idx = [self.arg_names.index(k) for k in key]
-        self.launchers = list()
+        self.cache = dict()
         # hook to reset all required tensor to zeros before relaunching a kernel
         self.hook = lambda args: 0
         if reset_to_zero is not None:
@@ -47,59 +43,65 @@ class KernlAutotuner(KernelInterface):
             def _hook(args):
                 for i in self.reset_idx:
                     args[i].zero_()
-
             self.hook = _hook
-        # prune configs
-        early_config_prune = None
         if prune_configs_by:
-            perf_model, top_k = prune_configs_by["perf_model"], prune_configs_by["top_k"]
-            if "early_config_prune" in prune_configs_by:
-                early_config_prune = prune_configs_by["early_config_prune"]
+            perf_model, top_k = prune_configs_by['perf_model'], prune_configs_by['top_k']
+            if 'early_config_prune' in prune_configs_by:
+                early_config_prune = prune_configs_by['early_config_prune']
         else:
-            perf_model, top_k = None, None
+            perf_model, top_k, early_config_prune = None, None, None
         self.perf_model, self.configs_top_k = perf_model, top_k
         self.early_config_prune = early_config_prune
-        self.constexprs = [self.arg_names.index(ann) for ann in self.fn.__annotations__.keys()]
-        self.fn.parse = self.parse
+        self.fn = fn
+        self.__annotations__ = fn.__annotations__
+        # index of constexprs
+        self.constexprs = [self.arg_names.index(ann) for ann in self.__annotations__.keys()]
         self.lock = threading.Lock()
 
-    def parse(self):
-        tree = ast.parse(self.src)
-        assert isinstance(tree, ast.Module)
-        assert len(tree.body) == 1
-        assert isinstance(tree.body[0], ast.FunctionDef)
-        return tree
-
-    def precompile(self):
+    def precompile(self, warm_cache_only_with_cc=None):
+        breakpoint()
         with self.lock:
             if self.launchers:
                 return
-            self.launchers = [self._precompile_config(c) for c in self.configs]
+            self.launchers = [
+                self._precompile_config(c, warm_cache_only_with_cc)
+                for c in self.configs
+            ]
             self.configs = None
 
-    def _precompile_config(self, cfg: Config):
+    def _precompile_config(self, cfg: Config, warm_cache_only_with_cc: int):
         """Ahead of time compile a given autotuner config."""
-        compile_meta = dict()
-        compile_meta["constants"] = dict()
-        config = namedtuple("instance_descriptor", ["divisible_by_16", "equal_to_1"])(tuple(range(4)), ())
-        compile_meta["configs"] = [config]
+        all_args = {', '.join([f'{arg}' for arg in self.arg_names])},
+        signature = {{i: type_of(key_of(arg)) for i, arg in enumerate(all_args) if i not in self.constexprs}}
+        compile_meta = {
+            "constants": dict(), "signature": signature
+        }
         for k, v in cfg.kwargs.items():
-            compile_meta["constants"][self.arg_names.index(k)] = v
+            compile_meta["constants"][self.fn.arg_names.index(k)] = v
         compile_meta["num_warps"] = cfg.num_warps
         compile_meta["num_stages"] = cfg.num_stages
-        compile_meta["device"] = torch.cuda.current_device()
-        compile_meta["signature"] = self.signature
 
-        # load binary to the correct device
-        with torch.cuda.device(compile_meta["device"]):
-            # need to initialize context
-            torch.cuda.synchronize(torch.cuda.current_device())
-            binary = triton.compile(
+        if warm_cache_only_with_cc:
+            triton.compile(
                 self.fn,
+                warm_cache_only=True,
+                cc=warm_cache_only_with_cc,
                 **compile_meta,
             )
+            return
 
-        call_args = [arg for i, arg in enumerate(self.fn.arg_names) if i not in self.fn.constexprs]
+        torch.cuda.set_device(torch.cuda.current_device())
+
+        binary = triton.compile(
+            self.fn,
+            **compile_meta,
+        )
+
+        call_args = [
+            arg
+            for i, arg in enumerate(self.fn.arg_names)
+            if i not in self.fn.constexprs
+        ]
         def_args = list(self.fn.arg_names)
         while def_args and def_args[-1] in cfg.kwargs:
             def_args.pop()
@@ -114,10 +116,8 @@ class KernlAutotuner(KernelInterface):
         exec(
             f"""
             def launcher({', '.join(def_args)}, grid, stream):
-                if callable(grid):
-                    grid_0, grid_1, grid_2 = grid(grid_meta)
-                else:
-                    grid_0, grid_1, grid_2 = grid
+                # set_device(current_device())  # TODO(jansel): is this needed?
+                grid_0, grid_1, grid_2 = grid(grid_meta)
                 bin.c_wrapper(grid_0, grid_1, grid_2, bin.num_warps, bin.shared,
                             stream, bin.cu_function, None, None, None,
                             {', '.join(call_args)})
@@ -135,30 +135,40 @@ class KernlAutotuner(KernelInterface):
 
         def kernel_call():
             if launcher.config.pre_hook is not None:
-                launcher.config.pre_hook({**zip(self.arg_names, args), **launcher.config.kwargs})
+                launcher.config.pre_hook(
+                    {**zip(self.arg_names, args), **launcher.config.kwargs}
+                )
             launcher(
                 *args,
                 grid=grid,
                 stream=stream,
             )
 
-        return do_bench(kernel_call, rep=40, fast_flush=True)
+        from triton.testing import do_bench
+
+        return do_bench(kernel_call)
+
+    @staticmethod
+    def clone_preserve_strides(x):
+        needed_size = (
+                sum((shape - 1) * stride for shape, stride in zip(x.size(), x.stride())) + 1
+        )
+        buffer = torch.as_strided(x, (needed_size,), (1,)).clone()
+        return torch.as_strided(buffer, x.size(), x.stride())
 
     def autotune_to_one_config(self, *args, **kwargs):
         """Do the actual autotuning"""
 
-        # clone inplace buffers to avoid autotune contaminating them if
-        # the kernel does in-place stores. avoid cloning other buffers because
-        # it leads to increase memory use
-        cloned_args = []
-        for i, arg in enumerate(args):
-            if self.fn.arg_names[i] in self.mutated_arg_names:
-                assert isinstance(arg, torch.Tensor)
-                cloned_args.append(clone_preserve_strides(arg))
-            else:
-                cloned_args.append(arg)
-
-        timings = {launcher: self.bench(launcher, *cloned_args, **kwargs) for launcher in self.launchers}
+        # clone the input args to avoid autotune contaminating them if
+        # the kernel does in-place stores
+        cloned_args = [
+            self.clone_preserve_strides(arg) if isinstance(arg, torch.Tensor) else arg
+            for arg in args
+        ]
+        timings = {
+            launcher: self.bench(launcher, *cloned_args, **kwargs)
+            for launcher in self.launchers
+        }
         self.launchers = [builtins.min(timings, key=timings.get)]
 
     def run(self, *args, grid, stream):
@@ -170,7 +180,9 @@ class KernlAutotuner(KernelInterface):
 
         (launcher,) = self.launchers
         if launcher.config.pre_hook is not None:
-            launcher.config.pre_hook({**zip(self.arg_names, args), **launcher.config.kwargs})
+            launcher.config.pre_hook(
+                {**zip(self.arg_names, args), **launcher.config.kwargs}
+            )
         try:
             result = launcher(
                 *args,
@@ -182,28 +194,65 @@ class KernlAutotuner(KernelInterface):
                 raise RuntimeError(
                     """Consider updating Triton with
 `pip install -U "git+https://github.com/openai/triton@af76c989eb4799b015f8b288ccd8421558772e56#subdirectory=python"`"""
-                ) from e
+                )
             else:
                 raise e
 
         return result
 
 
-def kernl_autotune(
+def hash_configs(configs: List[Config]):
+    """
+    Hash used to check for changes in configurations
+    """
+    hasher = hashlib.sha256()
+    for cfg in configs:
+        hasher.update(
+            f"{sorted(cfg.kwargs.items())} {cfg.num_warps} {cfg.num_stages}\n".encode(
+                "utf-8"
+            )
+        )
+    return hasher.hexdigest()
+
+
+def load_cached_autotuning(
+    cache_filename: str, configs_hash: str, configs: List[Config]
+):
+    """
+    Read a cached autotuning result from disk
+    """
+    if not os.path.exists(cache_filename):
+        return None
+
+    best_config = json.loads(open(cache_filename).read())
+    if best_config.get("configs_hash") != configs_hash:
+        return None
+
+    matching_configs = [
+        cfg
+        for cfg in configs
+        if all(val == best_config.get(key) for key, val in cfg.kwargs.items())
+    ]
+    if len(matching_configs) != 1:
+        return None
+
+    return matching_configs[0]
+
+
+def autotune(
     configs: List[Config],
     key: List[str],
     reset_to_zero: Optional[List[str]] = None,
     prune_configs_by: Optional[Dict] = None,
 ):
     """
-    A copy of triton.autotune that calls our subclass.  Our subclass
-    has additional debugging, error handling, and on-disk caching.
+    A copy of triton.autotune that calls our subclass.
     """
     configs = unique_configs(configs)
 
     def decorator(fn):
-        return KernlAutotuner(
-            fn, configs=configs, key=key, reset_to_zero=reset_to_zero, prune_configs_by=prune_configs_by
+        return Autotuner(
+            fn, configs=configs, key=key, reset_to_zero=reset_to_zero, prune_configs_by=prune_configs_by,
         )
 
     return decorator
@@ -220,66 +269,34 @@ def unique_configs(configs: List[Config]):
             pruned_configs.append(cfg)
     return pruned_configs
 
-
-def clone_preserve_strides(x):
-    needed_size = sum((shape - 1) * stride for shape, stride in zip(x.size(), x.stride())) + 1
-    buffer = torch.as_strided(x, (needed_size,), (1,)).clone()
-    return torch.as_strided(buffer, x.size(), x.stride())
-
-
 def grid(xnumel, ynumel=None, znumel=None):
     """Helper function to compute triton grids"""
 
-    def get_grid_dim(numel, block_name, block):
-        if numel is None:
-            return 1
-        label = block_name[0]
-        if numel == 1:
-            assert block == 1, (
-                f"TritonKernel.indexing assumes {label.lower()}numel == 1 => {block_name} == 1"
-                f"({label.lower()}numel=={numel}, {block_name}={block})."
-            )
-        return cdiv(numel, block)
+    if ynumel and znumel:
 
-    def grid_fn(meta):
-        return (
-            get_grid_dim(xnumel, "XBLOCK", meta.get("XBLOCK", None)),
-            get_grid_dim(ynumel, "YBLOCK", meta.get("YBLOCK", None)),
-            get_grid_dim(znumel, "ZBLOCK", meta.get("ZBLOCK", None)),
-        )
+        def grid_fn(meta):
+            return (
+                cdiv(xnumel, meta["XBLOCK"]),
+                cdiv(ynumel, meta["YBLOCK"]),
+                cdiv(znumel, meta["ZBLOCK"]),
+            )
+
+    elif ynumel:
+
+        def grid_fn(meta):
+            return (
+                cdiv(xnumel, meta["XBLOCK"]),
+                cdiv(ynumel, meta["YBLOCK"]),
+                1,
+            )
+
+    else:
+
+        def grid_fn(meta):
+            return (
+                cdiv(xnumel, meta["XBLOCK"]),
+                1,
+                1,
+            )
 
     return grid_fn
-
-
-class KernlHeuristics(KernelInterface):
-    def __init__(self, fn, values) -> None:
-        self.fn = fn
-        self.values = values
-        signature = inspect.signature(fn)
-        self.arg_names = [v.name for v in signature.parameters.values()]
-
-    def run(self, *args, **kwargs):
-        for v, heur in self.values.items():
-            kwargs[v] = heur({**dict(zip(self.arg_names, args)), **kwargs})
-        return self.fn.run(*args, **kwargs)
-
-
-def kernl_heuristics(values):
-    """
-    Decorator for specifying how the values of certain meta-parameters may be computed.
-    This is useful for cases where auto-tuning is prohibitevely expensive, or just not applicable.
-    .. highlight:: python
-    .. code-block:: python
-        @triton.heuristics(values={'BLOCK_SIZE': lambda args: 2 ** int(math.ceil(math.log2(args[1])))})
-        @triton.jit
-        def kernel(x_ptr, x_size, **META):
-            BLOCK_SIZE = META['BLOCK_SIZE'] # smallest power-of-two >= x_size
-    .param values: a dictionary of meta-parameter names and functions that compute the value of the meta-parameter.
-                   each such function takes a list of positional arguments as input.
-    .type values: dict[str, Callable[[list[Any]], Any]]
-    """
-
-    def decorator(fn):
-        return KernlHeuristics(fn, values)
-
-    return decorator
