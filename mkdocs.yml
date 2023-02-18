@@ -1,6 +1,6 @@
 # Project information
 site_name: "kernl.ai"
-site_url: https://els-rd.github.io/kernl
+site_url: https://www.kernl.ai/
 site_author: Lefebvre Sarrut
 site_description: >-
   Kernl is an open source project that optimizes and accelerates your PyTorch model
@@ -164,7 +164,6 @@ nav:
       - Page 1: tutorials/page.md
   - Code Reference:
       - Model Optimization: reference/model_optimization.md
-      - Debugger: reference/debugger.md
       - Graph Pattern Matching: reference/extended_matcher.md
   - Contribution guide:
       - Contributing: contribution-guide/contributing.md

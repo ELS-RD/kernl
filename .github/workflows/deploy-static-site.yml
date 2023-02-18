@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: 3.x
-      - run: pip install mkdocs-material "mkdocstrings[python]"
+      - run: pip install git+https://${{secrets.GH_TOKEN}}@github.com/squidfunk/mkdocs-material-insiders.git@9.0.12-insiders-4.30.2 "mkdocstrings[python]"
       - run: mkdocs build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
