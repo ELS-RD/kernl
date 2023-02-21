@@ -110,10 +110,7 @@ class Autotuner(KernelInterface):
         constants = {i: k for i, k in zip(self.constexprs, constexpr_args)}
         for k, v in constants.items():
             constants[k] = cfg.kwargs[v] if v in cfg.kwargs.keys() else 1
-        compile_meta = {"constants": constants}
-        compile_meta["signature"] = self.signature
-        compile_meta["num_warps"] = cfg.num_warps
-        compile_meta["num_stages"] = cfg.num_stages
+        compile_meta = {"constants": constants, "signature": self.signature, "num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
         cfg.divisible_by_16 = [i for i, arg in enumerate(self.arg_names) if self.is_divisible_by_16(arg)]
         cfg.equal_to_1 = [i for i, arg in enumerate(self.arg_names) if isinstance(arg, int) and arg == 1]
 
