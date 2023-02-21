@@ -18,7 +18,7 @@ jobs:
     - uses: actions/setup-python@v4
       with:
         python-version: '3.9.16'
-        cache: 'pip'
+        cache: 'pip' # test
     - run: pip install black flake8 isort
     - run: make source_code_check_format
     - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
