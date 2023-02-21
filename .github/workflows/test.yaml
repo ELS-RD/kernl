@@ -10,20 +10,20 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
-#  main:
-#    name: Run tests
-#    runs-on: [self-hosted, Linux, X64]
-#    steps:
-#    - uses: actions/checkout@v3
-#    - uses: actions/setup-python@v4
-#      with:
-#        python-version: '3.9.16'
-#        cache: 'pip'
-#    - run: pip install black flake8 isort
-#    - run: make source_code_check_format
-#    - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
-#    - run: pytest --verbose
-  changes:
+  main:
+    name: Run tests
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9.16'
+        cache: 'pip'
+    - run: pip install black flake8 isort
+    - run: make source_code_check_format
+    - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+    - run: pytest --verbose
+  notebooks-changes:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -38,12 +38,12 @@ jobs:
           filters: |
             changed:
               - added|modified: '**.ipynb'
-  notebooks:
-    name: Run notebooks
-    needs: changes
+  notebook:
+    name: Run notebook
+    needs: notebooks-changes
     strategy:
       matrix:
-        notebook: ${{ fromJSON(needs.changes.outputs.notebooks) }}
+        notebook: ${{ fromJSON(needs.notebooks-changes.outputs.notebooks) }}
     runs-on: [ self-hosted, Linux, X64 ]
     steps:
       - uses: actions/checkout@v3
