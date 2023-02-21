@@ -23,8 +23,26 @@ jobs:
 #    - run: make source_code_check_format
 #    - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 #    - run: pytest --verbose
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      notebooks: ${{ steps.filter.outputs.changed_files }}
+    steps:
+      # For pull requests it's not necessary to checkout the code
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            changed:
+              - added|modified: '**.ipynb'
   notebooks:
     name: Run notebooks
+    needs: changes
+    strategy:
+      matrix:
+        notebook: ${{ fromJSON(needs.changes.outputs.notebooks) }}
     runs-on: [ self-hosted, Linux, X64 ]
     steps:
       - uses: actions/checkout@v3
@@ -33,4 +51,4 @@ jobs:
           python-version: '3.9.16'
           cache: 'pip'
       - run: pip install jupyter nbconvert
-      - run: jupyter nbconvert --execute --clear-output experimental/whisper/speedup.ipynb
+      - run: jupyter nbconvert --execute --clear-output ${{ matrix.notebook }}
