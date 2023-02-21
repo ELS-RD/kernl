@@ -33,4 +33,4 @@ jobs:
           python-version: '3.9.16'
           cache: 'pip'
       - run: pip install nbconvert
-      - run: jupyter nbconvert --execute --clear-output experimental/speedup.ipynb
+      - run: jupyter nbconvert --execute --clear-output experimental/whisper/speedup.ipynb
