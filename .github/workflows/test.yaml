@@ -5,6 +5,10 @@ on:
     branches:
       - '**'
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   main:
     name: Lint & Format
@@ -18,4 +22,4 @@ jobs:
     - run: pip install black flake8 isort
     - run: make source_code_check_format
     - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
-    - run: pytest
+    - run: pytest --verbose
