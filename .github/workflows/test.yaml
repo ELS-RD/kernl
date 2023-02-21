@@ -8,7 +8,7 @@ on:
 jobs:
   main:
     name: Lint & Format
-    runs-on: [self-hosted, Linux, X64, a10g]
+    runs-on: [self-hosted, Linux, X64]
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v4
