@@ -6,11 +6,17 @@ on:
       - '**'
 
 concurrency:
-  group: ${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
+#  preparation:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Prepare
+#        run: echo "test
   main:
+#    needs: preparation
     name: Lint & Format
     runs-on: [self-hosted, Linux, X64]
     steps:
