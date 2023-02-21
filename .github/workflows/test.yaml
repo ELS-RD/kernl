@@ -30,7 +30,7 @@ jobs:
     outputs:
       notebooks: ${{ steps.filter.outputs.changed_files }}
     steps:
-      # For pull requests it's not necessary to checkout the code
+      - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
         id: filter
         with:
