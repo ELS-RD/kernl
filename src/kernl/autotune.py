@@ -3,6 +3,8 @@ import builtins
 import inspect
 import logging
 import re
+import string
+import random
 import textwrap
 import threading
 from typing import Dict, List, Optional
@@ -71,7 +73,7 @@ class Autotuner(KernelInterface):
         self.perf_model, self.configs_top_k = perf_model, top_k
         self.early_config_prune = early_config_prune
         self.fn = fn
-        self.fn.cache_key = "test"
+        self.fn.cache_key = ''.join(random.choice(string.printable) for i in range(20)) # TODO: fix the cache key
         self.__annotations__ = fn.__annotations__
         # index of constexprs
         self.constexprs = [self.arg_names.index(ann) for ann in self.__annotations__.keys()]
@@ -124,7 +126,7 @@ class Autotuner(KernelInterface):
             return
 
         torch.cuda.set_device(torch.cuda.current_device())
-        compile_meta["device"] = 0
+        compile_meta["device"] = torch.cuda.current_device()
 
         binary = triton.compile(
             self.fn,
