@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/ELS-RD/kernl/compare/v0.2.2...v0.3.0) (2023-02-22)
+
+
+### Features
+
+* github runner ([#294](https://github.com/ELS-RD/kernl/issues/294)) ([2dd349b](https://github.com/ELS-RD/kernl/commit/2dd349b241f9c9fdb059bb4d2d10590340ea2edc))
+
 ## [0.2.2](https://github.com/ELS-RD/kernl/compare/v0.2.1...v0.2.2) (2023-02-17)
 
 
