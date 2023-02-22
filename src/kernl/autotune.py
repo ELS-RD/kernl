@@ -2,18 +2,17 @@ import ast
 import builtins
 import inspect
 import logging
+import random
 import re
 import string
-import random
 import textwrap
 import threading
 from typing import Dict, List, Optional
 
 import torch
 import triton
-from triton import Config, cdiv
+from triton import Config
 from triton.runtime.jit import get_cuda_stream
-
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +52,7 @@ class Autotuner(KernelInterface):
         self.key_idx = [self.arg_names.index(k) for k in key]
         self.cache = dict()
         self.src = textwrap.dedent(inspect.getsource(fn))
-        self.src = self.src[self.src.find("def") :]
+        self.src = self.src[self.src.find("def"):]
         # hook to reset all required tensor to zeros before relaunching a kernel
         self.hook = lambda args: 0
         if reset_to_zero is not None:
@@ -73,7 +72,7 @@ class Autotuner(KernelInterface):
         self.perf_model, self.configs_top_k = perf_model, top_k
         self.early_config_prune = early_config_prune
         self.fn = fn
-        self.fn.cache_key = ''.join(random.choice(string.printable) for i in range(20)) # TODO: fix the cache key
+        self.fn.cache_key = ''.join(random.choice(string.printable) for i in range(20))
         self.__annotations__ = fn.__annotations__
         # index of constexprs
         self.constexprs = [self.arg_names.index(ann) for ann in self.__annotations__.keys()]
@@ -108,11 +107,13 @@ class Autotuner(KernelInterface):
     def _precompile_config(self, cfg: Config, warm_cache_only_with_cc: int):
         """Ahead of time compile a given autotuner config."""
         # make constants:
-        constexpr_args = [f"{arg}" for i, arg in enumerate(self.arg_names) if i in self.constexprs]
+        constexpr_args = [f'{arg}' for i, arg in enumerate(self.arg_names) if i in self.constexprs]
         constants = {i: k for i, k in zip(self.constexprs, constexpr_args)}
         for k, v in constants.items():
-            constants[k] = cfg.kwargs[v] if v in cfg.kwargs.keys() else 1
-        compile_meta = {"constants": constants, "signature": self.signature, "num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
+            if v in cfg.kwargs.keys():
+                constants[k] = cfg.kwargs[v]
+        compile_meta = {"constants": constants, "signature": self.signature, "num_warps": cfg.num_warps,
+                        "num_stages": cfg.num_stages}
         cfg.divisible_by_16 = [i for i, arg in enumerate(self.arg_names) if self.is_divisible_by_16(arg)]
         cfg.equal_to_1 = [i for i, arg in enumerate(self.arg_names) if isinstance(arg, int) and arg == 1]
 
@@ -125,8 +126,9 @@ class Autotuner(KernelInterface):
             )
             return
 
-        torch.cuda.set_device(torch.cuda.current_device())
-        compile_meta["device"] = torch.cuda.current_device()
+        current_device = torch.cuda.current_device()
+        torch.cuda.set_device(current_device)
+        compile_meta["device"] = current_device
 
         binary = triton.compile(
             self.fn,
@@ -168,12 +170,14 @@ class Autotuner(KernelInterface):
     def bench(self, launcher, *args, grid, **kwargs):
         """Measure the performance of a given launcher"""
 
-        current = dict(**kwargs, **launcher.config.kwargs)
-
         def kernel_call():
             if launcher.config.pre_hook is not None:
                 launcher.config.pre_hook({**zip(self.arg_names, args), **launcher.config.kwargs})
-            launcher(*args, grid=grid, **current)
+            launcher(
+                *args,
+                grid=grid,
+                **kwargs
+            )
 
         from triton.testing import do_bench
 
@@ -206,7 +210,7 @@ class Autotuner(KernelInterface):
         if launcher.config.pre_hook is not None:
             launcher.config.pre_hook({**zip(self.arg_names, args), **launcher.config.kwargs})
         try:
-            result = launcher(*args, grid=grid, stream=stream, **kwargs)
+            result = launcher(*args, grid=grid, **kwargs)
         except TypeError as e:
             if re.match(r"function takes exactly \d+ arguments \(\d+ given\)", str(e)):
                 raise RuntimeError(
@@ -254,36 +258,3 @@ def unique_configs(configs: List[Config]):
             seen.add(key)
             pruned_configs.append(cfg)
     return pruned_configs
-
-
-def grid(xnumel, ynumel=None, znumel=None):
-    """Helper function to compute triton grids"""
-
-    if ynumel and znumel:
-
-        def grid_fn(meta):
-            return (
-                cdiv(xnumel, meta["BLOCK_M"]),
-                cdiv(ynumel, meta["BLOCK_N"]),
-                cdiv(znumel, meta["BLOCK_K"]),
-            )
-
-    elif ynumel:
-
-        def grid_fn(meta):
-            return (
-                cdiv(xnumel, meta["BLOCK_M"]),
-                cdiv(ynumel, meta["BLOCK_N"]),
-                1,
-            )
-
-    else:
-
-        def grid_fn(meta):
-            return (
-                cdiv(xnumel, meta["BLOCK_M"]),
-                1,
-                1,
-            )
-
-    return grid_fn
