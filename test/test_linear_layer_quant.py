@@ -42,7 +42,16 @@ def test_quant_linear_a8_w8_b32_o32(benchmark, implementation):
 
     if implementation == "triton":
         y_triton = torch.zeros((B, N), device="cuda")
-        y_triton = linear_layer(x, weight, bias, "", None, alpha, beta, y_triton)
+        y_triton = linear_layer(
+            x=x,
+            weight=weight,
+            bias=bias,
+            activation="",
+            act_inputs=None,
+            alpha_scaler=alpha,
+            beta_scaler=beta,
+            output=y_triton,
+        )
         assert_all_close(y_pytorch, y_triton.half(), rtol=0, atol=4)  # not eq as baseline is computed with floats
         fn = lambda: linear_layer(  # noqa: E731
             x=x,
@@ -65,45 +74,27 @@ def test_quant_linear_a8_w8_b32_o32(benchmark, implementation):
 
 @set_seed()
 @torch.no_grad()
-def test_w8a8b8o8_linear_relu():
+@pytest.mark.parametrize("implementation", ["w8a8b8o8", "w8a8b8o8_relu", "w8a8bfp32ofp32"])
+def test_w8a8b8o8_linear_relu(implementation):
     B, M, N = 128, 512, 1024
     x = torch.randn(B, M)
     x_scale = x.abs().max() / 127
     qx = (x / x_scale).round().to(torch.int8)
     linear = torch.nn.Linear(M, N, bias=True)
-    y_gt = linear(x).clamp(min=0)
-    y_scale = y_gt.abs().max() / 127
-    q_linear = W8A8B8O8LinearReLU.from_float(linear, x_scale, y_scale).cuda()
-    q_y = q_linear(qx.cuda()).cpu()
-    y_hat = q_y * y_scale
-    assert_all_close(y_gt, y_hat, rtol=0, atol=1e-1)
-
-
-@set_seed()
-@torch.no_grad()
-def test_w8a8b8o8_linear():
-    B, M, N = 128, 512, 1024
-    x = torch.randn(B, M)
-    x_scale = x.abs().max() / 127
-    qx = (x / x_scale).round().to(torch.int8)
-    linear = torch.nn.Linear(M, N, bias=True)
-    y_gt = linear(x)
-    y_scale = y_gt.abs().max() / 127
-    q_linear = W8A8B8O8Linear.from_float(linear, x_scale, y_scale).cuda()
-    q_y = q_linear(qx.cuda()).cpu()
-    y_hat = q_y * y_scale
-    assert_all_close(y_gt, y_hat, rtol=0, atol=1e-1)
-
-
-@set_seed()
-@torch.no_grad()
-def test_w8a8bfp32ofp32_linear():
-    B, M, N = 128, 512, 1024
-    x = torch.randn(B, M)
-    x_scale = x.abs().max() / 127
-    qx = (x / x_scale).round().to(torch.int8)
-    linear = torch.nn.Linear(M, N, bias=True)
-    y_gt = linear(x)
-    q_linear = W8A8BFP32OFP32Linear.from_float(linear, x_scale).cuda()
-    y_hat = q_linear(qx.cuda()).cpu()
-    assert_all_close(y_gt, y_hat, rtol=0, atol=1e-1)
+    y_pytorch = linear(x)
+    if implementation == "w8a8b8o8_relu":
+        y_pytorch = y_pytorch.clamp(min=0)
+    if implementation != "w8a8bfp32ofp32":
+        y_scale = y_pytorch.abs().max() / 127
+    # linear_quant = W8A8B8O8LinearReLU.from_float(linear, x_scale, y_scale).cuda()
+    if implementation == "w8a8b8o8":
+        linear_quant = W8A8B8O8Linear.from_float(linear, x_scale, y_scale).cuda()
+    elif implementation == "w8a8b8o8_relu":
+        linear_quant = W8A8B8O8LinearReLU.from_float(linear, x_scale, y_scale).cuda()
+    elif implementation == "w8a8bfp32ofp32":
+        linear_quant = W8A8BFP32OFP32Linear.from_float(linear, x_scale).cuda()
+    else:
+        raise ValueError(f"Unknown implementation: {implementation}")
+    q_y = linear_quant(qx.cuda()).cpu()
+    y_quant = q_y * y_scale if implementation != "w8a8bfp32ofp32" else q_y
+    assert_all_close(y_pytorch, y_quant, rtol=0, atol=1e-1)
