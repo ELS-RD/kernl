@@ -219,7 +219,7 @@ def kernel_linear(
         acc *= ALPHA_SCALER
 
     if HAS_BIAS:
-        bias = tl.load(bias + n_offs, mask=n_offs < N, other=0.0).to(ACC_TYPE)  # TODO fix when Triton updated
+        bias = tl.load(bias + n_offs, mask=n_offs < N, other=0.0)  # .to(ACC_TYPE)  # TODO fix when Triton updated
         if BETA_SCALER != 1.0:
             bias *= BETA_SCALER
         acc += bias[None, :]
@@ -266,7 +266,7 @@ class LinearLayer(torch.autograd.Function):
         :param x: input tensor
         :param weight: weight matrix
         :param bias: an optional bias tensor
-        :param activation: Activation name. Needs to be a Triton kernel.
+        :param activation: Activation name (relu, tanh, gelu, fast_gelu)
         :param act_inputs: an optional tensor to save the activation inputs (for backward)
         :param alpha_scaler: alpha scaler (to be appled on mamtul output)
         :param beta_scaler: beta scaler (to be applied on bias)

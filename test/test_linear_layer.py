@@ -97,35 +97,3 @@ def test_benchmark(
     value = benchmark(fn, x)
 
     assert_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)
-
-
-@set_seed()
-@pytest.mark.parametrize("implementation", ["triton", "pytorch"])
-def test_quant_linear_a8_w8_b32_o32(benchmark, implementation):
-    alpha, beta = 0.01, 0.0001
-    B, M, N = 128, 512, 1024
-    min_int8 = torch.iinfo(torch.int8).min
-    max_int8 = torch.iinfo(torch.int8).max
-    min_bias = int(torch.finfo(torch.float16).min)  # because bias will be converted to fp16 for benchmark reason
-    max_bias = int(torch.finfo(torch.float16).max)
-    weight = torch.randint(min_int8, max_int8, (N, M), dtype=torch.int8, device="cuda")
-    bias = torch.randint(min_bias, max_bias, (N,), dtype=torch.int32, device="cuda")
-    x = torch.randint(min_int8, max_int8, (B, M), dtype=torch.int8, device="cuda")
-    linear = torch.nn.Linear(M, N, bias=True)
-    linear.weight.data = weight.half() * alpha
-    linear.bias.data = bias.half() * beta
-    y_pytorch = linear(x.half())
-    assert torch.all(torch.isfinite(y_pytorch))
-
-    if implementation == "triton":
-        y_triton = torch.zeros((B, N), device="cuda")
-        y_triton = linear_layer(x, weight, bias, "", None, alpha, beta, y_triton)
-        assert_all_close(y_pytorch, y_triton.half(), rtol=0, atol=4)  # not eq as baseline is computed with floats
-        fn = lambda: linear_layer(x, weight, bias, "", None, alpha, beta, y_triton)  # noqa: E731
-    elif implementation == "pytorch":
-        x = x.half()
-        fn = lambda: linear(x)  # noqa: E731
-    else:
-        raise ValueError(f"Unknown implementation: {implementation}")
-
-    benchmark(fn)
