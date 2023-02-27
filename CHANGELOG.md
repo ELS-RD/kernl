@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/ELS-RD/kernl/compare/v0.2.2...v0.3.0) (2023-02-27)
+
+
+### Features
+
+* github runner ([#294](https://github.com/ELS-RD/kernl/issues/294)) ([2dd349b](https://github.com/ELS-RD/kernl/commit/2dd349b241f9c9fdb059bb4d2d10590340ea2edc))
+* make pytest in CI non verbose ([#300](https://github.com/ELS-RD/kernl/issues/300)) ([dea505e](https://github.com/ELS-RD/kernl/commit/dea505e7b099276cba94281c5512f68677ec4b5c))
+
 ## [0.2.2](https://github.com/ELS-RD/kernl/compare/v0.2.1...v0.2.2) (2023-02-17)
 
 
