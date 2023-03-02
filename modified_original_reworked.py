@@ -196,10 +196,10 @@ attention = _attention.apply
 
 @pytest.mark.parametrize("Z, H, N_CTX, D_HEAD", [(4, 48, 128, 64), (4, 48, 512, 64)])
 def test_op(Z, H, N_CTX, D_HEAD, dtype=torch.float16):
-    torch.manual_seed(5)
-    q = torch.rand((Z, H, N_CTX, D_HEAD), dtype=torch.float32, device="cuda")
-    k = torch.rand((Z, H, N_CTX, D_HEAD), dtype=torch.float32, device="cuda")
-    v = torch.rand((Z, H, N_CTX, D_HEAD), dtype=torch.float32, device="cuda")
+    torch.manual_seed(20)
+    q = torch.rand((Z, H, N_CTX, D_HEAD), dtype=dtype, device="cuda")
+    k = torch.rand((Z, H, N_CTX, D_HEAD), dtype=dtype, device="cuda")
+    v = torch.rand((Z, H, N_CTX, D_HEAD), dtype=dtype, device="cuda")
     sm_scale = 0.3
     # reference implementation
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
@@ -210,11 +210,11 @@ def test_op(Z, H, N_CTX, D_HEAD, dtype=torch.float16):
     fake_attention_mask = generate_broadcast_mask(batch=Z, heads=H, seq_length=N_CTX, dhead=D_HEAD, dtype=torch.float32)
 
     p += fake_attention_mask
-    p = torch.softmax(p.float(), dim=-1)#.half()
+    p = torch.softmax(p.float(), dim=-1).half()
     ref_out = torch.matmul(p, v)
 
     # triton implementation
-    tri_out = attention(q.half(), k.half(), v.half(), sm_scale, fake_attention_mask)
+    tri_out = attention(q, k, v, sm_scale, fake_attention_mask)
     # compare
-    # print((ref_out - tri_out).abs().max().item())
-    triton.testing.assert_almost_equal(ref_out.half(), tri_out.half(), decimal=1)
+    print((ref_out - tri_out).abs().max().item())
+    triton.testing.assert_almost_equal(ref_out, tri_out, decimal=1)
