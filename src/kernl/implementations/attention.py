@@ -86,39 +86,39 @@ def prune(configs, named_args):
     return pruned_configs
 
 
-@triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=1),
-        triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=1),
-        triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=1),
-        triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=2),
-        triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=2),
-        triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=2),
-        triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=4),
-        triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=8),
-        # triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 256}, num_stages=1, num_warps=8),
-        # triton.Config({"BLOCK_M_SIZE": 256, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=8),
-        # triton.Config({"BLOCK_M_SIZE": 256, "BLOCK_N_SIZE": 256}, num_stages=1, num_warps=16),
-    ],
-    prune_configs_by={"early_config_prune": prune, "perf_model": None, "top_k": None},
-    key=["m_size", "n_size", "head_size", "HAS_MASK", "IS_MATRIX_MASK", "IS_CAUSAL"],
-)
-@triton.heuristics(  # order should be the same as in function args, otherwise expect strange bugs
-    {
-        # load mask is needed if one dim (n_size / m_size) of tensors do not align with block size
-        "M_LOAD_MASK_NEEDED": lambda args: args["m_size"] % args["BLOCK_M_SIZE"] != 0,
-        "N_LOAD_MASK_NEEDED": lambda args: args["n_size"] % args["BLOCK_N_SIZE"] != 0,
-    }
-)
+# @triton.autotune(
+#     configs=[
+#         triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=1),
+#         triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=1),
+#         triton.Config({"BLOCK_M_SIZE": 16, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=1),
+#         triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=2),
+#         triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=2),
+#         triton.Config({"BLOCK_M_SIZE": 32, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=2),
+#         triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 64, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 16}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 32}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 64}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=4),
+#         triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=8),
+#         # triton.Config({"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 256}, num_stages=1, num_warps=8),
+#         # triton.Config({"BLOCK_M_SIZE": 256, "BLOCK_N_SIZE": 128}, num_stages=1, num_warps=8),
+#         # triton.Config({"BLOCK_M_SIZE": 256, "BLOCK_N_SIZE": 256}, num_stages=1, num_warps=16),
+#     ],
+#     prune_configs_by={"early_config_prune": prune, "perf_model": None, "top_k": None},
+#     key=["m_size", "n_size", "head_size", "HAS_MASK", "IS_MATRIX_MASK", "IS_CAUSAL"],
+# )
+# @triton.heuristics(  # order should be the same as in function args, otherwise expect strange bugs
+#     {
+#         # load mask is needed if one dim (n_size / m_size) of tensors do not align with block size
+#         "M_LOAD_MASK_NEEDED": lambda args: args["m_size"] % args["BLOCK_M_SIZE"] != 0,
+#         "N_LOAD_MASK_NEEDED": lambda args: args["n_size"] % args["BLOCK_N_SIZE"] != 0,
+#     }
+# )
 @triton.jit
 def _fwd_kernel(
     head_size,
@@ -131,7 +131,7 @@ def _fwd_kernel(
     v_ptr,
     sm_scale,
     attention_mask_ptr,
-    tmp_ptr,  # NOTE: TMP is a scratchpad buffer to workaround a compiler bug
+    qk_ptr,
     output_ptr,
     q_batch_stride,
     q_head_stride,
@@ -145,6 +145,10 @@ def _fwd_kernel(
     v_head_stride,
     v_k_stride,
     v_n_stride,
+    qk_batch_stride,
+    qk_head_stride,
+    qk_m_stride,
+    qk_n_stride,
     output_batch_stride,
     output_head_stride,
     output_row_stride,
@@ -158,9 +162,6 @@ def _fwd_kernel(
     attention_mask_head_size,
     attention_mask_m_size,
     attention_mask_n_size,
-    tmp_batch_size,
-    tmp_head_size,
-    tmp_m_size,
     HAS_MASK: tl.constexpr,
     IS_MATRIX_MASK: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
@@ -202,7 +203,6 @@ def _fwd_kernel(
     @param k_ptr: key matrix size (batch, head_size, n_size, BLOCK_DHEAD)
     @param v_ptr: value matrix size (batch, head_size, n_size, BLOCK_DHEAD)
     @param sm_scale: scaling factor applied after operation QxK
-    @param tmp_ptr: temporary variable to fix a compiler bug
     @param output_ptr: output matrix size (batch, head_size, m_size, BLOCK_DHEAD)
     @param q_batch_stride: matrix Q stride for batch dimension
     @param q_head_stride: matrix Q stride for head dimension
@@ -229,10 +229,8 @@ def _fwd_kernel(
     @param attention_mask_head_size: matrix mask size for head dimension
     @param attention_mask_m_size: matrix mask size for rows (equal to m_size)
     @param attention_mask_n_size: matrix mask size for columns (equal to n_size)
-    @param tmp_batch_size: matrix TMP size for batch dimension
-    @param tmp_head_size: matrix TMP size for head dimension
-    @param tmp_m_size: matrix TMP size for rows, called "M dimension"
     @param HAS_MASK: whether the mask is applied
+    @param IS_MATRIX_MASK: whether the mask is a vector or a matrix
     @param IS_CAUSAL: whether the mask is applied
     @param BLOCK_DHEAD_SIZE: number of columns per head
     @param BLOCK_M_SIZE: number of rows computed in a single instance for matrix Q
@@ -273,6 +271,12 @@ def _fwd_kernel(
         + (n_range_offs[:, None] * k_n_stride + dhead_range_offs[None, :] * k_k_stride)
     )
 
+    # qk_offs = (
+    #     current_batch_idx * qk_batch_stride
+    #     + current_head_idx * qk_head_stride
+    #     + (m_offs[:, None] * qk_m_stride + n_range_offs[None, :] * qk_n_stride)
+    # )
+
     # offsets for the first block on matrix V
     v_offs = (
         current_batch_idx * v_batch_stride
@@ -291,10 +295,8 @@ def _fwd_kernel(
     q_ptrs = q_ptr + q_offs
     k_ptrs = k_ptr + k_offs
     v_ptrs = v_ptr + v_offs
+    # qk_ptrs = qk_ptr + qk_offs
     output_ptrs = output_ptr + output_offs
-
-    # Temporary pointer to memory to fix bug in triton compiler
-    tmp_ptrs = tmp_ptr + tmp_m_size * head_idx + m_offs
 
     # initialize pointer to m and d used to compute normalizer for softmax
     l_i = tl.zeros((BLOCK_M_SIZE,), dtype=tl.float32) - float("inf")
@@ -316,6 +318,7 @@ def _fwd_kernel(
     if IS_CAUSAL:
         # in causal mode, we expect that BLOCK_M_SIZE == BLOCK_N_SIZE
         # autotune will prune shapes not matching this rule
+        # TODO are we sure it s BLOCK_N_SIZE ? Do not matter as they have to be equal
         block_n_end = (block_m_idx + 1) * BLOCK_N_SIZE
 
     if HAS_MASK:
@@ -336,7 +339,7 @@ def _fwd_kernel(
     # block_n_start_idx is the row offset on dimension N of the current block
     # It's used for both the N dimension of K and V because they are handled at the same time
     for block_n_start_idx in range(0, block_n_end, BLOCK_N_SIZE):
-        block_n_start_idx = tl.multiple_of(block_n_start_idx, BLOCK_N_SIZE)
+        # block_n_start_idx = tl.multiple_of(block_n_start_idx, BLOCK_N_SIZE)
         block_n_offs = block_n_start_idx + n_range_offs
         # We load the current block in K in SRAM
         # We do the first multiplication between the block in Q and the current block in K
@@ -351,7 +354,7 @@ def _fwd_kernel(
         # required to fix a Triton compiler bug, if not done, there is a precision issue
         if N_LOAD_MASK_NEEDED:
             qk = tl.where(n_range_offs[None, :] < n_size, qk, float("-inf"))
-        qk += tl.dot(q, k, trans_b=True)
+        qk += tl.dot(q, tl.trans(k))
         qk *= sm_scale
         if IS_CAUSAL:
             qk += tl.where(m_offs[:, None] >= block_n_offs[None, :], 0, float("-inf"))
@@ -387,8 +390,11 @@ def _fwd_kernel(
                     eviction_policy="evict_first",
                 )
             # Avoids NaN
-            attention_mask = tl.where(attention_mask == float("-inf"), min_clamp_value, attention_mask)
+            # attention_mask = tl.where(attention_mask == float("-inf"), min_clamp_value, attention_mask)
             qk += attention_mask
+            # TODO restore if needs to output qk
+            # qk_copy_mask = (block_n_offs[None, :] < n_size) & (m_offs[:, None] < m_size)
+            # tl.store(qk_ptrs + block_n_start_idx * qk_n_stride, qk, mask=qk_copy_mask)
 
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions
@@ -416,20 +422,16 @@ def _fwd_kernel(
         # To correct previous blocks we will scale the accumulator
         # d_i / d_new is for correcting denominator
         # alpha is for correcting numerator
+        # TODO this line if acc_scale = d_i pytest test/test_attention.py -k "triton and broadcast and fp16 and non-causal" -sx  works up to 128
         acc_scale = d_i / d_new * alpha
-
-        # This isn't useful in the algorithm, simply to fix a compiler bug
-        # BUG: have to store and immediately load
-        tl.store(tmp_ptrs, acc_scale)
-        acc_scale = tl.load(tmp_ptrs)
 
         # acc scaling
         acc = acc * acc_scale[:, None]
 
         # We now apply the last operation, the multiplication by a block of matrix V
         if N_LOAD_MASK_NEEDED:
-            k_ptr_mask = block_n_offs[:, None] < n_size  # repeated otherwise triton segfault
-            v = tl.load(v_ptrs + block_n_start_idx * v_k_stride, mask=k_ptr_mask, other=0.0)
+            v_ptr_mask = block_n_offs[:, None] < n_size  # repeated otherwise triton segfault
+            v = tl.load(v_ptrs + block_n_start_idx * v_k_stride, mask=v_ptr_mask, other=0.0)
         else:
             v = tl.load(v_ptrs + block_n_start_idx * v_k_stride)
         qk_softmax = qk_softmax.to(q_ptr.dtype.element_ty)
@@ -485,11 +487,11 @@ class Attention(torch.autograd.Function):
         assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
         batch, head_size, m_size, dhead = q.size()
         n_size = k.size(2)
-
+        # QKt
+        qk = torch.zeros((batch, head_size, m_size, n_size), device=q.device, dtype=torch.float16)
         grid = lambda args: (triton.cdiv(m_size, args["BLOCK_M_SIZE"]), batch * head_size)  # noqa: E731
         # tmp should match m_size rounded to the next multiple of block_m
         # if unknown because of autotune, we put 128 as a safe value
-        tmp = torch.empty((batch, head_size, math.ceil(m_size / 128) * 128), device=q.device, dtype=torch.float32)
 
         HAS_MASK = False
         IS_MATRIX_MASK = False
@@ -519,21 +521,41 @@ class Attention(torch.autograd.Function):
             v,  # V
             sm_scale,  # sm_scale
             attention_mask,  # attention_mask
-            tmp,  # TMP
+            qk,  # QKt
             output,  # output
             *q.stride(),  # (batch, heads, m_size, size_k)
             *k.stride(),  # (batch, heads, n_size, size_k)
             *v.stride(),  # (batch, heads, size_k, n_size)
+            *qk.stride(),  # (batch, heads, m_size, n_size)
             *output.stride(),  # (batch, heads, m_size, n_size)
             *attention_mask.stride() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, m_size, size_k)
             torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,  # min_clamp_value
             *attention_mask.size() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, m_size, size_k)
-            *tmp.size(),  # (batch, heads, m_size)
             HAS_MASK,  # HAS_MASK
             IS_MATRIX_MASK,  # IS_MATRIX_MASK
             is_causal,  # IS_CAUSAL
             dhead,  # BLOCK_DHEAD
+            128,  # BLOCK_M_SIZE
+            128,  # BLOCK_N_SIZE
+            m_size % 128 != 0,  # M_LOAD_MASK_NEEDED
+            n_size % 128 != 0,  # N_LOAD_MASK_NEEDED
+            num_warps=4 if k.size(3) <= 64 else 8,
+            num_stages=2
         )
+        p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
+        p += attention_mask
+        if is_causal:
+            m_size = q.size(2)
+            n_size = k.size(2)
+            M = torch.tril(torch.ones((m_size, n_size), device="cuda"))
+            p = torch.where(M == 0, float("-inf"), p)
+        torch.save(p, "p.pt")
+        torch.save(qk, "qk.pt")
+        torch.save(output, "output.pt")
+        # assert not torch.any(torch.isnan(qk))
+        # assert not torch.any(torch.isnan(output)), output
+        # if not is_causal:
+        #     assert torch.allclose(p.float(), qk.float(), atol=1e-1), f"{qk}"
         ctx.save_for_backward(q, k, v, output)
         return output
 
