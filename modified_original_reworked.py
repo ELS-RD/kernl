@@ -69,7 +69,7 @@ def _fwd_kernel(
     off_q = off_hz * stride_qh + offs_m[:, None] * stride_qm + offs_d[None, :] * stride_qk
     off_k = off_hz * stride_qh + offs_n[:, None] * stride_kn + offs_d[None, :] * stride_kk
     off_v = off_hz * stride_qh + offs_n[:, None] * stride_qm + offs_d[None, :] * stride_qk
-    off_attention = off_hz * attention_mask_head_stride
+    off_attention = off_hz // H * attention_mask_batch_stride  # shape (Z, 1, 1, N_CTX) and off_hz is batch * nb heads
     # Initialize pointers to Q, K, V
     q_ptrs = Q + off_q
     k_ptrs = K + off_k
@@ -90,17 +90,16 @@ def _fwd_kernel(
         qk = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
         qk += tl.dot(q, tl.trans(k))
         qk *= sm_scale
-        # qk = tl.where(offs_m[:, None] >= (start_n + offs_n[None, :]), qk, float("-inf"))  # no causal mask
+        # qk = tl.where(offs_m[:, None] >= (start_n + offs_n[None, :]), qk, float("-inf"))
         # fake mask
         if USE_MASK:
-            attention_mask_offs = off_attention + offs_n[None, :] * attention_mask_n_stride
-            attention_mask_ptr_mask = block_n_offs[None, :] < N_CTX
+            attention_mask_offs = off_attention + block_n_offs * attention_mask_n_stride
+            attention_mask_ptr_mask = block_n_offs < N_CTX
             attention_mask = tl.load(attention_mask_ptr + attention_mask_offs,
-                                     eviction_policy="evict_first",
                                      mask=attention_mask_ptr_mask,
                                      other=float("-inf")
                                      )
-            qk = tl.where(attention_mask, qk, float("-inf"))  # no causal mask
+            qk += attention_mask[None, :]  # (not causal) attention mask
         # compute new m
         m_curr = tl.maximum(tl.max(qk, 1), m_prev)
         # correct old l
@@ -197,9 +196,10 @@ attention = _attention.apply
 )
 def test_op(Z, H, N_CTX, D_HEAD, use_mask):
     torch.manual_seed(20)
-    q = torch.rand((Z, H, N_CTX, D_HEAD), dtype=torch.float16, device="cuda")
-    k = torch.rand((Z, H, N_CTX, D_HEAD), dtype=torch.float16, device="cuda")
-    v = torch.rand((Z, H, N_CTX, D_HEAD), dtype=torch.float16, device="cuda")
+    q = torch.randn((Z, H, N_CTX, D_HEAD), dtype=torch.float16, device="cuda")
+    k = torch.randn((Z, H, N_CTX, D_HEAD), dtype=torch.float16, device="cuda")
+    v = torch.randn((Z, H, N_CTX, D_HEAD), dtype=torch.float16, device="cuda")
+
     sm_scale = 0.3
     # reference implementation
     p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
