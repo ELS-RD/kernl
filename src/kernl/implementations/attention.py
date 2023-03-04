@@ -131,7 +131,6 @@ def _fwd_kernel(
     v_ptr,
     sm_scale,
     attention_mask_ptr,
-    qk_ptr,
     output_ptr,
     q_batch_stride,
     q_head_stride,
@@ -145,10 +144,6 @@ def _fwd_kernel(
     v_head_stride,
     v_k_stride,
     v_n_stride,
-    qk_batch_stride,
-    qk_head_stride,
-    qk_m_stride,
-    qk_n_stride,
     output_batch_stride,
     output_head_stride,
     output_row_stride,
@@ -271,12 +266,6 @@ def _fwd_kernel(
         + (n_range_offs[:, None] * k_n_stride + dhead_range_offs[None, :] * k_k_stride)
     )
 
-    # qk_offs = (
-    #     current_batch_idx * qk_batch_stride
-    #     + current_head_idx * qk_head_stride
-    #     + (m_offs[:, None] * qk_m_stride + n_range_offs[None, :] * qk_n_stride)
-    # )
-
     # offsets for the first block on matrix V
     v_offs = (
         current_batch_idx * v_batch_stride
@@ -295,7 +284,6 @@ def _fwd_kernel(
     q_ptrs = q_ptr + q_offs
     k_ptrs = k_ptr + k_offs
     v_ptrs = v_ptr + v_offs
-    # qk_ptrs = qk_ptr + qk_offs
     output_ptrs = output_ptr + output_offs
 
     # initialize pointer to m and d used to compute normalizer for softmax
@@ -318,7 +306,6 @@ def _fwd_kernel(
     if IS_CAUSAL:
         # in causal mode, we expect that BLOCK_M_SIZE == BLOCK_N_SIZE
         # autotune will prune shapes not matching this rule
-        # TODO are we sure it s BLOCK_N_SIZE ? Do not matter as they have to be equal
         block_n_end = (block_m_idx + 1) * BLOCK_N_SIZE
 
     if HAS_MASK:
@@ -361,12 +348,12 @@ def _fwd_kernel(
 
         if HAS_MASK:
             # we assume mask has a vector shape
-            attention_mask_offs = attention_mask_off + block_n_offs[None, :] * attention_mask_n_stride
+            attention_mask_offs = attention_mask_off + block_n_offs * attention_mask_n_stride
             if IS_MATRIX_MASK:  # mask has a matrix shape, we load (BLOCK_M, BLOCK_N) elements
-                attention_mask_offs += m_offs[:, None] * attention_mask_m_stride
+                attention_mask_offs = attention_mask_offs[None, :] + m_offs[:, None] * attention_mask_m_stride
 
             if N_LOAD_MASK_NEEDED & (not IS_MATRIX_MASK):  # mask has a vector shape + need a load mask
-                attention_mask_ptr_mask = block_n_offs[None, :] < attention_mask_n_size
+                attention_mask_ptr_mask = block_n_offs < attention_mask_n_size
             if IS_MATRIX_MASK:  # mask has a matrix shape
                 if M_LOAD_MASK_NEEDED & (not N_LOAD_MASK_NEEDED):  # load mask on M axis
                     attention_mask_ptr_mask = m_offs[:, None] < attention_mask_m_size
@@ -390,11 +377,11 @@ def _fwd_kernel(
                     eviction_policy="evict_first",
                 )
             # Avoids NaN
-            # attention_mask = tl.where(attention_mask == float("-inf"), min_clamp_value, attention_mask)
-            qk += attention_mask
-            # TODO restore if needs to output qk
-            # qk_copy_mask = (block_n_offs[None, :] < n_size) & (m_offs[:, None] < m_size)
-            # tl.store(qk_ptrs + block_n_start_idx * qk_n_stride, qk, mask=qk_copy_mask)
+            attention_mask = tl.where(attention_mask == float("-inf"), min_clamp_value, attention_mask)
+            if IS_MATRIX_MASK:
+                qk += attention_mask
+            else:  # related to https://github.com/openai/triton/issues/1273
+                qk += attention_mask[None, :]
 
         # We compute softmax normalization like in Milakov et al.
         # We renamed m (in the original article) to l to avoid confusions
@@ -422,7 +409,6 @@ def _fwd_kernel(
         # To correct previous blocks we will scale the accumulator
         # d_i / d_new is for correcting denominator
         # alpha is for correcting numerator
-        # TODO this line if acc_scale = d_i pytest test/test_attention.py -k "triton and broadcast and fp16 and non-causal" -sx  works up to 128
         acc_scale = d_i / d_new * alpha
 
         # acc scaling
@@ -487,8 +473,7 @@ class Attention(torch.autograd.Function):
         assert q.dtype in [torch.float16, torch.bfloat16], f"Only float16 and bfloat16 are supported, got {q.dtype}"
         batch, head_size, m_size, dhead = q.size()
         n_size = k.size(2)
-        # QKt
-        qk = torch.zeros((batch, head_size, m_size, n_size), device=q.device, dtype=torch.float16)
+
         grid = lambda args: (triton.cdiv(m_size, args["BLOCK_M_SIZE"]), batch * head_size)  # noqa: E731
         # tmp should match m_size rounded to the next multiple of block_m
         # if unknown because of autotune, we put 128 as a safe value
@@ -521,12 +506,10 @@ class Attention(torch.autograd.Function):
             v,  # V
             sm_scale,  # sm_scale
             attention_mask,  # attention_mask
-            qk,  # QKt
             output,  # output
             *q.stride(),  # (batch, heads, m_size, size_k)
             *k.stride(),  # (batch, heads, n_size, size_k)
             *v.stride(),  # (batch, heads, size_k, n_size)
-            *qk.stride(),  # (batch, heads, m_size, n_size)
             *output.stride(),  # (batch, heads, m_size, n_size)
             *attention_mask.stride() if HAS_MASK else (0, 0, 0, 0),  # (batch, heads, m_size, size_k)
             torch.finfo(attention_mask.dtype).min if HAS_MASK else 0,  # min_clamp_value
@@ -540,23 +523,8 @@ class Attention(torch.autograd.Function):
             m_size % 128 != 0,  # M_LOAD_MASK_NEEDED
             n_size % 128 != 0,  # N_LOAD_MASK_NEEDED
             num_warps=4 if k.size(3) <= 64 else 8,
-            num_stages=2
+            num_stages=2,
         )
-        p = torch.matmul(q, k.transpose(2, 3)) * sm_scale
-        p += attention_mask
-        if is_causal:
-            m_size = q.size(2)
-            n_size = k.size(2)
-            M = torch.tril(torch.ones((m_size, n_size), device="cuda"))
-            p = torch.where(M == 0, float("-inf"), p)
-        torch.save(p, "p.pt")
-        torch.save(qk, "qk.pt")
-        torch.save(output, "output.pt")
-        # assert not torch.any(torch.isnan(qk))
-        # assert not torch.any(torch.isnan(output)), output
-        # if not is_causal:
-        #     assert torch.allclose(p.float(), qk.float(), atol=1e-1), f"{qk}"
-        ctx.save_for_backward(q, k, v, output)
         return output
 
 
