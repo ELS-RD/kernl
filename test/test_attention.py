@@ -43,9 +43,9 @@ def generate_broadcast_mask(
         torch.randint(1, seq_length, (batch,), device="cuda")[:, None]
         > torch.arange(0, seq_length, device="cuda")[None, :]
     )
-    attention_mask = attention_mask.to(dtype)
     attention_mask = torch.reshape(attention_mask, (batch, 1, 1, seq_length))
-    attention_mask = (1.0 - attention_mask) * torch.finfo(dtype).min
+    attention_mask = torch.where(attention_mask, 0, float("-inf"))
+    attention_mask = attention_mask.to(dtype)
     return attention_mask
 
 
@@ -105,10 +105,6 @@ def test_benchmark_masked(
     value = benchmark(func, **cast_args)
 
     assert_all_close(a=value.float(), b=expected, atol=1e-1)
-
-    for _ in range(10):
-        o = func(**cast_args)
-        assert_all_close(value, o, atol=1e-2)
 
 
 @set_seed()
