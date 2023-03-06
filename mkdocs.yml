@@ -160,8 +160,8 @@ nav:
   - How to:
       - Get Started: how-to-guides/get-started.md
       - How to support a new model: how-to-guides/support-new-model.md
-  - Tutorials:
-      - Page 1: tutorials/page.md
+#  - Tutorials:
+#      - Page 1: tutorials/page.md
   - Code Reference:
       - Model Optimization: reference/model_optimization.md
       - Graph Pattern Matching: reference/extended_matcher.md
@@ -170,5 +170,5 @@ nav:
       - Code of conduct: contribution-guide/code-of-conduct.md
       - Contributing guidelines: contribution-guide/how-to-contribute.md
       - Kernel writing conventions: contribution-guide/kernel-writing-conventions.md
-  - Changelog & FAQ:
-      - Page 1: changelog/page.md
+#  - Changelog & FAQ:
+#      - Page 1: changelog/page.md
