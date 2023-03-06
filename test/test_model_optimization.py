@@ -20,6 +20,7 @@ from transformers import AutoModel
 from conftest import set_seed
 
 from kernl.model_optimization import optimize_model
+from kernl.autocast import autocast
 
 
 @set_seed()
@@ -30,7 +31,7 @@ def test_optimized_model():
     optimized_model = AutoModel.from_pretrained(model_name).eval().cuda()
     optimize_model(optimized_model)
 
-    with torch.inference_mode(), torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
+    with torch.inference_mode(), torch.cuda.amp.autocast(enabled=True, dtype=torch.float16, cache_enabled=True), autocast(use_torch_autocast_dtype=True):
         inputs = {
             "input_ids": torch.randint(2, 10000, shape, device="cuda", dtype=torch.long),
             "attention_mask": torch.ones(shape, device="cuda", dtype=torch.long),

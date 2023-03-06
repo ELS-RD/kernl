@@ -54,7 +54,7 @@ implementations = {
     [(1, 8, 8, 8)] + [(bs, M, 768, 768) for bs in [1, 16] for M in [8, 16, 128, 256, 512]],
     ids=lambda s: "x".join(map(str, s)),
 )
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=["fp32", "fp16"])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16], ids=["fp32", "fp16", "bf16"])
 @pytest.mark.parametrize("cuda_graphs", [False, True], ids=["no_cuda_graphs", "cuda_graphs"])
 @pytest.mark.parametrize("implementation", ["triton", "pytorch"])
 def test_benchmark(
@@ -70,17 +70,20 @@ def test_benchmark(
     batch, M, N, K = shape
 
     # order of dimensions is wrong so we force contiguous call
-    x = torch.randn((batch, K, M), device="cuda", dtype=torch.float32, requires_grad=False)
+    factory_kwargs = {"device": "cuda", "dtype": torch.bfloat16 if dtype == torch.bfloat16 else torch.float32, "requires_grad": False}
+    x = torch.randn((batch, K, M), **factory_kwargs)
     x = x.mT
     if contiguous:
         x = x.contiguous()
     else:
         assert not x.is_contiguous()
-    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
+
     layer_weight = torch.randn((N, K), **factory_kwargs)
     layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
     pytorch_layer_activation = get_pytorch_activation(activation)
     expected = pytorch_layer_activation(torch.nn.functional.linear(x, layer_weight, layer_bias))
+    if dtype == torch.bfloat16:
+        expected = expected.float()
 
     # tensors casting
     layer_weight = layer_weight.to(dtype=dtype)

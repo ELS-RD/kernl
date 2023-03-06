@@ -46,16 +46,20 @@ implementations_layer_norm = {
 @set_seed()
 @pytest.mark.parametrize("shape", [128, 512, 1024, 2048, 4096], ids=lambda x: f"shape={x}x{x}")
 @pytest.mark.parametrize("cuda_graphs", [True, False], ids=["cuda_graphs", "no_cuda_graphs"])
-@pytest.mark.parametrize("dtype", [torch.float16, torch.float32], ids=["fp16", "fp32"])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32], ids=["fp16", "bfloat16", "fp32"])
 @pytest.mark.parametrize("implementation", implementations_layer_norm.keys())
 def test_benchmark_layer_norm(benchmark, shape: int, dtype, cuda_graphs: bool, implementation: str):
+    if dtype == torch.bfloat16 and implementation == "pytorch_naive":
+        pytest.skip("unsupported configuration")
     M = N = shape
     eps = 1e-5
-    factory_kwargs = {"device": "cuda", "dtype": torch.float32, "requires_grad": False}
+    factory_kwargs = {"device": "cuda", "dtype": torch.bfloat16 if dtype == torch.bfloat16 else torch.float32, "requires_grad": False}
     layer_weight = torch.rand((N,), **factory_kwargs)
     layer_bias = torch.randn_like(layer_weight)
     x = -20 + 0.5 * torch.randn((M, N), **factory_kwargs)
     expected = torch.nn.functional.layer_norm(x, layer_weight.shape, layer_weight, layer_bias, eps)
+    if dtype == torch.bfloat16:
+        expected = expected.float()
 
     # tensors casting
     layer_weight = layer_weight.to(dtype)

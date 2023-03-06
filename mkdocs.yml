@@ -151,6 +151,9 @@ plugins:
         python:
           options:
             show_source: false
+          import:
+            - url: https://pytorch.org/docs/1.13/objects.inv
+      enable_inventory: false
 watch:
   - src/kernl
 
@@ -165,6 +168,7 @@ nav:
   - Code Reference:
       - Model Optimization: reference/model_optimization.md
       - Graph Pattern Matching: reference/extended_matcher.md
+      - Autocast: reference/autocast.md
   - Contribution guide:
       - Contributing: contribution-guide/contributing.md
       - Code of conduct: contribution-guide/code-of-conduct.md

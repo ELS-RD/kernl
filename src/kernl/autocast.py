@@ -1,17 +1,9 @@
-import collections
+import torch
 import functools
 
-import torch
-from torch._six import string_classes
-
-
-try:
-    import numpy as np
-
-    HAS_NUMPY = True
-except ModuleNotFoundError:
-    np = None  # type: ignore[assignment]
 from typing import Any
+
+from kernl.utils.cast import _cast
 
 
 _is_autocast_enabled: bool = False
@@ -19,34 +11,76 @@ _autocast_dtype: torch.dtype = torch.float16
 _is_torch_autocast_dtype_used: bool = False
 
 
-def is_autocast_enabled() -> bool:
-    return _is_autocast_enabled
-
-
 def enable_autocast(is_autocast_enabled: bool):
+    """Change autocast state for kernl.
+    Args:
+        is_autocast_enabled: True to enable autocast, False to disable
+    """
     global _is_autocast_enabled
     _is_autocast_enabled = is_autocast_enabled
 
 
+def is_autocast_enabled() -> bool:
+    """Check is autocast enabled.
+    Returns:
+        wether autocast is enabled
+    """
+    return _is_autocast_enabled
+
+
 def set_autocast_dtype(dtype: torch.dtype) -> None:
+    """Change autocast target dtype.
+    Args:
+        dtype: which dtype to autocast on
+    """
     global _autocast_dtype
     _autocast_dtype = dtype
 
 
 def get_autocast_dtype() -> torch.dtype:
+    """Get autocast target dtype.
+    Returns:
+        autocast target dype
+    """
     return _autocast_dtype
 
 
 def use_torch_autocast_dtype(use_torch_autocast_dtype: bool) -> None:
+    """ Check i
+    Args:
+        use_torch_autocast_dtype: wether torch autocast dtype is used
+    """
     global _is_torch_autocast_dtype_used
     _is_torch_autocast_dtype_used = use_torch_autocast_dtype
 
 
 def is_torch_autocast_dtype_used() -> bool:
+    """ Check if torch autocast dtype is used in autocast
+    Returns:
+        wether torch autocast dtype is used
+    """
     return _is_torch_autocast_dtype_used
 
 
 class autocast(object):
+    """Serve as context managers or decorators that allow fused kernels to run in mixed precision.
+
+    In these regions, kernels run in an op-specific dtype chosen by autocast
+    to improve performance while maintaining accuracy.
+
+    When entering an autocast-enabled region, Tensors may be any type.
+    You should not call `half()` or `bfloat16()` on your model(s) or inputs when using autocasting.
+
+    `autocast` should wrap only the forward pass(es) of your network, including the loss
+    computation(s).  Backward passes under autocast are not recommended.
+    Backward ops run in the same type that autocast used for corresponding forward ops.
+
+    Heavily inspired by [torch.autocast][].
+    Args:
+        enabled:  Whether autocasting should be enabled in the region.
+        dtype:  Whether to use torch.float16 or torch.bfloat16.
+        use_torch_autocast_dtype:  Whether use torch autocast dtype.
+    """
     def __init__(
         self, enabled: bool = True, dtype: torch.dtype = torch.float16, use_torch_autocast_dtype: bool = False
     ):
@@ -122,25 +156,3 @@ def custom_fwd(fwd=None, **kwargs):
                 return fwd(*args, **kwargs)
 
     return decorate_fwd
-
-
-# Casts Tensors and containers of Tensors.  Special-cases passthroughs for strings and np.ndarrays, which
-# may be falsely detected as "Iterables."
-def _cast(value, dtype):
-    if isinstance(value, torch.Tensor):
-        is_eligible = value.is_floating_point() and value.is_cuda and (value.dtype is not torch.float64)
-        return value.to(dtype) if is_eligible else value
-    elif isinstance(value, string_classes):
-        return value
-    elif HAS_NUMPY and isinstance(value, np.ndarray):
-        return value
-    elif isinstance(value, collections.abc.Mapping):
-        return {_cast(k, dtype): _cast(v, dtype) for k, v in value.items()}
-    elif isinstance(value, collections.abc.Iterable):
-        iterable = map(lambda v: _cast(v, dtype), value)
-        if isinstance(value, list) or isinstance(value, tuple):
-            return type(value)(iterable)
-        else:
-            return iterable
-    else:
-        return value
