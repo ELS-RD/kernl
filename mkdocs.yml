@@ -39,14 +39,23 @@ theme:
     - navigation.instant
     - navigation.tracking
     - navigation.tabs
-    - navigation.footer
     - navigation.sections
+    - navigation.path
+    - navigation.prune
     - navigation.indexes
     - navigation.top
+    - navigation.footer
 
     - search.suggest
     - search.highlight          # experimental features
     - search.share              # experimental features
+
+    - toc.follow
+
+    - content.code.copy         # code copy button enabled globally
+    - content.code.annotate     # code annotations enabled globally
+    - content.tabs.link         # all content tabs across the whole documentation site will be linked
+    - content.tooltips          # add tooltips on hover
 
 # Stylesheets
 extra_css:
