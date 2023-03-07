@@ -35,23 +35,18 @@ theme:
       primary: white
       accent: blue
 
-  # Default values, taken from mkdocs_theme.yml
   features:
-    # - header.autohide
-    # - navigation.instant
+    - navigation.instant
     - navigation.tracking
     - navigation.tabs
     - navigation.footer
-    # - navigation.tabs.sticky
     - navigation.sections
-    # - navigation.expand
     - navigation.indexes
-    # - toc.integrate
     - navigation.top
+
     - search.suggest
     - search.highlight          # experimental features
     - search.share              # experimental features
-    # - announce.dismiss
 
 # Stylesheets
 extra_css:
