@@ -134,6 +134,8 @@ markdown_extensions:
 # Plugins
 plugins:
   - search
+  - typeset       # preserves html formatting in the navigation and t.o.c
+  - glightbox     # image zoom functionality plugin
   - mkdocstrings:
       custom_templates: templates
       default_handler: python
