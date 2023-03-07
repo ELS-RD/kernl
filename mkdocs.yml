@@ -20,8 +20,10 @@ theme:
   custom_dir: docs/overrides
   logo: assets/images/logo.svg
   favicon: assets/favicon.png
+
   icon:
     repo: fontawesome/brands/github
+
   font:
     text: Poppins
     code: Roboto Mono
