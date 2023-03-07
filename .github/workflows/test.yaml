@@ -5,7 +5,7 @@ on:
     branches:
       - '**'
     paths-ignore:
-      - mkdocs.yml
+      - 'mkdocs.yml'
       - 'docs/**'
 
 concurrency:
