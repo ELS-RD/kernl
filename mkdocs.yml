@@ -100,7 +100,6 @@ markdown_extensions:
   - def_list
   - footnotes
   - md_in_html
-  - meta
   - tables
   - toc:
       permalink: true
@@ -131,11 +130,8 @@ markdown_extensions:
   - pymdownx.betterem:
       smart_enable: all
   - pymdownx.smartsymbols
-#  - pymdownx.magiclink:
-#      repo_url_shorthand: true
-#      user: squidfunk
-#      repo: mkdocs-material
 
+# Plugins
 plugins:
   - search
   - mkdocstrings:
