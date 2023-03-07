@@ -32,18 +32,6 @@ theme:
       scheme: default
       primary: white
       accent: blue
-#      toggle:
-#        icon: material/toggle-switch-off-outline
-#        name: Switch to dark mode
-
-# Palette toggle for dark mode
-#    - media: "(prefers-color-scheme: dark)"
-#      scheme: slate
-#      primary: white
-#      accent: light blue
-#      toggle:
-#        icon: material/toggle-switch
-#        name: Switch to light mode
 
   # Default values, taken from mkdocs_theme.yml
   features:
