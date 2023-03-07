@@ -76,7 +76,7 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/ELS-RD/kernl
       name: Kernl on Github
-  generator: false              # Disable the "Made with Material for MkDocs" footer
+  generator: false # Disable the "Made with Material for MkDocs" footer
   analytics:
     provider: google
     property: G-QC1WFMZK6C
@@ -136,6 +136,13 @@ plugins:
   - search
   - typeset       # preserves html formatting in the navigation and t.o.c
   - glightbox     # image zoom functionality plugin
+  - privacy:
+      enabled: true
+      external_assets_exclude:
+        - cdn.jsdelivr.net/npm/mathjax@3/*
+      external_links_attr_map:
+        target: _blank
+      external_links_noopener: true
   - mkdocstrings:
       custom_templates: templates
       default_handler: python
