@@ -36,7 +36,6 @@ theme:
       accent: blue
 
   features:
-    - navigation.instant
     - navigation.tracking
     - navigation.tabs
     - navigation.sections
