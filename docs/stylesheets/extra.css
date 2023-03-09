@@ -799,3 +799,15 @@ div[class="md-search__scrollwrap"] {
         height: 250px;
     }
 }
+
+/* ----- ----- ----- ----- ----- */
+/* blog link customization   */
+/* ----- ----- ----- ----- ----- */
+a[href="https://ai.lefebvre-sarrut.eu/"]::after {
+    content: " ";
+    display: inline-block;
+    width: 20px;
+
+    background: url(../assets/images/icon-open-in-new.svg) no-repeat center right;
+    background-size: 16px 16px;
+}
