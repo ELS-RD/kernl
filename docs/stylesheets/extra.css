@@ -803,11 +803,11 @@ div[class="md-search__scrollwrap"] {
 /* ----- ----- ----- ----- ----- */
 /* blog link customization   */
 /* ----- ----- ----- ----- ----- */
-a[href="https://ai.lefebvre-sarrut.eu/"]::after {
+/* main navigation: nav ul > li allows to distinguish the link in the footer */
+nav ul > li [href="https://ai.lefebvre-sarrut.eu/"]::after {
     content: " ";
     display: inline-block;
     width: 20px;
-
     background: url(../assets/images/icon-open-in-new.svg) no-repeat center right;
     background-size: 16px 16px;
 }

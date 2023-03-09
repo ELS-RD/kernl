@@ -82,6 +82,9 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/ELS-RD/kernl
       name: Kernl on Github
+    - icon: lefebvre-sarrut/icon-social-ai-blog
+      link: https://ai.lefebvre-sarrut.eu/
+      name: Discover our blog fully dedicated to AI
   generator: false              # Disable the "Made with Material for MkDocs" footer
   analytics:
     provider: google
@@ -130,6 +133,9 @@ markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:materialx.emoji.twemoji
       emoji_generator: !!python/name:materialx.emoji.to_svg
+      options:
+        custom_icons:
+          - overrides/.icons
   - pymdownx.tasklist:
       custom_checkbox: true
   - pymdownx.arithmatex:
