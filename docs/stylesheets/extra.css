@@ -47,6 +47,7 @@ You need to add a data-md-color-scheme="slate" | "default" metadata to the enclo
 
     /* fonts */
     --font-fredoka-semibold: 600;
+    --font-fredoka-regular-400: 400;
 
     /* text */
     --accessible-line-height: 150%;
@@ -810,4 +811,48 @@ nav ul > li [href="https://ai.lefebvre-sarrut.eu/"]::after {
     width: 20px;
     background: url(../assets/images/icon-open-in-new.svg) no-repeat center right;
     background-size: 16px 16px;
+}
+
+/* ----- ----- ----- ----- ----- */
+/* 404 page */
+/* ----- ----- ----- ----- ----- */
+.not-found {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+
+    padding: 24px;
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--md-shadow-z1); /* uses the parent design system */
+}
+
+.not-found > h1 {
+    margin: 0;
+    padding: 0;
+    font-family: "Fredoka", sans-serif;
+    font-size: 32px;
+    font-weight: var(--font-fredoka-regular-400);
+    color: var(--md-typeset-color);
+    text-align: center;
+}
+
+.not-found > h1 > em {
+    color: var(--color-primary);
+    font-weight: var(--font-fredoka-semibold);
+}
+
+.not-found > img {
+    max-height: 400px;
+}
+
+.not-found > .go-back {
+    display: flex;
+    gap: 8px;
+}
+
+.not-found > .go-back > svg {
+    width: 18px;
+    fill: var(--md-typeset-color);
 }

@@ -11,7 +11,7 @@ repo_url: https://github.com/ELS-RD/kernl
 edit_uri: ""
 
 # Copyright
-copyright: Copyright &copy; 2022-2023 Lefebvre Sarrut –
+copyright: Copyright &copy; 2022-2023 <a href="https://www.lefebvre-sarrut.eu/" target="_blank" rel="noopener">Lefebvre Sarrut</a> –
   <a href="#__consent">Change cookie settings</a>
 
 # Configuration
@@ -20,8 +20,10 @@ theme:
   custom_dir: docs/overrides
   logo: assets/images/logo.svg
   favicon: assets/favicon.png
+
   icon:
     repo: fontawesome/brands/github
+
   font:
     text: Poppins
     code: Roboto Mono
@@ -32,36 +34,27 @@ theme:
       scheme: default
       primary: white
       accent: blue
-#      toggle:
-#        icon: material/toggle-switch-off-outline
-#        name: Switch to dark mode
 
-# Palette toggle for dark mode
-#    - media: "(prefers-color-scheme: dark)"
-#      scheme: slate
-#      primary: white
-#      accent: light blue
-#      toggle:
-#        icon: material/toggle-switch
-#        name: Switch to light mode
-
-  # Default values, taken from mkdocs_theme.yml
   features:
-    # - header.autohide
-    # - navigation.instant
     - navigation.tracking
     - navigation.tabs
-    - navigation.footer
-    # - navigation.tabs.sticky
     - navigation.sections
-    # - navigation.expand
+    - navigation.path
+    - navigation.prune
     - navigation.indexes
-    # - toc.integrate
     - navigation.top
+    - navigation.footer
+
     - search.suggest
     - search.highlight          # experimental features
     - search.share              # experimental features
-    # - announce.dismiss
+
+    - toc.follow
+
+    - content.code.copy         # code copy button enabled globally
+    - content.code.annotate     # code annotations enabled globally
+    - content.tabs.link         # all content tabs across the whole documentation site will be linked
+    - content.tooltips          # add tooltips on hover
 
 # Stylesheets
 extra_css:
@@ -109,7 +102,6 @@ markdown_extensions:
   - def_list
   - footnotes
   - md_in_html
-  - meta
   - tables
   - toc:
       permalink: true
@@ -143,13 +135,24 @@ markdown_extensions:
   - pymdownx.betterem:
       smart_enable: all
   - pymdownx.smartsymbols
-#  - pymdownx.magiclink:
-#      repo_url_shorthand: true
-#      user: squidfunk
-#      repo: mkdocs-material
 
+# Plugins
 plugins:
   - search
+  - typeset       # preserves html formatting in the navigation and t.o.c
+  - glightbox     # image zoom functionality plugin
+
+  - privacy:
+      enabled: true
+      external_assets_exclude:
+        - cdn.jsdelivr.net/npm/mathjax@3/*
+      external_links_attr_map:
+        target: _blank
+      external_links_noopener: true
+
+  - optimize:
+      enabled: !ENV [CI, false] # only run on ci (requires 3rd party libraries)
+
   - mkdocstrings:
       custom_templates: templates
       default_handler: python

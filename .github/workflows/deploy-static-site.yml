@@ -32,7 +32,15 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: 3.x
+      - uses: actions/cache@v3
+        with:
+          key: ${{ github.ref }}
+          path: .cache
+      - run: sudo apt-get install libcairo2-dev libfreetype6-dev libffi-dev libjpeg-dev libpng-dev libz-dev
+      - run: sudo apt-get install pngquant
       - run: pip install git+https://${{secrets.GH_TOKEN}}@github.com/squidfunk/mkdocs-material-insiders.git@9.0.12-insiders-4.30.2 "mkdocstrings[python]"
+      - run: pip install mkdocs-glightbox
+      - run: pip install pillow cairosvg
       - run: mkdocs build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
