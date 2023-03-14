@@ -127,7 +127,7 @@ You want to contribute by opening a Pull Request, we appreciate it. We'll do our
 
 When adding a new Breaking change, we recommend following this template in your Pull Request description:
 
-```{.markdown .copy}
+``` markdown
 ### Breaking change
 
 - **Who does this affect**:

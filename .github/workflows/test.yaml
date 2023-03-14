@@ -4,16 +4,58 @@ on:
   push:
     branches:
       - '**'
+    paths-ignore:
+      - 'mkdocs.yml'
+      - 'docs/**'
+      - '.github/workflows/deploy-static-site.yml'
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   main:
-    name: Lint & Format
-    runs-on: ubuntu-latest
+    name: Run tests
+    runs-on: [self-hosted, Linux, X64]
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-        cache: 'pip' # caching pip dependencies
+        python-version: '3.9.16'
+        cache: 'pip'
     - run: pip install black flake8 isort
     - run: make source_code_check_format
+    - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+    - run: pytest
+  notebooks-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      notebooks: ${{ steps.filter.outputs.changed_files }}
+      has-notebooks-changes: ${{ steps.filter.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          list-files: json
+          filters: |
+            changed:
+              - added|modified: '**.ipynb'
+  notebook:
+    name: Run notebook
+    needs: notebooks-changes
+    if: ${{ needs.notebooks-changes.outputs.has-notebooks-changes == 'true' }}
+    strategy:
+      matrix:
+        notebook: ${{ fromJSON(needs.notebooks-changes.outputs.notebooks) }}
+    runs-on: [ self-hosted, Linux, X64 ]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9.16'
+          cache: 'pip'
+      - run: pip install jupyter nbconvert
+      - run: jupyter nbconvert --execute --clear-output ${{ matrix.notebook }}
