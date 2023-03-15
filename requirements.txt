@@ -1,5 +1,4 @@
-triton==2.0.0.dev20221202
-torch==2.0.0.dev20230128+cu117
+torch==2.0.0
 pytest
 tabulate
 termcolor
