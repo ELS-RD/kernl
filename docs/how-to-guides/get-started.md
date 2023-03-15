@@ -5,7 +5,7 @@
 To install Kernl library, you just have to pip install it:
 
 ``` { .bash }
-python3 -m pip install install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/nightly/cu118
+python3 -m pip install install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/cu118
 ```
 
 ## Optimize a model

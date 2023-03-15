@@ -31,7 +31,7 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 &
 RUN python3.9 -m ensurepip --default-pip --upgrade && \
     pip install --upgrade pip
 
-RUN pip install --pre torch==2.0.0.dev20230226+cu118 --extra-index-url https://download.pytorch.org/whl/nightly/cu118
+RUN pip install --pre torch==2.0.0 --extra-index-url https://download.pytorch.org/whl/cu118
 
 RUN mkdir /syncback
 WORKDIR /kernl

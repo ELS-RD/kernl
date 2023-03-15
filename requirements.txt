@@ -1,4 +1,4 @@
-torch==2.0.0.dev20230226+cu118
+torch==2.0.0
 pytest
 tabulate
 termcolor
