@@ -11,7 +11,7 @@ repo_url: https://github.com/ELS-RD/kernl
 edit_uri: ""
 
 # Copyright
-copyright: Copyright &copy; 2022-2023 Lefebvre Sarrut –
+copyright: Copyright &copy; 2022-2023 <a href="https://www.lefebvre-sarrut.eu/" target="_blank" rel="noopener">Lefebvre Sarrut</a> –
   <a href="#__consent">Change cookie settings</a>
 
 # Configuration
@@ -20,8 +20,10 @@ theme:
   custom_dir: docs/overrides
   logo: assets/images/logo.svg
   favicon: assets/favicon.png
+
   icon:
     repo: fontawesome/brands/github
+
   font:
     text: Poppins
     code: Roboto Mono
@@ -32,36 +34,27 @@ theme:
       scheme: default
       primary: white
       accent: blue
-#      toggle:
-#        icon: material/toggle-switch-off-outline
-#        name: Switch to dark mode
 
-# Palette toggle for dark mode
-#    - media: "(prefers-color-scheme: dark)"
-#      scheme: slate
-#      primary: white
-#      accent: light blue
-#      toggle:
-#        icon: material/toggle-switch
-#        name: Switch to light mode
-
-  # Default values, taken from mkdocs_theme.yml
   features:
-    # - header.autohide
-    # - navigation.instant
     - navigation.tracking
     - navigation.tabs
-    - navigation.footer
-    # - navigation.tabs.sticky
     - navigation.sections
-    # - navigation.expand
+    - navigation.path
+    - navigation.prune
     - navigation.indexes
-    # - toc.integrate
     - navigation.top
+    - navigation.footer
+
     - search.suggest
     - search.highlight          # experimental features
     - search.share              # experimental features
-    # - announce.dismiss
+
+    - toc.follow
+
+    - content.code.copy         # code copy button enabled globally
+    - content.code.annotate     # code annotations enabled globally
+    - content.tabs.link         # all content tabs across the whole documentation site will be linked
+    - content.tooltips          # add tooltips on hover
 
 # Stylesheets
 extra_css:
@@ -82,6 +75,9 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/ELS-RD/kernl
       name: Kernl on Github
+    - icon: lefebvre-sarrut/icon-social-ai-blog
+      link: https://ai.lefebvre-sarrut.eu/
+      name: Discover our blog fully dedicated to AI
   generator: false              # Disable the "Made with Material for MkDocs" footer
   analytics:
     provider: google
@@ -106,7 +102,6 @@ markdown_extensions:
   - def_list
   - footnotes
   - md_in_html
-  - meta
   - tables
   - toc:
       permalink: true
@@ -130,6 +125,9 @@ markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:materialx.emoji.twemoji
       emoji_generator: !!python/name:materialx.emoji.to_svg
+      options:
+        custom_icons:
+          - overrides/.icons
   - pymdownx.tasklist:
       custom_checkbox: true
   - pymdownx.arithmatex:
@@ -137,13 +135,24 @@ markdown_extensions:
   - pymdownx.betterem:
       smart_enable: all
   - pymdownx.smartsymbols
-#  - pymdownx.magiclink:
-#      repo_url_shorthand: true
-#      user: squidfunk
-#      repo: mkdocs-material
 
+# Plugins
 plugins:
   - search
+  - typeset       # preserves html formatting in the navigation and t.o.c
+  - glightbox     # image zoom functionality plugin
+
+  - privacy:
+      enabled: true
+      external_assets_exclude:
+        - cdn.jsdelivr.net/npm/mathjax@3/*
+      external_links_attr_map:
+        target: _blank
+      external_links_noopener: true
+
+  - optimize:
+      enabled: !ENV [CI, false] # only run on ci (requires 3rd party libraries)
+
   - mkdocstrings:
       custom_templates: templates
       default_handler: python
@@ -160,8 +169,8 @@ nav:
   - How to:
       - Get Started: how-to-guides/get-started.md
       - How to support a new model: how-to-guides/support-new-model.md
-  - Tutorials:
-      - Page 1: tutorials/page.md
+#  - Tutorials:
+#      - Page 1: tutorials/page.md
   - Code Reference:
       - Model Optimization: reference/model_optimization.md
       - Graph Pattern Matching: reference/extended_matcher.md
@@ -170,5 +179,6 @@ nav:
       - Code of conduct: contribution-guide/code-of-conduct.md
       - Contributing guidelines: contribution-guide/how-to-contribute.md
       - Kernel writing conventions: contribution-guide/kernel-writing-conventions.md
-  - Changelog & FAQ:
-      - Page 1: changelog/page.md
+#  - Changelog & FAQ:
+#      - Page 1: changelog/page.md
+  - Blog: https://ai.lefebvre-sarrut.eu/

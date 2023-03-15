@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - '**'
+    paths-ignore:
+      - 'mkdocs.yml'
+      - 'docs/**'
+      - '.github/workflows/deploy-static-site.yml'
 
 concurrency:
   group: ${{ github.ref }}
