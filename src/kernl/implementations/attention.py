@@ -378,6 +378,7 @@ def _fwd_kernel(
                 )
             # Avoids NaN
             attention_mask = tl.where(attention_mask == float("-inf"), min_clamp_value, attention_mask)
+            # if IS_MATRIX_MASK we already added the dimensions, else we need to add one
             if IS_MATRIX_MASK:
                 qk += attention_mask
             else:  # related to https://github.com/openai/triton/issues/1273
