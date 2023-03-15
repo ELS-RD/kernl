@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - '**'
+    paths-ignore:
+      - 'mkdocs.yml'
+      - 'docs/**'
+      - '.github/workflows/deploy-static-site.yml'
 
 concurrency:
   group: ${{ github.ref }}
@@ -21,7 +25,7 @@ jobs:
         cache: 'pip'
     - run: pip install black flake8 isort
     - run: make source_code_check_format
-    - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu118
+    - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cu118
     - run: pytest
   notebooks-changes:
     runs-on: ubuntu-latest

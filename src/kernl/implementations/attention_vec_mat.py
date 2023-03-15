@@ -87,7 +87,7 @@ def vec_mat(
         + (block_n_idx * N_SIZE + n_range_offs) * output_col_stride
     )
     output_ptr_mask = (block_n_idx * N_SIZE + n_range_offs) < output_col_size
-    tl.store(pointer=output_ptrs, value=result, mask=output_ptr_mask, eviction_policy="evict_first")
+    tl.store(pointer=output_ptrs, value=result, mask=output_ptr_mask)
 
 
 def vec_mat_wrapper(
