@@ -67,7 +67,7 @@ def generate_none_mask(*_) -> None:
     ids=lambda x: f"shape(batch,heads,seq_len,dhead)={x[0]}x{x[1]}x{x[2]}x{x[3]}",
 )
 # fp32 not yet possible because of a bug in triton
-@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
+@pytest.mark.parametrize("dtype", [torch.float16], ids=["fp16"])  # TODO reactivate bf16 tests when support comes back
 @pytest.mark.parametrize("is_causal", [True, False], ids=["causal", "non-causal"])
 @pytest.mark.parametrize(
     "mask_fn",
