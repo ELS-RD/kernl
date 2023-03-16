@@ -35,9 +35,9 @@ A list of Examples contains how to use kernl with Pytorch.
 Please install it first.
 
 ```shell
-pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/cu118
 # or for local dev, after git clone ...
-pip install -e . --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+pip install -e . --extra-index-url https://download.pytorch.org/whl/cu118
 ```
 
 This project requires `Python` >= 3.9.

@@ -189,7 +189,7 @@ def _fwd_part_1(
     # required to fix a Triton compiler bug, if not done, there is a precision issue
     if N_LOAD_MASK_NEEDED:
         qk = tl.where(n_range_offs[None, :] < n_size, qk, float("-inf"))
-    qk += tl.dot(q, k, trans_b=True)
+    qk += tl.dot(q, tl.trans(k))
     qk *= sm_scale
     if IS_CAUSAL:
         qk += tl.where(m_offs[:, None] >= block_n_offs[None, :], 0, float("-inf"))

@@ -1,4 +1,9 @@
 FROM ghcr.io/els-rd/mkdocs-material-insiders:4.30.2
 
+# lightbox plugin
+RUN pip install --no-cache-dir \
+  pip install mkdocs-glightbox
+
+# mkdocstrings plugin
 RUN pip install --no-cache-dir \
   pip install mkdocstrings[python] mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
