@@ -6,4 +6,4 @@ RUN pip install --no-cache-dir \
 
 # mkdocstrings plugin
 RUN pip install --no-cache-dir \
-  pip install mkdocstrings[python]
+  pip install mkdocstrings[python] mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
