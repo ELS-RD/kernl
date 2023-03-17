@@ -156,13 +156,13 @@ def kernel_fma(
     n_offs_untagged = block_n_idx * BLOCK_N + tl.arange(0, BLOCK_N)
 
     # trick to avoid masking on M and N axis
-    # rm and rn can contains addresses outside matrix boundaries
+    # m_offs_untagged and n_offs_untagged can contains addresses outside matrix boundaries
     # modulo operation is used to wrap around the indices that go beyond the matrix boundaries
     # The value loaded are not ok but at least we are not reading outside the A/B matrices
     # Then, during storing in C a mask is used and the results related to these wrong values is discarded!
     # Regarding max_contiguous and multiple_of, they are used to force the compiler to vectorize loads
-    # multiple_of indicates that the first element of rm / rn is a multiple of BLOCK_M
-    # max_contiguous indicates that the range is a block of BLOCK_M contiguous elements
+    # multiple_of indicates that the first element of rm / rn is a multiple of BLOCK_M / BLOCK_N
+    # max_contiguous indicates that the range is a block of BLOCK_M / BLOCK_N contiguous elements
     m_offs = tl.max_contiguous(tl.multiple_of(m_offs_untagged % M, BLOCK_M), BLOCK_M)
     n_offs = tl.max_contiguous(tl.multiple_of(n_offs_untagged % N, BLOCK_N), BLOCK_N)
 
