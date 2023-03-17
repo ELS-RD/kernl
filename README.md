@@ -1,6 +1,7 @@
 ![Kernl logo](./resources/images/logo-readme.svg)
 
 ---
+[![Tests](https://github.com/ELS-RD/kernl/actions/workflows/test.yaml/badge.svg)](https://github.com/ELS-RD/kernl/actions/workflows/test.yaml)
 
 **Kernl lets you run Pytorch transformer models several times faster on GPU with a single line of code,** 
 **and is designed to be easily hackable.**
@@ -35,9 +36,9 @@ A list of Examples contains how to use kernl with Pytorch.
 Please install it first.
 
 ```shell
-pip install 'git+https://github.com/ELS-RD/kernl' --extra-index-url https://download.pytorch.org/whl/cu118
+pip install 'git+https://github.com/ELS-RD/kernl'
 # or for local dev, after git clone ...
-pip install -e . --extra-index-url https://download.pytorch.org/whl/cu118
+pip install -e .
 ```
 
 This project requires `Python` >= 3.9.
