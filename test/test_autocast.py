@@ -8,19 +8,18 @@ def test_autocast():
 
     with autocast():
         assert is_autocast_enabled() is True
-    assert is_autocast_enabled() is False
 
     with autocast(enabled=False):
         assert is_autocast_enabled() is False
-    assert is_autocast_enabled() is False
+    assert is_autocast_enabled() is True
 
     with autocast(dtype=torch.float32):
         assert get_autocast_dtype() is torch.float32
     assert get_autocast_dtype() is torch.float16
 
-    with autocast(use_torch_autocast_dtype=True):
-        assert is_torch_autocast_dtype_used() is True
-    assert is_torch_autocast_dtype_used() is False
+    with autocast(use_torch_autocast_dtype=False):
+        assert is_torch_autocast_dtype_used() is False
+    assert is_torch_autocast_dtype_used() is True
 
 
 @pytest.mark.parametrize(

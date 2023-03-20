@@ -6,9 +6,9 @@ from typing import Any
 from kernl.utils.cast import _cast
 
 
-_is_autocast_enabled: bool = False
+_is_autocast_enabled: bool = True
 _autocast_dtype: torch.dtype = torch.float16
-_is_torch_autocast_dtype_used: bool = False
+_is_torch_autocast_dtype_used: bool = True
 
 
 def enable_autocast(is_autocast_enabled: bool):

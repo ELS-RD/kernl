@@ -22,6 +22,7 @@ from conftest import assert_all_close, set_seed
 
 from kernl.implementations.linear_layer import linear_layer
 from kernl.optimizer.cuda_graph import cuda_graphs_wrapper
+from kernl.autocast import autocast
 
 
 def get_pytorch_activation(activation: str) -> Callable:
@@ -82,8 +83,6 @@ def test_benchmark(
     layer_bias = torch.randn((K,), **factory_kwargs) if bias else None
     pytorch_layer_activation = get_pytorch_activation(activation)
     expected = pytorch_layer_activation(torch.nn.functional.linear(x, layer_weight, layer_bias))
-    if dtype == torch.bfloat16:
-        expected = expected.float()
 
     # tensors casting
     layer_weight = layer_weight.to(dtype=dtype)
@@ -99,4 +98,7 @@ def test_benchmark(
 
     value = benchmark(fn, x)
 
-    assert_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)
+    if dtype == torch.bfloat16:
+        assert_all_close(expected, value, rtol=1e-1, atol=1e-1)
+    else:
+        assert_all_close(expected, value.float(), rtol=1e-1, atol=1e-1)
