@@ -18,8 +18,9 @@ import torch
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
-from torch.cuda.amp import custom_fwd
 from triton import JITFunction
+
+from kernl.autocast import custom_fwd
 
 
 # CREDITS: Initially inspired by the Triton tutorial and xformers implementation
@@ -278,7 +279,7 @@ def _layer_norm_fwd_fused_multi_pass(
 
 class LayerNorm(torch.autograd.Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float16)
+    @custom_fwd()
     def forward(
         ctx: FunctionCtx,
         x: torch.Tensor,
