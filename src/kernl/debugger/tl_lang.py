@@ -1,4 +1,5 @@
 import torch
+import triton
 
 from kernl.debugger.core import ExecutionContext
 from kernl.debugger.memory_map import MemoryMap
@@ -134,6 +135,9 @@ class WrappedTensor:
 
     def __str__(self) -> str:
         return "wrapped_" + str(self.tensor)
+
+    def __bool__(self) -> bool:
+        return torch.all(self.tensor == True).item()
 
     @property
     def dtype(self):
@@ -380,6 +384,21 @@ class TritonLangProxy:
             if not isinstance(d.value, int):
                 raise TypeError(f"Shape element {i} must have type `constexpr[int]`, got `constexpr[{type(d.value)}]")
         shape = [x.value for x in shape]
+        if isinstance(dtype, triton.language.core.dtype):
+            if dtype.is_fp32():
+                dtype = torch.float32
+            elif dtype.is_fp16():
+                dtype = torch.float16
+            elif dtype.is_bf16():
+                dtype = torch.bfloat16
+            elif dtype.is_int32():
+                dtype = torch.int32
+            elif dtype.is_int16():
+                dtype = torch.int16
+            elif dtype.is_int8():
+                dtype = torch.int8
+            else:
+                raise TypeError(f"Unsupported dtype {dtype}")
         return torch.zeros(size=shape, dtype=dtype, device="cuda")
 
     @_tensor_operation
@@ -421,7 +440,11 @@ class TritonLangProxy:
 
     @_tensor_operation
     def atomic_add(self, pointer, val, mask=None):
-        raise NotImplementedError()
+        # arbitrary other value as it will masked during storing
+        stored = self._memory_map.load(pointer, mask, 0.0)
+        result = stored + val
+        self._memory_map.store(pointer, result, mask)
+        return result
 
     @_tensor_operation
     def atomic_max(self, pointer, val, mask=None):
