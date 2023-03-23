@@ -69,7 +69,7 @@ def _kernel(A, B, C, M, N, K,
             ):
     # matrix multiplication
     pid = tl.program_id(0)
-    # pid_z = tl.program_id(1)
+    pid_z = tl.program_id(1)
     grid_m = (M + BLOCK_M - 1) // BLOCK_M
     grid_n = (N + BLOCK_N - 1) // BLOCK_N
     # re-order program ID for better L2 performance
@@ -83,7 +83,7 @@ def _kernel(A, B, C, M, N, K,
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     ram = tl.max_contiguous(tl.multiple_of(rm % M, BLOCK_M), BLOCK_M)
     rbn = tl.max_contiguous(tl.multiple_of(rn % N, BLOCK_N), BLOCK_N)
-    rk = tl.arange(0, BLOCK_K)
+    rk = pid_z * BLOCK_K + tl.arange(0, BLOCK_K)
     # pointers
     A = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak)
     B = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn)
@@ -117,7 +117,7 @@ class _matmul(torch.autograd.Function):
     _locks = {}
 
     @staticmethod
-    def _call(a, b):
+    def _call(a, b, split_k):
         device = a.device
         # handle non-contiguous inputs if necessary
         if a.stride(0) > 1 and a.stride(1) > 1:
@@ -129,27 +129,28 @@ class _matmul(torch.autograd.Function):
         M, K = a.shape
         _, N = b.shape
         # allocates output
-        c = torch.empty((M, N), device=device, dtype=a.dtype)
+        c = torch.zeros((M, N), device=device, dtype=a.dtype)
         # accumulator types
         ACC_TYPE = tl.float32 if a.dtype in [torch.float16, torch.bfloat16, torch.float32] else tl.int32
+        # hard coded block sizes
         BLOCK_M = 64
         BLOCK_N = 64
         BLOCK_K = 64
 
         # launch kernel
-        grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), )
+        grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), split_k)
         _kernel[grid](a, b, c, M, N, K,
                       a.stride(0), a.stride(1),
                       b.stride(0), b.stride(1),
                       c.stride(0), c.stride(1),
                       BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
-                      SPLIT_K=1, EVEN_K=True,
+                      SPLIT_K=split_k, EVEN_K=True,
                       GROUP_M=8, ACC_TYPE=ACC_TYPE)
         return c
 
     @staticmethod
-    def forward(ctx, a, b):
-        return _matmul._call(a, b)
+    def forward(ctx, a, b,split_k=1):
+        return _matmul._call(a, b, split_k)
 
 
 matmul_ref = _matmul.apply

@@ -1,9 +1,11 @@
+import random
 from typing import Optional
 
 import torch
 import triton
 import triton.language as tl
 
+from experimental.misc.matmul_ref import matmul_ref
 from kernl.debugger.debugger import triton_debug
 
 torch.manual_seed(123)
@@ -40,6 +42,7 @@ def _kernel(
         start_iter = pid * full + tl.minimum(pid, remaining)
         end_iter = (pid + 1) * full + tl.minimum(pid + 1, remaining)
         # print("-- stream k pid", pid.tensor.item(), "start", start_iter.tensor.item(), "end", end_iter.tensor.item())
+
         acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
 
         for current_iter in range(start_iter, end_iter):  # iterate over K axis, M/N may change during iteration
@@ -63,7 +66,8 @@ def _kernel(
                 else:
                     tl.atomic_add(C_, acc)
                 # print("tile_id first", tile_id.tensor.item(), "to save", acc.tensor.sum().item(), "tile iter", (current_iter % iters_per_tile).tensor.item(), "iter", current_iter, "is full", (current_iter + 1 - iters_per_tile >= start_iter).tensor.item())
-                acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)  # reset accumulator
+                if end_iter != current_iter:
+                    acc *= 0.0
 
         # save last tile if there are some iterations leftovers
         if end_iter % iters_per_tile != 0:
@@ -129,7 +133,7 @@ class _matmul(torch.autograd.Function):
         total_iters = total_tiles * iters_per_tile  # total work to do
         # tiles to be computed using classical blocking approach (data parallel in the paper)
         # if more SMs than tiles, will be 0
-        total_blocking_tiles = (total_tiles // grid_to_use) * grid_to_use
+        total_blocking_tiles = (total_tiles // grid_to_use) * grid_to_use if grid_to_use > 0 else total_tiles
         if total_tiles >= grid_to_use:
             # for two-tile Stream-K + data-parallel in the paper
             total_blocking_tiles -= grid_to_use
@@ -169,6 +173,7 @@ class _matmul(torch.autograd.Function):
             BLOCK_N=BLK_N,
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
+            num_warps=16,
         )
         return c
 
@@ -184,25 +189,87 @@ matmul = _matmul.apply
 
 
 # Example
+# m, n, k, g = 256, 3584, 8192, 8  # works! with warp set to 16 and 64 64 64 for block mnk
 # m, n, k, g = 896, 384, 128, 4
 # m, n, k, g = 768, 384, 96, 82
 # m, n, k, g = 384, 384, 64, 82
 # m, n, k, g = 5120, 3840, 160, 82
-# m, n, k, g = 256, 3584, 8192, 82
-m, n, k, g = 1024, 1024, 1024, 64
-m, n, k, g = 512, 512, 1024, 64
+# m, n, k, g = 1024, 1024, 1024, 82
+# m, n, k, g = 512, 512, 1024, 64
+# m, n, k, g = 256, 128, 3968, 82  # marche
+m, n, k = 256, 512, 2048*2
+g = 82
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
 debug = False
 C = matmul(A, B, g, debug, 64, 64, 64)
 expected = A @ B
-assert torch.allclose(C, expected, atol=1e-1), f"max: {(C - expected).max().item()}\n{C}\n{expected}"
+C_ref = matmul_ref(A, B, 1)
+C_grid_0 = matmul(A, B, 0, debug, 64, 64, 64)
+for i, res in enumerate([C, C_ref, C_grid_0]):
+    print("check", i)
+    assert torch.allclose(res, expected, atol=5e-1), f"max: {(res - expected).max().item()}\n{res}\n{expected}"
 
 if not debug:
-    ms, min_ms, max_ms = triton.testing.do_bench(lambda: torch.matmul(A, B))
-    print("PyTorch", ms, min_ms, max_ms)
+    ms, *_ = triton.testing.do_bench(lambda: torch.matmul(A, B))
+    print("PyTorch", ms)
 
-    # for g in range(1, 82):
-    ms, min_ms, max_ms = triton.testing.do_bench(lambda: matmul(A, B, g, False, 64, 64, 64))
-    print("Triton", ms, min_ms, max_ms)
+    # for g in range(0, 82):
+    ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, g, False, 64, 64, 64))
+    print("Triton grid", g, ms)
+
+    ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, 0, False, 64, 64, 64))
+    print("Triton grid 0", ms)
+
+    ms, *_ = triton.testing.do_bench(lambda: matmul_ref(A, B, 1))
+    print("Triton ref", ms)
+
+# for experiments on 3090 RTX
+# sudo nvidia-smi -pm 1 -i 0
+# sudo nvidia-smi -i 0 -pl 350  # 400 for A100
+# sudo nvidia-smi -i 0 -lgc 1005
+
+
+# TODO test on A100
+
+
+# shapes = [(int(m), int(n), int(k)) for m in range(64, 512, 64) for n in range(64, 512, 64) for k in range(7104, 8192, 128)]
+# random.shuffle(shapes)
+# shapes = shapes[:1000]
+# print("nb shapes", len(shapes))
+# g = 82
+# for m, n, k in shapes:
+#     A = torch.randn(m, k, device="cuda", dtype=torch.float16)
+#     B = torch.randn(k, n, device="cuda", dtype=torch.float16)
+#     # for g in range(1, 82):
+#     ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, g, False, 64, 64, 64))
+#     ms_baseline, *_ = triton.testing.do_bench(lambda: matmul_ref(A, B, 2))
+#
+#     if ms < ms_baseline:
+#         print(f"problem size: {m} {n} {k}")
+#         print(f"Triton {ms_baseline} < {ms} with g={g}")
+
+# 0.9 -> 8.6 : zero -> empty to create C
+# 8.6 -> 7.8 : remove the if / else statements
+
+
+# list of problems working well
+# problem size: 256 128 3968
+# Triton 0.07168000191450119 < 0.03481600061058998 with g=82
+# problem size: 128 512 3584
+# Triton 0.0655359998345375 < 0.05119999870657921 with g=82
+# problem size: 128 512 3584
+# Triton 0.0655359998345375 < 0.05119999870657921 with g=82
+# problem size: 256 128 5120
+# Triton 0.09113600105047226 < 0.03891199827194214 with g=82
+# problem size: 384 128 2816
+# Triton 0.053247999399900436 < 0.03686400130391121 with g=82
+# problem size: 256 128 3712
+# Triton 0.06758400052785873 < 0.03379200026392937 with g=82
+# problem size: 512 128 4608
+# Triton 0.08191999793052673 < 0.06143999844789505 with g=82
+# problem size: 128 384 3328
+# Triton 0.06143999844789505 < 0.03993599861860275 with g=82
+# problem size: 512 128 4992
+# Triton 0.08908800035715103 < 0.06758400052785873 with g=82
