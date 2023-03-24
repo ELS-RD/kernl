@@ -8,53 +8,25 @@ import triton
 import triton.language as tl
 from triton.compiler import init_cuda_utils
 
-from matmul_ref import matmul_ref
 
 torch.manual_seed(123)
 
 # ---------------------------------------------------------------------------
-# Triton kernel
+# Triton kernels
 # ---------------------------------------------------------------------------
 
 
 @triton.jit()
-def _kernel(
-        # input and output matrices
+def process_first_wave(
         A, B, C,
-        # matrix dimensions
         M, N, K,
-        # strides
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-        # total number of iterations for Stream-K and other variables
-        total_sm, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        # block dimensions and accumulator type
+        total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
 ):
     pid = tl.program_id(0)
-    # First wave: each SM/triton program does more than one tile of work
-    if pid < total_sm:
-        process_first_wave(
-            A, B, C, M, N, K, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-            pid, total_sm, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-            BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
-        )
-    else:
-        # After first wave: classic blocking matmul
-        process_classic_blocking(
-            A, B, C, M, N, K, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-            pid, total_sm, total_tiles_streamk, iters_per_tile,
-            BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
-        )
-
-
-@triton.jit()
-def process_first_wave(
-        A, B, C, M, N, K, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-        pid, total_sm, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
-):
-    full = total_iters_streamk // total_sm
-    remaining = total_iters_streamk % total_sm
+    full = total_iters_streamk // total_programs_streamk
+    remaining = total_iters_streamk % total_programs_streamk
     start_iter = pid * full + tl.minimum(pid, remaining)
     end_iter = (pid + 1) * full + tl.minimum(pid + 1, remaining)
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
@@ -97,11 +69,14 @@ def process_first_wave(
 
 @triton.jit()
 def process_classic_blocking(
-        A, B, C, M, N, K, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-        pid, total_sm, total_tiles_streamk, iters_per_tile,
-        BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
+        A, B, C,
+        M, N, K,
+        stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+        total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
+        BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
 ):
-    pid = pid + (total_tiles_streamk - total_sm)  # first wave has done more tiles than there are SMs, we adjust pid
+    pid = tl.program_id(0) + total_programs_streamk
+    pid = pid + (total_tiles_streamk - total_programs_streamk) # first wave has done more tiles than there are SMs, we adjust pid
     pid_m = pid // tl.cdiv(N, BLOCK_N)
     pid_n = pid % tl.cdiv(N, BLOCK_N)
     # do matrix multiplication
@@ -129,10 +104,9 @@ def process_classic_blocking(
 
 
 class _matmul(torch.autograd.Function):
-    kernel = _kernel
 
     @staticmethod
-    def _call(a: torch.Tensor, b: torch.Tensor, grid_to_use: int, debug: bool, BLK_M: int, BLK_N: int, BLK_K: int):
+    def _call(a: torch.Tensor, b: torch.Tensor, total_programs_streamk: int, debug: bool, BLK_M: int, BLK_N: int, BLK_K: int):
         device = a.device
         # handle non-contiguous inputs if necessary
         if a.stride(0) > 1 and a.stride(1) > 1:
@@ -153,22 +127,23 @@ class _matmul(torch.autograd.Function):
         total_iters = total_tiles * iters_per_tile  # total work to do
         # tiles to be computed using classical blocking approach (data parallel in the paper)
         # if more SMs than tiles, will be 0
-        total_blocking_tiles = (total_tiles // grid_to_use) * grid_to_use if grid_to_use > 0 else total_tiles
-        if total_tiles >= grid_to_use:
+        total_blocking_tiles = (total_tiles // total_programs_streamk) * total_programs_streamk if total_programs_streamk > 0 else total_tiles
+        if total_tiles >= total_programs_streamk:
             # for two-tile Stream-K + data-parallel in the paper
-            total_blocking_tiles -= grid_to_use
+            total_blocking_tiles -= total_programs_streamk
         total_tiles_streamk = total_tiles - total_blocking_tiles
         total_iters_streamk = total_tiles_streamk * iters_per_tile
 
-        total_programs = grid_to_use + (total_tiles - total_tiles_streamk)  # grid
-
+        total_programs = total_programs_streamk + (total_tiles - total_tiles_streamk)  # grid
+        total_programs_classic = total_programs - total_programs_streamk
         if debug:
             print(f"m,n,k={M},{N},{K} ; BLK_M,BLK_N,BLK_K={BLK_M},{BLK_N},{BLK_K}")
             print(f"{total_blocks_M=} x {total_blocks_N=} = {total_tiles=}")
             print(f"{total_tiles_streamk=} + {total_blocking_tiles=} = {total_tiles=}")
             print(f"{total_tiles=} * {iters_per_tile=} = {total_iters=}")
             print(f"{total_iters_streamk=}")
-            print(f"{total_programs=}")
+            print(f"{total_programs_streamk=} + {total_programs_classic=} = {total_programs=}")
+
         # allocates output
         if total_tiles_streamk > 0:
             # atomic add requires zero-initialized output
@@ -176,7 +151,7 @@ class _matmul(torch.autograd.Function):
         else:
             c = torch.empty((M, N), device=device, dtype=a.dtype)
         assert c.dtype == torch.float16
-        _kernel[(total_programs,)](
+        k1 = process_first_wave[(total_programs_streamk,)](
             a,
             b,
             c,
@@ -192,18 +167,45 @@ class _matmul(torch.autograd.Function):
             total_iters_streamk=total_iters_streamk,
             total_tiles_streamk=total_tiles_streamk,
             iters_per_tile=iters_per_tile,
-            total_sm=grid_to_use,
+            total_programs_streamk=total_programs_streamk,
             BLOCK_M=BLK_M,
             BLOCK_N=BLK_N,
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
+            num_stages=1,
             num_warps=16,
         )
+        assert k1.n_spills == 0, f"register spilling detected: {k1.n_spills}"
+        k2 = process_classic_blocking[(total_programs_classic,)](
+            a,
+            b,
+            c,
+            M,
+            N,
+            K,
+            a.stride(0),
+            a.stride(1),
+            b.stride(0),
+            b.stride(1),
+            c.stride(0),
+            c.stride(1),
+            total_iters_streamk=total_iters_streamk,
+            total_tiles_streamk=total_tiles_streamk,
+            iters_per_tile=iters_per_tile,
+            total_programs_streamk=total_programs_streamk,
+            BLOCK_M=BLK_M,
+            BLOCK_N=BLK_N,
+            BLOCK_K=BLK_K,
+            ACC_TYPE=ACC_TYPE,
+            num_stages=3,
+            num_warps=4,
+        )
+        assert k2.n_spills == 0, f"register spilling detected: {k2.n_spills}"
         return c
 
     @staticmethod
     def forward(ctx, a: torch.Tensor, b: torch.Tensor, grid: int, debug: bool = False, BLK_M=128, BLK_N=128, BLK_K=32):
-        return _matmul._call(a=a, b=b, grid_to_use=grid, debug=debug, BLK_M=BLK_M, BLK_N=BLK_N, BLK_K=BLK_K)
+        return _matmul._call(a=a, b=b, total_programs_streamk=grid, debug=debug, BLK_M=BLK_M, BLK_N=BLK_N, BLK_K=BLK_K)
 
 
 matmul = _matmul.apply
@@ -213,28 +215,25 @@ matmul = _matmul.apply
 # ---------------------------------------------------------------------------
 
 device = torch.cuda.current_device()
-init_cuda_utils()
-total_sm = triton.compiler.cuda_utils.get_device_properties(device)["multiprocessor_count"]
-m, n, k = 256, 512, 2048*16
+# init_cuda_utils()
+# total_sm = triton.compiler.cuda_utils.get_device_properties(device)["multiprocessor_count"]
+total_programs_streamk = 82  # number of tiles
+m, n, k = 2560, 512, 32768
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
 debug = False
-C = matmul(A, B, total_sm, debug, 64, 64, 64)
+C = matmul(A, B, total_programs_streamk, debug, 64, 64, 64)
 expected = A @ B
-C_ref = matmul_ref(A, B, 8)
-# assert torch.allclose(C, expected, atol=5e-1), f"max: {(C - expected).abs().max().item()}\n{C}\n{expected}"
-# assert torch.allclose(C_ref, expected, atol=5e-1), f"max: {(C_ref - expected).max().item()}\n{C_ref}\n{expected}"
+
+assert torch.allclose(C, expected, atol=5e-1), f"max: {(C - expected).abs().max().item()}\n{C}\n{expected}"
 
 if not debug:
     ms, *_ = triton.testing.do_bench(lambda: torch.matmul(A, B))
     print("PyTorch", ms)
 
-    ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm, False, 64, 64, 64))
-    print("Triton", ms, total_sm)
+    ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_programs_streamk, debug))
+    print(f"hybrid stream-k (grid={total_programs_streamk})", ms)
 
-    ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, 0, False, 64, 64, 64))
-    print("Triton grid=0", ms)
-
-    ms, *_ = triton.testing.do_bench(lambda: matmul_ref(A, B, 1))
-    print("Triton ref", ms)
+    ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, 0, debug))
+    print("tile matmul (grid=0)", ms)
