@@ -41,7 +41,7 @@ def _kernel(
         remaining = total_iters_streamk % total_sm
         start_iter = pid * full + tl.minimum(pid, remaining)
         end_iter = (pid + 1) * full + tl.minimum(pid + 1, remaining)
-        # print("-- stream k pid", pid.tensor.item(), "start", start_iter.tensor.item(), "end", end_iter.tensor.item())
+        # print("-- stream k pid", pid.tensor.item(), "start", start_iter.tensor.item(), "end", end_iter.tensor.item(), "nb iter", (end_iter.tensor - start_iter.tensor).item())
 
         acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
 
@@ -65,7 +65,7 @@ def _kernel(
                     tl.store(C_, acc)
                 else:
                     tl.atomic_add(C_, acc)
-                # print("tile_id first", tile_id.tensor.item(), "to save", acc.tensor.sum().item(), "tile iter", (current_iter % iters_per_tile).tensor.item(), "iter", current_iter, "is full", (current_iter + 1 - iters_per_tile >= start_iter).tensor.item())
+                # print("tile_id first", tile_id.tensor.item(), "to save", acc.tensor.sum().item(), "tile iter", (current_iter % iters_per_tile).tensor.item(), "iter", current_iter, "is full" if (current_iter + 1 - iters_per_tile >= start_iter).tensor.item() else "is_partial")
                 if end_iter != current_iter:
                     acc *= 0.0
 
@@ -81,7 +81,7 @@ def _kernel(
             tl.atomic_add(C_, acc)
     else:  # classic matmul part
         pid = pid + (total_tiles_streamk - total_sm)  # first wave has done more tiles than there are SMs
-        # print("-- classic pid", pid.tensor.item(), "tile id", pid.tensor.item())
+        # print("-- classic pid", pid.tensor.item(), "tile id", pid.tensor.item(), "nb iter", (BLOCK_K.tensor / K.tensor).item())
         pid_m = pid // tl.cdiv(N, BLOCK_N)
         pid_n = pid % tl.cdiv(N, BLOCK_N)
         # do matrix multiplication
@@ -94,7 +94,7 @@ def _kernel(
         A_ = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak)
         B_ = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn)
         acc_ = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
-        for k in range(0, tl.cdiv(K, BLOCK_K)):
+        for k in range(0, K, BLOCK_K):
             a = tl.load(A_)
             b = tl.load(B_)
             acc_ += tl.dot(a, b)
@@ -173,12 +173,13 @@ class _matmul(torch.autograd.Function):
             BLOCK_N=BLK_N,
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
-            num_warps=16,
+            num_stages=3,
+            num_warps=4,
         )
         return c
 
     @staticmethod
-    def forward(ctx, a: torch.Tensor, b: torch.Tensor, grid: Optional[int] = None, debug: bool=False, BLK_M=128, BLK_N=128, BLK_K=32):  # 82 for 3090 RTX, 108 for A100
+    def forward(ctx, a: torch.Tensor, b: torch.Tensor, grid: Optional[int] = None, debug: bool=False, BLK_M=64, BLK_N=64, BLK_K=64):  # 82 for 3090 RTX, 108 for A100
         if grid is None:
             device = torch.cuda.current_device()
             grid = triton.compiler.cuda_utils.get_device_properties(device)["multiprocessor_count"]
@@ -197,8 +198,8 @@ matmul = _matmul.apply
 # m, n, k, g = 1024, 1024, 1024, 82
 # m, n, k, g = 512, 512, 1024, 64
 # m, n, k, g = 256, 128, 3968, 82  # marche
-m, n, k = 256, 512, 2048*2
-g = 82
+m, n, k = 256, 512, 2048*16
+g = 32
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
@@ -209,7 +210,7 @@ C_ref = matmul_ref(A, B, 1)
 C_grid_0 = matmul(A, B, 0, debug, 64, 64, 64)
 for i, res in enumerate([C, C_ref, C_grid_0]):
     print("check", i)
-    assert torch.allclose(res, expected, atol=5e-1), f"max: {(res - expected).max().item()}\n{res}\n{expected}"
+    assert torch.allclose(res, expected, atol=1), f"max: {(res - expected).max().item()}\n{res}\n{expected}"
 
 if not debug:
     ms, *_ = triton.testing.do_bench(lambda: torch.matmul(A, B))
