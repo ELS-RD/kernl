@@ -4,6 +4,7 @@
 # sudo nvidia-smi -i 0 -pl 350  # 400 for A100
 # sudo nvidia-smi -i 0 -lgc 1005
 
+
 import torch
 import triton
 import triton.language as tl
@@ -24,7 +25,7 @@ def mac_loop(
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter, end_iter, locks,
+        start_iter, end_iter, locks, GROUP_M,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
 ):
     # If no work to do, return early
@@ -33,8 +34,15 @@ def mac_loop(
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
     # where are we in the grid
     tile_id = start_iter // iters_per_tile
-    pid_m = tile_id // tl.cdiv(N, BLOCK_N)
-    pid_n = tile_id % tl.cdiv(N, BLOCK_N)
+    grid_m = tl.cdiv(M, BLOCK_M)
+    grid_n = tl.cdiv(N, BLOCK_N)
+    # re-order program ID for better L2 performance
+    width = GROUP_M * grid_n
+    group_id = tile_id // width
+    group_size = min(grid_m - group_id * GROUP_M, GROUP_M)
+    pid_m = group_id * GROUP_M + (tile_id % group_size)
+    pid_n = (tile_id % width) // group_size
+
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     ram = tl.max_contiguous(tl.multiple_of(rm, BLOCK_M), BLOCK_M)
@@ -70,6 +78,7 @@ def first_wave(
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
+        GROUP_M: tl.constexpr,
 ):
     pid = tl.program_id(0)
     full = total_iters_streamk // total_programs_streamk  # iterations related to full wave
@@ -87,7 +96,7 @@ def first_wave(
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter_1, start_iter_2, locks,
+        start_iter_1, start_iter_2, locks, GROUP_M,
         BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
     )
 
@@ -97,7 +106,7 @@ def first_wave(
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter_2, start_iter_3, locks,
+        start_iter_2, start_iter_3, locks, GROUP_M,
         BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
     )
 
@@ -107,7 +116,7 @@ def first_wave(
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter_3, end_iter, locks,
+        start_iter_3, end_iter, locks, GROUP_M,
         BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
     )
 
@@ -119,11 +128,20 @@ def full_tiles(
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
+        GROUP_M: tl.constexpr,
 ):
-    pid = tl.program_id(0) + total_programs_streamk
-    pid = pid + (total_tiles_streamk - total_programs_streamk) # first wave has done more tiles than there are SMs, we adjust pid
-    pid_m = pid // tl.cdiv(N, BLOCK_N)
-    pid_n = pid % tl.cdiv(N, BLOCK_N)
+    # first wave has done more tiles than there are SMs, we adjust pid
+    tile_id = tl.program_id(0) + total_tiles_streamk
+
+    grid_m = tl.cdiv(M, BLOCK_M)
+    grid_n = tl.cdiv(N, BLOCK_N)
+    # re-order program ID for better L2 performance
+    width = GROUP_M * grid_n
+    group_id = tile_id // width
+    group_size = min(grid_m - group_id * GROUP_M, GROUP_M)
+    pid_m = group_id * GROUP_M + (tile_id % group_size)
+    pid_n = (tile_id % width) // group_size
+
     # do matrix multiplication
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -218,6 +236,7 @@ class _matmul(torch.autograd.Function):
             BLOCK_N=BLK_N,
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
+            GROUP_M=8,
             num_stages=num_stages,
             num_warps=num_warps,
         )
@@ -245,6 +264,7 @@ class _matmul(torch.autograd.Function):
             BLOCK_N=BLK_N,
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
+            GROUP_M=8,
             num_stages=3,
             num_warps=4,
         )
@@ -297,7 +317,7 @@ if not debug:
 # ---------------------------------------------------------------------------
 
 # tried to reproduce the tests described in the paper
-num_samples = 100  # 32768
+num_samples = 32768  # 32768
 values = ((torch.logspace(torch.tensor(128).log2(), torch.tensor(8192).log2(), num_samples,
                           base=2) / 128).round() * 128).unique().tolist()
 shapes = [(int(m), int(n), int(k)) for m in values for n in values for k in values]
@@ -336,3 +356,4 @@ import json
 with open("results.json", "w") as f:
     json.dump(results, f, indent=4)
 
+# speedup: 22740/32768 - average speedup: 1.052
