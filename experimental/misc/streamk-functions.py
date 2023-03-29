@@ -1,3 +1,4 @@
+# sudo apt-get install zlib1g-dev
 # for reproductible experiments
 # sudo nvidia-smi -pm 1 -i 0
 # sudo nvidia-smi -i 0 -pl 350  # 400 for A100
@@ -9,16 +10,16 @@ import triton.language as tl
 import random
 from triton.compiler import init_cuda_utils
 
-from kernl.debugger.debugger import triton_debug
-
 torch.manual_seed(123)
 random.seed(123)
+
 # ---------------------------------------------------------------------------
 # Triton kernels
 # ---------------------------------------------------------------------------
 
+# iterate, multiply and accumulate over K axis
 @triton.jit()
-def k_iterations(
+def mac_loop(
         A, B, C,
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
@@ -26,20 +27,22 @@ def k_iterations(
         start_iter, end_iter,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
 ):
-    if end_iter - start_iter == 0:
+    # If no work to do, return early
+    if end_iter == start_iter:
         return
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
-    # update pointers
+    # where are we in the grid
     tile_id = start_iter // iters_per_tile
     pid_m = tile_id // tl.cdiv(N, BLOCK_N)
     pid_n = tile_id % tl.cdiv(N, BLOCK_N)
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    ram = tl.max_contiguous(tl.multiple_of(rm, BLOCK_M), BLOCK_M)
+    rbn = tl.max_contiguous(tl.multiple_of(rn, BLOCK_N), BLOCK_N)
     rk = tl.arange(0, BLOCK_K)
-    A_ = A + (rm[:, None] * stride_am + rk[None, :] * stride_ak) + BLOCK_K * stride_ak * (start_iter % iters_per_tile)
-    B_ = B + (rk[:, None] * stride_bk + rn[None, :] * stride_bn) + BLOCK_K * stride_bk * (start_iter % iters_per_tile)
+    A_ = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak) + BLOCK_K * stride_ak * (start_iter % iters_per_tile)
+    B_ = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn) + BLOCK_K * stride_bk * (start_iter % iters_per_tile)
 
-    # iterate over K axis, M/N may change during iteration
     for current_iter in range(start_iter, end_iter):
         a = tl.load(A_)
         b = tl.load(B_)
@@ -47,16 +50,14 @@ def k_iterations(
         A_ += BLOCK_K * stride_ak
         B_ += BLOCK_K * stride_bk
 
-    # save last tile if there are some iterations leftovers
     C_ = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)
-    if end_iter - start_iter == iters_per_tile and start_iter % iters_per_tile == 0:
+    if end_iter - start_iter == iters_per_tile:
         tl.store(C_, acc)
     else:
         tl.atomic_add(C_, acc)
 
-# @triton_debug
 @triton.jit()
-def process_first_wave(
+def first_wave(
         A, B, C,
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
@@ -66,47 +67,46 @@ def process_first_wave(
     pid = tl.program_id(0)
     full = total_iters_streamk // total_programs_streamk  # iterations related to full wave
     remaining = total_iters_streamk % total_programs_streamk  # iterations related to last (partial) wave
-    start_iter = pid * full + tl.minimum(pid, remaining)
+    start_iter_1 = pid * full + tl.minimum(pid, remaining)
     end_iter = (pid + 1) * full + tl.minimum(pid + 1, remaining)
-    start_iter2 = start_iter + (iters_per_tile - start_iter % iters_per_tile)
-    start_iter2 = tl.minimum(start_iter2, end_iter)
-    start_iter3 = start_iter2 + (iters_per_tile - start_iter2 % iters_per_tile)
-    start_iter3 = tl.minimum(start_iter3, end_iter)
-    # print(f"pid={pid.tensor.item()}, start_iter={start_iter.tensor.item()}, start_iter2={start_iter2.tensor.item()}, start_iter3={start_iter3.tensor.item()}, end_iter={end_iter.tensor.item()}")
+    start_iter_2 = start_iter_1 + (iters_per_tile - start_iter_1 % iters_per_tile)
+    start_iter_2 = tl.minimum(start_iter_2, end_iter)
+    start_iter_3 = start_iter_2 + (iters_per_tile - start_iter_2 % iters_per_tile)
+    start_iter_3 = tl.minimum(start_iter_3, end_iter)
 
     # finish tile another SM was working on (may be a complete tile)
-    k_iterations(
+    mac_loop(
         A, B, C,
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter, start_iter2,
+        start_iter_1, start_iter_2,
         BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
     )
 
     # do full tile (if there is enough work for that)
-    k_iterations(
+    mac_loop(
         A, B, C,
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter2, start_iter3,
+        start_iter_2, start_iter_3,
         BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
     )
 
     # start a new tile (may be incomplete)
-    k_iterations(
+    mac_loop(
         A, B, C,
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter3, end_iter,
+        start_iter_3, end_iter,
         BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
     )
 
-
+# similar to the reference matmul kernel
 @triton.jit()
-def process_full_tiles(
+def full_tiles(
         A, B, C,
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
@@ -140,6 +140,9 @@ def process_full_tiles(
     C_ = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)
     tl.store(C_, acc_)
 
+# ---------------------------------------------------------------------------
+# Wrapper
+# ---------------------------------------------------------------------------
 
 class _matmul(torch.autograd.Function):
 
@@ -183,13 +186,9 @@ class _matmul(torch.autograd.Function):
             print(f"{total_programs_streamk=} + {total_programs_classic=} = {total_programs=}")
 
         # allocates output
-        if total_tiles_streamk > 0:
-            # atomic add requires zero-initialized output
-            c = torch.zeros((M, N), device=device, dtype=a.dtype)
-        else:
-            c = torch.empty((M, N), device=device, dtype=a.dtype)
+        c = torch.zeros((M, N), device=device, dtype=a.dtype)
         assert c.dtype == torch.float16
-        k1 = process_first_wave[(total_programs_streamk,)](
+        k1 = first_wave[(total_programs_streamk,)](
             a,
             b,
             c,
@@ -213,8 +212,10 @@ class _matmul(torch.autograd.Function):
             num_stages=num_stages,
             num_warps=num_warps,
         )
+        if debug:
+            print(f"{k1.n_regs} registers used")
         assert k1.n_spills == 0, f"register spilling detected: {k1.n_spills}"
-        k2 = process_full_tiles[(total_programs_classic,)](
+        k2 = full_tiles[(total_programs_classic,)](
             a,
             b,
             c,
@@ -253,15 +254,11 @@ matmul = _matmul.apply
 # ---------------------------------------------------------------------------
 
 device = torch.cuda.current_device()
-# init_cuda_utils()
-# total_sm = triton.compiler.cuda_utils.get_device_properties(device)["multiprocessor_count"]
-total_programs_streamk = 82  # number of tiles
-# m, n, k = 256, 512, 32768
-# m, n, k = 896-128, 384, 6*32
-# m, n, k = 256, 192, 8128
-# m, n, k = 5632, 4224, 6784
-# m, n, k = 384,7040,7168
-m, n, k = 1536, 1792, 6016
+init_cuda_utils()
+total_sm = triton.compiler.cuda_utils.get_device_properties(device)["multiprocessor_count"]
+print(f"total SMs: {total_sm}")
+total_programs_streamk = total_sm  # number of tiles to use in Stream-K first wave
+m, n, k = 1536, 1792, 6016  # some problem size to test
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
@@ -275,48 +272,58 @@ if not debug:
     triton_ms, *_ = triton.testing.do_bench(lambda: torch.matmul(A, B))
     print("PyTorch", triton_ms)
 
-    triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_programs_streamk, debug, 64, 64, 64, 3, 4))
-    print(f"hybrid stream-k (grid={total_programs_streamk}, block=64,64,64, warp=8)", triton_ms)
-
     triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_programs_streamk, debug, 128, 128, 32, 3, 4))
-    print(f"hybrid stream-k (grid={total_programs_streamk}, block=128,128,32, warp=8)", triton_ms)
+    print(f"hybrid stream-k (grid={total_programs_streamk})", triton_ms)
+
+    total_programs_streamk *= 2
+    triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_programs_streamk, debug, 128, 128, 32, 3, 4))
+    print(f"hybrid stream-k (grid={total_programs_streamk})", triton_ms)
 
     triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, 0, debug))
     print("tile matmul (grid=0)", triton_ms)
 
-
+# exit(0)
 # ---------------------------------------------------------------------------
-# log-sampled at random within a domain of m, n, and k matrix dimensions whose volume spans six orders of magnitude
-num_samples = 32768
+# Log-sampled benchmark
+# ---------------------------------------------------------------------------
+
+# tried to reproduce the tests described in the paper
+num_samples = 100  # 32768
 values = ((torch.logspace(torch.tensor(128).log2(), torch.tensor(8192).log2(), num_samples,
                           base=2) / 128).round() * 128).unique().tolist()
 shapes = [(int(m), int(n), int(k)) for m in values for n in values for k in values]
-random.shuffle(shapes)
+shapes = random.sample(shapes, num_samples)
+assert len(shapes) == num_samples
 
-print("nb shapes", len(shapes))
-g = 82
 results = []
 for idx, (m, n, k) in enumerate(shapes):
+    # print progress bar
+    if idx % 10 == 0 and idx > 0:
+        speedups = [ratio for *_, ratio in results]
+        print(f"{idx}/{num_samples} - average speedup: {sum(speedups) / len(speedups):.3f}")
+
     A = torch.randn(m, k, device="cuda", dtype=torch.float16)
     B = torch.randn(k, n, device="cuda", dtype=torch.float16)
-    triton_ms_128_128_32, *_ = triton.testing.do_bench(lambda: matmul(A, B, g, False, 128, 128, 32, 3, 4))
-    triton_ms_64_64_64, *_ = triton.testing.do_bench(lambda: matmul(A, B, g, False, 64, 64, 64, 3, 4))
-    triton_ms = min(triton_ms_128_128_32, triton_ms_64_64_64)
+    triton_ms_1sm, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm, False, 128, 128, 32, 3, 4))
+    triton_2sm_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm*2, False, 128, 128, 32, 3, 4))
     pytorch_ms, *_ = triton.testing.do_bench(lambda: A @ B)
 
     expected = A @ B
-    C = matmul(A, B, g, False, 64, 64, 64)
+    C = matmul(A, B, total_sm, False, 64, 64, 64)
     max_disc = (C - expected).abs().max().item()
     # for very large K, rounding due to half precision requires a large tolerance. We set it to 1.
-    assert max_disc < 1, f"max: {max_disc}\n{C}\n{expected}"
-    print(f"problem size: {m} {n} {k}")
-    print(f"{triton_ms:.3f} < {pytorch_ms:.3f} with g={g}. diff: {pytorch_ms / triton_ms:.3f}. best config: {'64' if triton_ms_64_64_64 < triton_ms_128_128_32 else '128'}")
+    assert max_disc <= 1., f"max: {max_disc}\n{C}\n{expected}"
 
-    results.append((m, n, k, max_disc, pytorch_ms, triton_ms_128_128_32, triton_ms_64_64_64, pytorch_ms / triton_ms))
+    results.append((m, n, k, max_disc, pytorch_ms, triton_ms_1sm, triton_2sm_ms, triton_ms_1sm < triton_2sm_ms, pytorch_ms / triton_ms_1sm))
+
 
 results.sort(key=lambda x: x[-1], reverse=False)
 
+# ---------------------------------------------------------------------------
+# Benchmark export
+# ---------------------------------------------------------------------------
+
 import json
-# save in a formated json file
-with open("results.json", "w") as f:
+with open("results_back_1000.json", "w") as f:
     json.dump(results, f, indent=4)
+
