@@ -84,7 +84,7 @@ class DebuggerFunction:
             return WrappedTensor(_primitive_to_tensor(arg))
 
         new_args = tuple(map(convert_arg, zip(self.func.__code__.co_varnames, args)))
-        new_kwargs = {k: convert_arg((k, v)) for (k, v) in kwargs.items() if k not in ["num_warps"]}
+        new_kwargs = {k: convert_arg((k, v)) for (k, v) in kwargs.items() if k not in ["num_warps", "num_stages"]}
 
         grid = self._get_grid(**kwargs)
         for program_id in program_ids_from_grid(grid):
