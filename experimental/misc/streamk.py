@@ -9,7 +9,7 @@ import torch
 import triton
 import triton.language as tl
 import random
-from triton.compiler import init_cuda_utils
+from triton.runtime.driver.cuda import get_cuda_utils
 
 torch.manual_seed(123)
 random.seed(123)
@@ -25,7 +25,7 @@ def mac_loop(
         M, N, K,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter, end_iter, locks, GROUP_M,
+        start_iter, end_iter, locks, GROUP_M: tl.constexpr,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
 ):
     # If no work to do, return early
@@ -48,26 +48,25 @@ def mac_loop(
     ram = tl.max_contiguous(tl.multiple_of(rm, BLOCK_M), BLOCK_M)
     rbn = tl.max_contiguous(tl.multiple_of(rn, BLOCK_N), BLOCK_N)
     rk = tl.arange(0, BLOCK_K)
-    A_ = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak) + BLOCK_K * stride_ak * (start_iter % iters_per_tile)
-    B_ = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn) + BLOCK_K * stride_bk * (start_iter % iters_per_tile)
+    A = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak) + BLOCK_K * stride_ak * (start_iter % iters_per_tile)
+    B = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn) + BLOCK_K * stride_bk * (start_iter % iters_per_tile)
 
     for current_iter in range(start_iter, end_iter):
-        a = tl.load(A_)
-        b = tl.load(B_)
+        a = tl.load(A)
+        b = tl.load(B)
         acc += tl.dot(a, b)
-        A_ += BLOCK_K * stride_ak
-        B_ += BLOCK_K * stride_bk
+        A += BLOCK_K * stride_ak
+        B += BLOCK_K * stride_bk
 
-    C_ = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)
-    if end_iter - start_iter == iters_per_tile:
-        tl.store(C_, acc)
-    elif tl.atomic_cas(locks + tile_id, 0, 1) == 0:
-            tl.store(C_, acc)
-            tl.atomic_xchg(locks + tile_id, 2)
+    C = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)
+    if end_iter % iters_per_tile == 0:  # last iteration of the tile always happens before its start on another SM
+        tl.store(C, acc)
+        if start_iter % iters_per_tile != 0:  # only if tile has been partially processed
+            tl.atomic_xchg(locks + tile_id, 1)
     else:
-        while tl.atomic_cas(locks + tile_id, 2, 3) != 3:
+        while tl.atomic_cas(locks + tile_id, 0, 2) != 1:  # save 2 to debug lock matrix if needed
             pass
-        tl.atomic_add(C_, acc)
+        tl.atomic_add(C, acc)
 
 
 @triton.jit()
@@ -241,7 +240,7 @@ class _matmul(torch.autograd.Function):
             num_warps=num_warps,
         )
         if debug:
-            print(f"{k1.n_regs} registers used")
+            print(f"{k1.n_regs} registers used, {k1.n_spills} spills")
         # assert k1.n_spills == 0, f"register spilling detected: {k1.n_spills}"
         k2 = full_tiles[(total_programs_classic,)](
             a,
@@ -265,8 +264,8 @@ class _matmul(torch.autograd.Function):
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
             GROUP_M=8,
-            num_stages=3,
-            num_warps=4,
+            num_stages=num_stages,
+            num_warps=num_warps,
         )
         # assert k2.n_spills == 0, f"register spilling detected: {k2.n_spills}"
         return c
@@ -283,8 +282,8 @@ matmul = _matmul.apply
 # ---------------------------------------------------------------------------
 
 device = torch.cuda.current_device()
-init_cuda_utils()
-total_sm = triton.compiler.cuda_utils.get_device_properties(device)["multiprocessor_count"]
+cuda_utils = get_cuda_utils()
+total_sm = cuda_utils.get_device_properties(device)["multiprocessor_count"]
 print(f"total SMs: {total_sm}")
 total_programs_streamk = total_sm  # number of tiles to use in Stream-K first wave
 m, n, k = 1536, 1792, 6016  # some problem size to test
@@ -311,15 +310,17 @@ if not debug:
     triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, 0, debug))
     print("tile matmul (grid=0)", triton_ms)
 
-# exit(0)
+if debug:
+    exit(0)
 # ---------------------------------------------------------------------------
 # Log-sampled benchmark
 # ---------------------------------------------------------------------------
 
 # tried to reproduce the tests described in the paper
 num_samples = 32768  # 32768
-values = ((torch.logspace(torch.tensor(128).log2(), torch.tensor(8192).log2(), num_samples,
-                          base=2) / 128).round() * 128).unique().tolist()
+step = 256
+values = ((torch.logspace(torch.tensor(step).log2(), torch.tensor(8192).log2(), num_samples,
+                          base=2) / step).round() * step).unique().tolist()
 shapes = [(int(m), int(n), int(k)) for m in values for n in values for k in values]
 shapes = random.sample(shapes, num_samples)
 assert len(shapes) == num_samples
@@ -333,17 +334,23 @@ for idx, (m, n, k) in enumerate(shapes):
 
     A = torch.randn(m, k, device="cuda", dtype=torch.float16)
     B = torch.randn(k, n, device="cuda", dtype=torch.float16)
+    torch.cuda.synchronize()
     triton_ms_1sm, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm, False, 128, 128, 32, 3, 4))
-    triton_2sm_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm*2, False, 128, 128, 32, 3, 4))
+    torch.cuda.synchronize()
+    triton_ms_2sm, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm * 2, False, 128, 128, 32, 3, 4))
+    torch.cuda.synchronize()
+    triton_ms = min(triton_ms_1sm, triton_ms_2sm)
     pytorch_ms, *_ = triton.testing.do_bench(lambda: A @ B)
+    torch.cuda.synchronize()
 
     expected = A @ B
     C = matmul(A, B, total_sm, False, 64, 64, 64)
     max_disc = (C - expected).abs().max().item()
+
     # for very large K, rounding due to half precision requires a large tolerance. We set it to 1.
     assert max_disc <= 1., f"max: {max_disc}\n{C}\n{expected}"
 
-    results.append((m, n, k, max_disc, pytorch_ms, triton_ms_1sm, triton_2sm_ms, triton_ms_1sm < triton_2sm_ms, pytorch_ms / triton_ms_1sm))
+    results.append((m, n, k, max_disc, pytorch_ms, triton_ms_1sm, triton_ms_2sm, triton_ms_1sm < triton_ms_2sm, pytorch_ms / triton_ms_1sm))
 
 
 results.sort(key=lambda x: x[-1], reverse=False)
