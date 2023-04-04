@@ -82,13 +82,10 @@ def mac_loop(A, B, C,
     if end_iter % iters_per_tile == 0:  # last iteration of the tile always happens before its start on another SM
         tl.store(C, acc)
         if start_iter % iters_per_tile != 0:  # only if tile has been partially processed
-            tl.atomic_xchg(locks + tile_id, 1)
+            tl.store(locks + tile_id, 1)
     else:
-        backoff = 1
-        while tl.atomic_cas(locks + tile_id, 0, 2) != 1:  # save 2 to debug lock matrix if needed
-            for _ in range(backoff):  # backoff delay
-                pass
-            backoff = tl.minimum(backoff * 2, 100)
+        while tl.atomic_and(locks + tile_id, 1) != 1:
+            pass
         tl.atomic_add(C, acc)
 
 
