@@ -21,8 +21,9 @@ random.seed(123)
 # Triton kernels
 # ---------------------------------------------------------------------------
 
+
 @triton.jit()
-def tile_position(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M: tl.constexpr):
+def tile_swizzling(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M: tl.constexpr):
     grid_m = tl.cdiv(M, BLOCK_M)
     grid_n = tl.cdiv(N, BLOCK_N)
     # re-order program ID for better L2 performance
@@ -34,23 +35,33 @@ def tile_position(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M: tl.const
     return pid_m, pid_n
 
 
+@triton.jit()
+def tile_classic(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M: tl.constexpr):
+    pid_m = tile_id // tl.cdiv(N, BLOCK_N)
+    pid_n = tile_id % tl.cdiv(N, BLOCK_N)
+    return pid_m, pid_n
+
+
 # iterate, multiply and accumulate over K axis
 @triton.jit()
-def mac_loop(
-        A, B, C,
-        M, N, K,
-        stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-        total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter, end_iter, locks, GROUP_M: tl.constexpr,
-        BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
-):
+def mac_loop(A, B, C,
+             M, N, K,
+             locks,
+             stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+             total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
+             start_iter, end_iter,
+             BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+             ACC_TYPE: tl.constexpr, GROUP_M: tl.constexpr, SWIZZLING: tl.constexpr):
     # If no work to do, return early
     if end_iter == start_iter:
         return
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
     # where are we in the grid
     tile_id = start_iter // iters_per_tile
-    pid_m, pid_n = tile_position(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
+    if SWIZZLING:
+        pid_m, pid_n = tile_swizzling(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
+    else:
+        pid_m, pid_n = tile_classic(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
 
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -73,8 +84,11 @@ def mac_loop(
         if start_iter % iters_per_tile != 0:  # only if tile has been partially processed
             tl.atomic_xchg(locks + tile_id, 1)
     else:
+        backoff = 1
         while tl.atomic_cas(locks + tile_id, 0, 2) != 1:  # save 2 to debug lock matrix if needed
-            pass
+            for _ in range(backoff):  # backoff delay
+                pass
+            backoff = tl.minimum(backoff * 2, 100)
         tl.atomic_add(C, acc)
 
 
@@ -85,8 +99,8 @@ def first_wave(
         locks,
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
-        GROUP_M: tl.constexpr,
+        BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+        ACC_TYPE: tl.constexpr, GROUP_M: tl.constexpr, SWIZZLING: tl.constexpr,
 ):
     pid = tl.program_id(0)
     full = total_iters_streamk // total_programs_streamk  # iterations related to full wave
@@ -99,34 +113,19 @@ def first_wave(
     start_iter_3 = tl.minimum(start_iter_3, end_iter)
 
     # finish tile another SM was working on (may be a complete tile)
-    mac_loop(
-        A, B, C,
-        M, N, K,
-        stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-        total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter_1, start_iter_2, locks, GROUP_M,
-        BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
-    )
+    mac_loop(A, B, C, M, N, K, locks, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+             total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile, start_iter_1,
+             start_iter_2, BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE, GROUP_M, SWIZZLING)
 
     # do full tile (if there is enough work for that)
-    mac_loop(
-        A, B, C,
-        M, N, K,
-        stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-        total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter_2, start_iter_3, locks, GROUP_M,
-        BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
-    )
+    mac_loop(A, B, C, M, N, K, locks, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+             total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile, start_iter_2,
+             start_iter_3, BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE, GROUP_M, SWIZZLING)
 
     # start a new tile (may be incomplete)
-    mac_loop(
-        A, B, C,
-        M, N, K,
-        stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-        total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
-        start_iter_3, end_iter, locks, GROUP_M,
-        BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
-    )
+    mac_loop(A, B, C, M, N, K, locks, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+             total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile, start_iter_3, end_iter,
+             BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE, GROUP_M, SWIZZLING)
 
 # similar to the reference matmul kernel
 @triton.jit()
@@ -136,11 +135,14 @@ def full_tiles(
         stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
         total_programs_streamk, total_iters_streamk, total_tiles_streamk, iters_per_tile,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, ACC_TYPE: tl.constexpr,
-        GROUP_M: tl.constexpr,
+        GROUP_M: tl.constexpr, SWIZZLING: tl.constexpr,
 ):
     # first wave has done more tiles than there are SMs, we adjust pid
     tile_id = tl.program_id(0) + total_tiles_streamk
-    pid_m, pid_n = tile_position(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
+    if SWIZZLING:
+        pid_m, pid_n = tile_swizzling(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
+    else:
+        pid_m, pid_n = tile_classic(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
 
     # do matrix multiplication
     rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
@@ -172,7 +174,7 @@ def full_tiles(
 class _matmul(torch.autograd.Function):
 
     @staticmethod
-    def _call(a: torch.Tensor, b: torch.Tensor, total_programs_streamk: int, debug: bool, BLK_M: int, BLK_N: int, BLK_K: int, num_stages: int, num_warps: int):
+    def _call(a: torch.Tensor, b: torch.Tensor, total_programs_streamk: int, debug: bool, BLK_M: int, BLK_N: int, BLK_K: int, swizzling: bool, num_stages: int, num_warps: int):
         device = a.device
         # handle non-contiguous inputs if necessary
         if a.stride(0) > 1 and a.stride(1) > 1:
@@ -237,12 +239,12 @@ class _matmul(torch.autograd.Function):
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
             GROUP_M=8,
+            SWIZZLING=swizzling,
             num_stages=num_stages,
             num_warps=num_warps,
         )
         if debug:
             print(f"{k1.n_regs} registers used, {k1.n_spills} spills")
-        # assert k1.n_spills == 0, f"register spilling detected: {k1.n_spills}"
         k2 = full_tiles[(total_programs_classic,)](
             a,
             b,
@@ -265,17 +267,17 @@ class _matmul(torch.autograd.Function):
             BLOCK_K=BLK_K,
             ACC_TYPE=ACC_TYPE,
             GROUP_M=8,
+            SWIZZLING=swizzling,
             num_stages=num_stages,
             num_warps=num_warps,
         )
         if debug:
             print(f"{k2.n_regs} registers used, {k2.n_spills} spills")
-        # assert k2.n_spills == 0, f"register spilling detected: {k2.n_spills}"
         return c
 
     @staticmethod
-    def forward(ctx, a: torch.Tensor, b: torch.Tensor, grid: int, debug: bool = False, BLK_M=128, BLK_N=128, BLK_K=32, num_stages=3, num_warps=4):
-        return _matmul._call(a=a, b=b, total_programs_streamk=grid, debug=debug, BLK_M=BLK_M, BLK_N=BLK_N, BLK_K=BLK_K, num_warps=num_warps, num_stages=num_stages)
+    def forward(ctx, a: torch.Tensor, b: torch.Tensor, grid: int, debug: bool = False, BLK_M=128, BLK_N=128, BLK_K=32, swizzling=True, num_stages=3, num_warps=4):
+        return _matmul._call(a=a, b=b, total_programs_streamk=grid, debug=debug, BLK_M=BLK_M, BLK_N=BLK_N, BLK_K=BLK_K, swizzling=swizzling, num_warps=num_warps, num_stages=num_stages)
 
 
 matmul = _matmul.apply
@@ -293,7 +295,7 @@ m, n, k = 1536, 1792, 6016  # some problem size to test
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
-debug = True
+debug = False
 C = matmul(A, B, total_programs_streamk, debug, 128, 128, 32, 3, 4)
 expected = A @ B
 
