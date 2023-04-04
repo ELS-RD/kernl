@@ -29,7 +29,7 @@ def tile_swizzling(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M: tl.cons
     # re-order program ID for better L2 performance
     width = GROUP_M * grid_n
     group_id = tile_id // width
-    group_size = min(grid_m - group_id * GROUP_M, GROUP_M)
+    group_size = tl.minimum(grid_m - group_id * GROUP_M, GROUP_M)
     pid_m = group_id * GROUP_M + (tile_id % group_size)
     pid_n = (tile_id % width) // group_size
     return pid_m, pid_n
@@ -84,7 +84,7 @@ def mac_loop(A, B, C,
         if start_iter % iters_per_tile != 0:  # only if tile has been partially processed
             tl.store(locks + tile_id, 1)
     else:
-        while tl.atomic_and(locks + tile_id, 1) != 1:
+        while tl.atomic_cas(locks + tile_id, 1, 1) != 1:
             pass
         tl.atomic_add(C, acc)
 
@@ -298,22 +298,22 @@ expected = A @ B
 
 assert torch.allclose(C, expected, atol=1), f"max: {(C - expected).abs().max().item()}\n{C}\n{expected}"
 
-if not debug:
-    triton_ms, *_ = triton.testing.do_bench(lambda: torch.matmul(A, B))
-    print("PyTorch", triton_ms)
-
-    triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_programs_streamk, debug, 128, 128, 32, 3, 4))
-    print(f"hybrid stream-k (grid={total_programs_streamk})", triton_ms)
-
-    total_programs_streamk *= 2
-    triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_programs_streamk, debug, 128, 128, 32, 3, 4))
-    print(f"hybrid stream-k (grid={total_programs_streamk})", triton_ms)
-
-    triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, 0, debug))
-    print("tile matmul (grid=0)", triton_ms)
-
 if debug:
     exit(0)
+
+triton_ms, *_ = triton.testing.do_bench(lambda: torch.matmul(A, B))
+print("PyTorch", triton_ms)
+
+triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_programs_streamk, debug, 128, 128, 32, 3, 4))
+print(f"hybrid stream-k (grid={total_programs_streamk})", triton_ms)
+
+
+triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm * 2, debug, 128, 128, 32, 3, 4))
+print(f"hybrid stream-k (grid={total_sm * 2})", triton_ms)
+
+triton_ms, *_ = triton.testing.do_bench(lambda: matmul(A, B, 0, debug))
+print("tile matmul (grid=0)", triton_ms)
+
 # ---------------------------------------------------------------------------
 # Log-sampled benchmark
 # ---------------------------------------------------------------------------
@@ -336,15 +336,10 @@ for idx, (m, n, k) in enumerate(shapes):
 
     A = torch.randn(m, k, device="cuda", dtype=torch.float16)
     B = torch.randn(k, n, device="cuda", dtype=torch.float16)
-    torch.cuda.synchronize()
     triton_ms_1sm, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm, False, 128, 128, 32, 3, 4))
-    torch.cuda.synchronize()
     triton_ms_2sm, *_ = triton.testing.do_bench(lambda: matmul(A, B, total_sm * 2, False, 128, 128, 32, 3, 4))
-    torch.cuda.synchronize()
     triton_ms = min(triton_ms_1sm, triton_ms_2sm)
     pytorch_ms, *_ = triton.testing.do_bench(lambda: A @ B)
-    torch.cuda.synchronize()
-
     expected = A @ B
     C = matmul(A, B, total_sm, False, 64, 64, 64)
     max_disc = (C - expected).abs().max().item()
