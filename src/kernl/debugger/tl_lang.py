@@ -432,7 +432,14 @@ class TritonLangProxy:
 
     @_tensor_operation
     def atomic_cas(self, pointer, cmp, val):
-        raise NotImplementedError()
+        stored = self._memory_map.load(pointer, None, 0.0)
+        if not isinstance(cmp, torch.Tensor):
+            cmp = torch.tensor(cmp, dtype=stored.dtype, device="cuda")
+        if not isinstance(val, torch.Tensor):
+            val = torch.tensor(val, dtype=stored.dtype, device="cuda")
+        if stored == cmp:
+            self._memory_map.store(pointer, val, None)
+        return stored
 
     @_tensor_operation
     def atomic_xchg(self, pointer, val, mask=None):
@@ -444,7 +451,7 @@ class TritonLangProxy:
         stored = self._memory_map.load(pointer, mask, 0.0)
         result = stored + val
         self._memory_map.store(pointer, result, mask)
-        return result
+        return stored
 
     @_tensor_operation
     def atomic_max(self, pointer, val, mask=None):
@@ -531,6 +538,10 @@ class TritonLangProxy:
 
     @_tensor_operation
     def minimum(self, x, y):
+        if isinstance(x, int):
+            x = torch.tensor(x, device="cuda")
+        if isinstance(y, int):
+            y = torch.tensor(y, device="cuda")
         return torch.minimum(x, y)
 
     @_tensor_operation
