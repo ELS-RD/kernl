@@ -12,6 +12,8 @@ import torch
 import triton
 import triton.language as tl
 import random
+
+# from kernl.debugger.debugger import triton_debug
 from triton.runtime.driver import CudaUtils
 
 torch.manual_seed(123)
@@ -59,10 +61,12 @@ def mac_loop(A, B, C,
         ACC_TYPE: tl.constexpr, GROUP_M: tl.constexpr, SWIZZLING: tl.constexpr):
     # If no work to do, return early
     if end_iter == start_iter:
+        # print(f"early return on {tl.program_id(0).tensor.item()}, start_iter: {start_iter.tensor.item()}, end_iter: {end_iter.tensor.item()}")
         return
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
     # where are we in the grid
     tile_id = start_iter // iters_per_tile
+    # print(f"tile_id: {tile_id.tensor.item()}, start_iter: {start_iter.tensor.item()}, end_iter: {end_iter.tensor.item()}")
     if SWIZZLING:
         pid_m, pid_n = tile_swizzling(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
     else:
@@ -95,6 +99,7 @@ def mac_loop(A, B, C,
 
 
 @triton.jit()
+# @triton_debug
 def first_wave(
         A, B, C,
         M, N, K,
@@ -105,6 +110,7 @@ def first_wave(
         GROUP_M: tl.constexpr, SWIZZLING: tl.constexpr,
 ):
     pid = tl.program_id(0)
+    # print(f"pid: {pid.tensor.item()}")
     full = total_iters_streamk // total_programs_streamk  # iterations related to full wave
     remaining = total_iters_streamk % total_programs_streamk  # iterations related to last (partial) wave
     start_iter_1 = pid * full + tl.minimum(pid, remaining)
@@ -149,6 +155,7 @@ def first_wave(
         BLOCK_M, BLOCK_N, BLOCK_K, ACC_TYPE,
         GROUP_M, SWIZZLING,
     )
+
 
 # similar to the reference matmul kernel
 @triton.jit()
@@ -314,8 +321,8 @@ m, n, k = 1536, 1792, 6016  # some problem size to test
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
-debug = True
-C = matmul(A, B, total_sm * 2, True, 128, 128, 32, 3, 4)
+debug = False
+C = matmul(A, B, total_sm, True, 128, 128, 32, 3, 4)
 expected = A @ B
 
 assert torch.allclose(C, expected, atol=1), f"max: {(C - expected).abs().max().item()}\n{C}\n{expected}"
@@ -353,7 +360,7 @@ results = []
 for idx, (m, n, k) in enumerate(shapes):
     # print progress bar
     if idx % 10 == 0 and idx > 0:
-        speedups = [ratio for _, _, _, sm, *_, ratio in results if sm == total_sm]
+        speedups = [ratio for *_, ratio in results]
         print(f"{idx}/{num_samples} - average speedup: {sum(speedups) / len(speedups):.3f}")
 
     A = torch.randn(m, k, device="cuda", dtype=torch.float16)
@@ -367,12 +374,16 @@ for idx, (m, n, k) in enumerate(shapes):
 
     expected = A @ B
     pytorch_ms = triton.testing.do_bench(lambda: A @ B)
+    measures = list()
     for sm in [total_sm, total_sm * 2]:
         triton_ms = triton.testing.do_bench(lambda: wrapper_matmul(A, B, sm, False, 128, 128, 32, 3, 4))
+        measures.append(triton_ms)
         max_disc = (output - expected).abs().max().item()
         # for very large K, rounding due to half precision requires a large tolerance. We set it to 1.
-        assert max_disc <= 1., f"max: {max_disc}\n{output}\n{expected}"
-        results.append((m, n, k, sm, max_disc, triton_ms, pytorch_ms / triton_ms))
+        assert max_disc <= 1., f"pb size: {m}x{n}x{k} - max discrepancy: {max_disc} - sm: {sm}\n{output}\n{expected}"
+
+    results.append((m, n, k, sm, max_disc, measures, pytorch_ms / min(measures)))
+    measures.clear()
 
 results.sort(key=lambda x: x[-1], reverse=False)
 
@@ -384,4 +395,4 @@ import json
 with open("results.json", "w") as f:
     json.dump(results, f, indent=4)
 
-# speedup: 22740/32768 - average speedup: 1.052
+# 990/1000 - average speedup: 0.906 (A100)
