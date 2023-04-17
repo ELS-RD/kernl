@@ -13,8 +13,8 @@ import triton
 import triton.language as tl
 import random
 
-# from kernl.debugger.debugger import triton_debug
 from triton.runtime.driver import CudaUtils
+import json
 
 torch.manual_seed(123)
 random.seed(123)
@@ -70,7 +70,6 @@ def mac_loop(A, B, C,
 
     # where are we in the grid
     tile_id = start_iter // iters_per_tile
-    # print(f"tile_id: {tile_id.tensor.item()}, start_iter: {start_iter.tensor.item()}, end_iter: {end_iter.tensor.item()}")
     if GROUP_M  > 0:
         pid_m, pid_n = swizzle_tile(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
     else:
@@ -102,7 +101,6 @@ def mac_loop(A, B, C,
         tl.atomic_add(C_, acc)
 
 
-# @triton_debug
 @triton.jit()
 def first_wave(
         A, B, C,
@@ -114,7 +112,6 @@ def first_wave(
         GROUP_M: tl.constexpr,
 ):
     pid = tl.program_id(0)
-    # print(f"pid: {pid.tensor.item()}")
     start_iter = pid * total_full_tiles_streamk + tl.minimum(pid, total_partial_tiles_streamk)
     last_iter = (pid + 1) * total_full_tiles_streamk + tl.minimum(pid + 1, total_partial_tiles_streamk)
 
@@ -332,8 +329,7 @@ print("tile matmul (grid=0)", triton_ms)
 # tried to reproduce the tests described in the paper
 num_samples = 1000  # 32768
 step = 256
-values = ((torch.logspace(torch.tensor(step).log2(), torch.tensor(8192).log2(), num_samples,
-                          base=2) / step).round() * step).unique().tolist()
+values = ((torch.logspace(torch.tensor(step).log2(), torch.tensor(8192).log2(), num_samples, base=2) / step).round() * step).unique().tolist()
 shapes = [(int(m), int(n), int(k)) for m in values for n in values for k in values]
 shapes = random.sample(shapes, num_samples)
 assert len(shapes) == num_samples
@@ -342,7 +338,7 @@ results = []
 for idx, (m, n, k) in enumerate(shapes):
     # print progress bar
     if idx % 10 == 0 and idx > 0:
-        speedups = [ratio for *_, ratio in results]
+        speedups = [r["speedup"] for r in results]
         print(f"{idx}/{num_samples} - average speedup: {sum(speedups) / len(speedups):.3f}")
 
     A = torch.randn(m, k, device="cuda", dtype=torch.float16)
@@ -360,28 +356,45 @@ for idx, (m, n, k) in enumerate(shapes):
     pytorch_ms = triton.testing.do_bench(lambda: A @ B)
     measures = list()
     for two_tiles in [True, False]:
-        for sm in [total_sm, total_sm * 2]:
+        nb_sm = [total_sm, total_sm * 2]
+        total_tile = (m // 128) * (n // 128)
+        if total_tile < total_sm * 2:
+            nb_sm.append(total_tile)
+        nb_sm += random.sample(range(2, total_sm * 2, 2), 10)
+        for sm in nb_sm:
             triton_ms = triton.testing.do_bench(lambda: wrapper_matmul(A, B, sm, 128, 128, 32, two_tiles, 4, 4))
-            measures.append(triton_ms)
             max_disc = (output - expected).abs().max().item()
             # large tolerance to accomodate for large K (rounding due to half precision), we just want to catch bugs.
             assert max_disc <= 5., f"pb size: {m}x{n}x{k} - max discrepancy: {max_disc} - sm: {sm}, 2 tiles: {two_tiles}\n{output}\n{expected}"
+            info = {
+                "2 tiles": two_tiles,
+                "sm": sm,
+                "disc": max_disc,
+                "triton_ms": triton_ms,
+            }
+            measures.append(info)
+    best_triton_ms = min([m["triton_ms"] for m in measures])
+    d = {
+        "m": m,
+        "n": n,
+        "k": k,
+        "triton": measures,
+        "pytorch_ms": pytorch_ms,
+        "speedup": pytorch_ms / best_triton_ms,
+    }
+    results.append(d)
+    measures = list()
 
-    results.append((m, n, k, sm, max_disc, measures, pytorch_ms / min(measures)))
-    measures.clear()
-
-results.sort(key=lambda x: x[-1], reverse=False)
+results.sort(key=lambda x: x["speedup"], reverse=False)
 
 # ---------------------------------------------------------------------------
 # Benchmark export
 # ---------------------------------------------------------------------------
 
-import json
-
 with open("results.json", "w") as f:
     json.dump(results, f, indent=4)
 
-# 990/1000 - average speedup: 0.965 (A100)
+# 32760/32768 - average speedup: 0.962 (A100)
 # 990/1000 - average speedup: 1.060 (3090 RTX no while loop)
 # 990/1000 - average speedup: 1.053 (3090 RTX with while loop)
 # 990/1000 - average speedup: 1.063 (3090 RTX with while loop and 2 tiles disabled / enabled)
