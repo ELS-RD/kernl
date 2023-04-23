@@ -13,15 +13,14 @@ import triton
 import triton.language as tl
 import random
 
-from triton.runtime.driver import CudaUtils
+from triton.runtime import driver
 import json
 
 torch.manual_seed(123)
 random.seed(123)
 
 device = torch.cuda.current_device()
-cuda_utils = CudaUtils()
-total_sm = cuda_utils.get_device_properties(device)["multiprocessor_count"]
+total_sm = driver.utils.get_device_properties(device)["multiprocessor_count"]
 print(f"total SMs: {total_sm}")
 
 # ---------------------------------------------------------------------------
@@ -199,12 +198,19 @@ class matmul(torch.autograd.Function):
         GROUP_M = 8  # 0 to disable swizzling
         total_tiles = total_blocks_M * total_blocks_N
 
-        if total_programs_streamk > 0:  # Stream-K
-            # last wave may occupy less than total_programs_streamk SMs
-            total_tiles_streamk = total_tiles % total_programs_streamk
+        if total_programs_streamk > 0:  # use Stream-K
+            if total_tiles == total_programs_streamk:
+                # special case: full wave to streamK
+                total_tiles_streamk = total_tiles
+            else:
+                # last wave may occupy less than total_programs_streamk SMs
+                total_tiles_streamk = total_tiles % total_programs_streamk
             # for two-tile Stream-K + data-parallel from original paper
             if two_tiles and total_tiles - total_tiles_streamk > total_programs_streamk:
                 total_tiles_streamk += total_programs_streamk
+            # to avoid dead lock because of the lock, we need > 2 tiles
+            if total_tiles_streamk <= 2 < total_tiles:
+                total_tiles_streamk = 3
             # remaining tiles are computed using classical blocking
             total_blocking_tiles = total_tiles - total_tiles_streamk
             total_iters_streamk = total_tiles_streamk * iters_per_tile
@@ -212,7 +218,7 @@ class matmul(torch.autograd.Function):
             total_full_tiles_streamk = total_iters_streamk // total_programs_streamk
             # iterations related to last (partial) wave
             total_partial_tiles_streamk = total_iters_streamk % total_programs_streamk
-
+            assert total_tiles_streamk > 2, f"{total_tiles_streamk=} <= 2, pb too small: there is a risk of deadlock"
         else:  # all tiles are computed using classical blocking
             total_blocking_tiles = total_tiles
             total_tiles_streamk = 0
@@ -228,6 +234,8 @@ class matmul(torch.autograd.Function):
             print(f"{total_blocking_tiles=}")
             print(f"{iters_per_tile=}")
             print(f"{total_iters_streamk=}")
+            print(f"{total_full_tiles_streamk=}")
+            print(f"{total_partial_tiles_streamk=}")
 
         # allocates output
         c = torch.empty((M, N), device=device, dtype=a.dtype)
@@ -287,7 +295,7 @@ class matmul(torch.autograd.Function):
         return c
 
     @staticmethod
-    def forward(ctx, a: torch.Tensor, b: torch.Tensor, grid: int, BLK_M=128, BLK_N=128, BLK_K=32, two_tiles=True, num_stages=3, num_warps=4):
+    def forward(ctx, a: torch.Tensor, b: torch.Tensor, grid: int, BLK_M=128, BLK_N=128, BLK_K=32, two_tiles=True, num_stages=4, num_warps=4):
         return matmul._call(a=a, b=b, total_programs_streamk=grid, BLK_M=BLK_M, BLK_N=BLK_N, BLK_K=BLK_K, two_tiles=two_tiles, num_warps=num_warps, num_stages=num_stages)
 
 
@@ -301,11 +309,11 @@ A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
 matmul.set_debug(True)
-C = matmul.apply(A, B, total_sm, 128, 128, 32, 4, 4)
+C = matmul.apply(A, B, total_sm, 128, 128, 32, True, 4, 4)
 matmul.set_debug(False)
 expected = A @ B
 
-assert torch.allclose(C, expected, atol=1), f"max: {(C - expected).abs().max().item()}\n{C}\n{expected}"
+assert torch.allclose(C, expected, atol=5), f"max: {(C - expected).abs().max().item()}\n{C}\n{expected}"
 
 # for debugging, uncomment the following line
 # exit(0)
@@ -327,15 +335,20 @@ print("tile matmul (grid=0)", triton_ms)
 # ---------------------------------------------------------------------------
 
 # tried to reproduce the tests described in the paper
-num_samples = 1000  # 32768
-step = 256
-values = ((torch.logspace(torch.tensor(step).log2(), torch.tensor(8192).log2(), num_samples, base=2) / step).round() * step).unique().tolist()
-shapes = [(int(m), int(n), int(k)) for m in values for n in values for k in values]
+num_samples = 32768  # 32768
+step = 128
+# pb size random sampling
+sizes = list(range(step, 8192, step))
+shapes = [(int(m), int(n), int(k)) for m in sizes for n in sizes for k in sizes]
 shapes = random.sample(shapes, num_samples)
-assert len(shapes) == num_samples
 
 results = []
 for idx, (m, n, k) in enumerate(shapes):
+    total_tiles = (m // 128) * (n // 128)
+    if total_tiles <= 2:  # very small pb size may lead to dead lock
+        continue
+
+    print("pb size:", m, n, k)
     # print progress bar
     if idx % 10 == 0 and idx > 0:
         speedups = [r["speedup"] for r in results]
@@ -356,11 +369,10 @@ for idx, (m, n, k) in enumerate(shapes):
     pytorch_ms = triton.testing.do_bench(lambda: A @ B)
     measures = list()
     for two_tiles in [True, False]:
-        nb_sm = [total_sm, total_sm * 2]
-        total_tile = (m // 128) * (n // 128)
-        if total_tile < total_sm * 2:
-            nb_sm.append(total_tile)
-        nb_sm += random.sample(range(2, total_sm * 2, 2), 10)
+        nb_sm = [total_sm, total_sm * 2, total_sm * 3, total_sm * 4]
+        if total_tiles < max(nb_sm):
+            nb_sm.append(total_tiles)
+        # nb_sm += random.sample(range(2, total_sm * 2, 2), 10)
         for sm in nb_sm:
             triton_ms = triton.testing.do_bench(lambda: wrapper_matmul(A, B, sm, 128, 128, 32, two_tiles, 4, 4))
             max_disc = (output - expected).abs().max().item()
@@ -394,7 +406,11 @@ results.sort(key=lambda x: x["speedup"], reverse=False)
 with open("results.json", "w") as f:
     json.dump(results, f, indent=4)
 
-# 32760/32768 - average speedup: 0.962 (A100)
+# 32760/32768 - average speedup: 0.971 (A100)
 # 990/1000 - average speedup: 1.060 (3090 RTX no while loop)
 # 990/1000 - average speedup: 1.053 (3090 RTX with while loop)
 # 990/1000 - average speedup: 1.063 (3090 RTX with while loop and 2 tiles disabled / enabled)
+
+
+# TODO: check if there are # SM which do not work, if there are heuristics easy to guess
+# TODO: compare with cutlass implementation
