@@ -1,11 +1,3 @@
-# (echo 'options nvidia "NVreg_RestrictProfilingToAdminUsers=0"') | sudo tee -a /etc/modprobe.d/RestrictedProfiling.conf >/dev/null
-# sudo update-initramfs -u -k all
-# cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly
-# sudo apt-get install zlib1g-dev
-# for reproductible experiments
-# sudo nvidia-smi -pm 1 -i 0
-# sudo nvidia-smi -i 0 -pl 350  # 400 for A100
-# sudo nvidia-smi -i 0 -lgc 1005
 from typing import Optional
 
 import torch
@@ -209,8 +201,8 @@ class matmul(torch.autograd.Function):
             if two_tiles and total_tiles - total_tiles_streamk > total_programs_streamk:
                 total_tiles_streamk += total_programs_streamk
             # to avoid dead lock because of the lock, we need > 2 tiles
-            if total_tiles_streamk <= 2 < total_tiles:
-                total_tiles_streamk = 3
+            #if total_tiles_streamk <= 2 < total_tiles:
+            #    total_tiles_streamk = 3
             # remaining tiles are computed using classical blocking
             total_blocking_tiles = total_tiles - total_tiles_streamk
             total_iters_streamk = total_tiles_streamk * iters_per_tile
@@ -218,24 +210,25 @@ class matmul(torch.autograd.Function):
             total_full_tiles_streamk = total_iters_streamk // total_programs_streamk
             # iterations related to last (partial) wave
             total_partial_tiles_streamk = total_iters_streamk % total_programs_streamk
+
+            if matmul._debug:
+                print(f"M,N,K={M},{N},{K} ; BLK_M,N,K={BLK_M},{BLK_N},{BLK_K}")
+                print(f"{total_blocks_M=} x {total_blocks_N=} = {total_tiles=}")
+                print(f"{total_tiles_streamk=} + {total_blocking_tiles=} = {total_tiles=}")
+                print(f"{total_programs_streamk=}")
+                print(f"{total_blocking_tiles=}")
+                print(f"{iters_per_tile=}")
+                print(f"{total_iters_streamk=}")
+                print(f"{total_full_tiles_streamk=}")
+                print(f"{total_partial_tiles_streamk=}")
+
             assert total_tiles_streamk > 2, f"{total_tiles_streamk=} <= 2, pb too small: there is a risk of deadlock"
+            assert total_full_tiles_streamk > 2, f"{total_full_tiles_streamk=} <= 2, pb too small: there is a risk of deadlock"
         else:  # all tiles are computed using classical blocking
             total_blocking_tiles = total_tiles
             total_tiles_streamk = 0
             total_full_tiles_streamk = 0
             total_partial_tiles_streamk = 0
-            total_iters_streamk = 0
-
-        if matmul._debug:
-            print(f"M,N,K={M},{N},{K} ; BLK_M,N,K={BLK_M},{BLK_N},{BLK_K}")
-            print(f"{total_blocks_M=} x {total_blocks_N=} = {total_tiles=}")
-            print(f"{total_tiles_streamk=} + {total_blocking_tiles=} = {total_tiles=}")
-            print(f"{total_programs_streamk=}")
-            print(f"{total_blocking_tiles=}")
-            print(f"{iters_per_tile=}")
-            print(f"{total_iters_streamk=}")
-            print(f"{total_full_tiles_streamk=}")
-            print(f"{total_partial_tiles_streamk=}")
 
         # allocates output
         c = torch.empty((M, N), device=device, dtype=a.dtype)
@@ -304,12 +297,12 @@ class matmul(torch.autograd.Function):
 # ---------------------------------------------------------------------------
 
 
-m, n, k = 1536, 1792, 6016  # some problem size to test
+m, n, k = 896, 6016, 4736# 1536, 1792, 6016  # some problem size to test
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
 matmul.set_debug(True)
-C = matmul.apply(A, B, total_sm, 128, 128, 32, True, 4, 4)
+C = matmul.apply(A, B, total_sm*4, 128, 128, 32, True, 4, 4)
 matmul.set_debug(False)
 expected = A @ B
 
@@ -374,6 +367,7 @@ for idx, (m, n, k) in enumerate(shapes):
             nb_sm.append(total_tiles)
         # nb_sm += random.sample(range(2, total_sm * 2, 2), 10)
         for sm in nb_sm:
+            print(sm, two_tiles)
             triton_ms = triton.testing.do_bench(lambda: wrapper_matmul(A, B, sm, 128, 128, 32, two_tiles, 4, 4))
             max_disc = (output - expected).abs().max().item()
             # large tolerance to accomodate for large K (rounding due to half precision), we just want to catch bugs.
@@ -406,6 +400,18 @@ results.sort(key=lambda x: x["speedup"], reverse=False)
 with open("results.json", "w") as f:
     json.dump(results, f, indent=4)
 
+# for profiling:
+# (echo 'options nvidia "NVreg_RestrictProfilingToAdminUsers=0"') | sudo tee -a /etc/modprobe.d/RestrictedProfiling.conf >/dev/null
+# sudo update-initramfs -u -k all
+# cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly
+# sudo apt-get install zlib1g-dev
+
+# for reproductible experiments
+# sudo nvidia-smi -pm 1 -i 0
+# sudo nvidia-smi -i 0 -pl 350  # 400 for A100
+# sudo nvidia-smi -i 0 -lgc 1005
+
+# measures
 # 32760/32768 - average speedup: 0.971 (A100)
 # 990/1000 - average speedup: 1.060 (3090 RTX no while loop)
 # 990/1000 - average speedup: 1.053 (3090 RTX with while loop)
@@ -414,3 +420,4 @@ with open("results.json", "w") as f:
 
 # TODO: check if there are # SM which do not work, if there are heuristics easy to guess
 # TODO: compare with cutlass implementation
+# TODO: reproductible dead lock on full size stream k, when there are too few tiles
