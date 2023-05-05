@@ -389,7 +389,7 @@ for idx, (m, n, k) in enumerate(shapes):
     pytorch_ms = triton.testing.do_bench(lambda: A @ B)
     measures = list()
     for two_tiles in [True, False]:
-        nb_sm = [total_sm, total_sm * 2, total_sm * 3, total_sm * 4]
+        nb_sm = [0, total_sm, total_sm * 2, total_sm * 3, total_sm * 4]
         if total_tiles < max(nb_sm):
             nb_sm.append(total_tiles)
         # nb_sm += random.sample(range(2, total_sm * 2, 2), 10)
