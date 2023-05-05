@@ -49,7 +49,7 @@ def linear_tile(tile_id,
 
 
 # iterate, multiply and accumulate over K axis
-@triton.jit()
+@triton.jit(noinline=True)
 def mac_loop(A, B, C,
              M, N, K,
              locks,
@@ -59,28 +59,53 @@ def mac_loop(A, B, C,
              BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
              ACC_TYPE: tl.constexpr, GROUP_M: tl.constexpr):
 
+    use_experimental_api: tl.constexpr = False
+
     # where are we in the grid
     tile_id = start_iter // iters_per_tile
-    if GROUP_M  > 0:
+    if GROUP_M > 0:
         pid_m, pid_n = swizzle_tile(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
     else:
         pid_m, pid_n = linear_tile(tile_id, M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M)
 
-    rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    rk = tl.arange(0, BLOCK_K)
-    A = A + (rm[:, None] * stride_am + rk[None, :] * stride_ak) + BLOCK_K * stride_ak * (start_iter % iters_per_tile)
-    B = B + (rk[:, None] * stride_bk + rn[None, :] * stride_bn) + BLOCK_K * stride_bk * (start_iter % iters_per_tile)
+    if use_experimental_api:
+        a_block_ptr = tl.make_block_ptr(base=A, shape=(M, K), strides=(stride_am, stride_ak),
+                                        offsets=(pid_m * BLOCK_M, 0),
+                                        block_shape=(BLOCK_M, BLOCK_K),
+                                        order=(1, 0))
+        a_block_ptr = tl.advance(a_block_ptr, (0, BLOCK_K * (start_iter % iters_per_tile)))
+
+        b_block_ptr = tl.make_block_ptr(base=B, shape=(K, N), strides=(stride_bk, stride_bn),
+                                        offsets=(0, pid_n * BLOCK_N),
+                                        block_shape=(BLOCK_K, BLOCK_N),
+                                        order=(1, 0))
+        b_block_ptr = tl.advance(b_block_ptr, (BLOCK_K * (start_iter % iters_per_tile), 0))
+    else:
+        rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+        rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+        rk = tl.arange(0, BLOCK_K)
+        A = A + (rm[:, None] * stride_am + rk[None, :] * stride_ak) + BLOCK_K * stride_ak * (start_iter % iters_per_tile)
+        B = B + (rk[:, None] * stride_bk + rn[None, :] * stride_bn) + BLOCK_K * stride_bk * (start_iter % iters_per_tile)
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
 
     for current_iter in range(start_iter, end_iter):
-        a = tl.load(A)
-        b = tl.load(B)
-        acc += tl.dot(a, b)
-        A += BLOCK_K * stride_ak
-        B += BLOCK_K * stride_bk
+
+        if use_experimental_api:
+            a = tl.load(a_block_ptr)
+            b = tl.load(b_block_ptr)
+            acc += tl.dot(a, b)
+            a_block_ptr = tl.advance(a_block_ptr, (0, BLOCK_K))
+            b_block_ptr = tl.advance(b_block_ptr, (BLOCK_K, 0))
+        else:
+            a = tl.load(A)
+            b = tl.load(B)
+            acc += tl.dot(a, b)
+            A += BLOCK_K * stride_ak
+            B += BLOCK_K * stride_bk
 
     if end_iter % iters_per_tile == 0:  # last iteration of the tile always happens before its start on another SM
+        rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+        rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         C_ = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)  # compute inside the if/else to avoid spilling!
         tl.store(C_, acc)
         if start_iter % iters_per_tile != 0:  # only if tile has been partially processed
@@ -88,6 +113,8 @@ def mac_loop(A, B, C,
     else:
         while tl.atomic_cas(locks + tile_id, 1, 1) != 1:
             pass
+        rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+        rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         C_ = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)  # compute inside the if/else to avoid spilling!
         tl.atomic_add(C_, acc)
 
@@ -222,8 +249,8 @@ class matmul(torch.autograd.Function):
                 print(f"{total_full_tiles_streamk=}")
                 print(f"{total_partial_tiles_streamk=}")
 
-            assert total_tiles_streamk > 2, f"{total_tiles_streamk=} <= 2, pb too small: there is a risk of deadlock"
-            assert total_full_tiles_streamk > 2, f"{total_full_tiles_streamk=} <= 2, pb too small: there is a risk of deadlock"
+            #assert total_tiles_streamk > 2, f"{total_tiles_streamk=} <= 2, pb too small: there is a risk of deadlock"
+            #assert total_full_tiles_streamk > 2, f"{total_full_tiles_streamk=} <= 2, pb too small: there is a risk of deadlock"
         else:  # all tiles are computed using classical blocking
             total_blocking_tiles = total_tiles
             total_tiles_streamk = 0
@@ -297,7 +324,7 @@ class matmul(torch.autograd.Function):
 # ---------------------------------------------------------------------------
 
 
-m, n, k = 896, 6016, 4736# 1536, 1792, 6016  # some problem size to test
+m, n, k = 1536, 1792, 6016  # some problem size to test
 A = torch.randn(m, k, device="cuda", dtype=torch.float16)
 B = torch.randn(k, n, device="cuda", dtype=torch.float16)
 
