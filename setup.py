@@ -25,7 +25,7 @@ with pathlib.Path("requirements.txt").open() as f:
 
 setup(
     name="kernl",
-    version="0.2.2",
+    version="0.3.0",
     license="Apache License 2.0",
     license_files=("LICENSE",),
     classifiers=[
