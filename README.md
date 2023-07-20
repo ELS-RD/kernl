@@ -29,6 +29,7 @@ A list of Examples contains how to use kernl with Pytorch.
 | **XNLI classification**: classification with / without optimizations (`Roberta` + `XNLI` classification task) | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/bert%20e2e.ipynb)                |
 | **Text generation**: with/without optimizations (`T5`)                                                        | [link](https://github.com/ELS-RD/kernl/blob/main/tutorial/t5%20e2e.ipynb)                  |
 | **Transcription generation**: with/without optimizations (`Whisper`)                                          | [link](https://github.com/ELS-RD/kernl/blob/main/experimental/whisper/speedup.ipynb)       |
+| **Llama version 2 optimization by kernel fusion                                                               | [link](https://github.com/ELS-RD/kernl/blob/main/experimental/llama-v2)                    |
 
 ## Installation
 
