@@ -1,3 +1,18 @@
+# Kernl is now archived
+In May 2023, at OpenAI's request, we upstreamed the Triton debugger to the official Triton repository.  
+This made Kernl the origin of the first debugger for the Triton language.  
+The feature is now maintained by the Triton team and available to all kernel authors.
+We built Kernl to make GPU kernel development more accessible.  
+Seeing part of it become an official tool for the community is exactly the outcome we hoped for.
+
+🎉 Mission accomplished.
+
+<img width="3024" height="1440" alt="image" src="https://github.com/user-attachments/assets/cf0b48c8-da08-4922-aa16-e4a2d660590d" />
+
+
+> Philippe Tillet presenting at the first Triton conference. The "interpreter mode" mentioned here originated from Kernl and was upstreamed to Triton in May 2023.
+
+
 ![Kernl logo](./resources/images/logo-readme.svg)
 
 ---
