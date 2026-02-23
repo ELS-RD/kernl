@@ -41,7 +41,9 @@ implementations = {
     "pytorch": lambda weight, bias, activation: lambda x: get_pytorch_activation(activation)(
         torch.nn.functional.linear(x, weight, bias)
     ),
-    "triton": lambda weight, bias, activation: lambda x: linear_layer(x, weight, bias, activation),
+    "triton": lambda weight, bias, activation: lambda x: linear_layer(
+        x=x, weight=weight, bias=bias, activation=activation
+    ),
 }
 
 
