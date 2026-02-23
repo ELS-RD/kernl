@@ -403,13 +403,13 @@ class TritonLangProxy:
         raise NotImplementedError()
 
     @_tensor_operation
-    def dot(self, input, other, trans_a=False, trans_b=False, allow_tf32=True):
+    def dot(self, input, other):
         assert input.dtype == other.dtype
-        if trans_a:
-            input = input.T
-        if trans_b:
-            other = other.T
         return torch.matmul(input=input, other=other)
+    
+    @_tensor_operation
+    def trans(self, input):
+        return input.T
 
     @_tensor_operation
     def atomic_cas(self, pointer, cmp, val):
