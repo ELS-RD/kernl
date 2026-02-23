@@ -16,13 +16,13 @@
 # This source code is licensed under the BSD license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import triton
 import triton.language as tl
 from torch.autograd.function import FunctionCtx
-from torch.cuda.amp import custom_fwd
+from torch.cuda.amp import custom_bwd, custom_fwd
 from triton.ops.matmul_perf_model import early_config_prune, estimate_matmul_time
 
 from kernl.implementations import activation_func
@@ -210,6 +210,127 @@ def kernel_fma(
     tl.store(C, acc, mask=c_ptr_mask)
 
 
+@triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 64, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 256, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 32, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 32, "SPLIT_K": 1}, num_stages=5, num_warps=2),
+        # good for int8
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=3, num_warps=8),
+        triton.Config({"BLOCK_M": 256, "BLOCK_N": 64, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 256, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 128, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 32, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=4, num_warps=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 64, "SPLIT_K": 1}, num_stages=5, num_warps=2),
+    ]
+    + get_configs_io_bound(),
+    key=["CACHE_KEY_M", "CACHE_KEY_N", "CACHE_KEY_K"],
+    prune_configs_by={"early_config_prune": early_config_prune, "perf_model": estimate_matmul_time, "top_k": 10},
+)
+@triton.heuristics(
+    {
+        "K_LOAD_MASK_NEEDED": lambda args: args["K"] % (args["BLOCK_K"] * args["SPLIT_K"]) == 0,
+    }
+)
+@triton.jit
+def kernel_bwd(
+    C,  # Pointers to matrices
+    ACT_INPUT,
+    A,
+    B,
+    # Matrix dimensions
+    M,
+    N,
+    K,
+    CACHE_KEY_M,
+    CACHE_KEY_N,
+    CACHE_KEY_K,
+    # The stride variables represent how much to increase the ptr by when moving by 1
+    # element in a particular dimension. E.g. stride_am is how much to increase a_ptr
+    # by to get the element one row down (A has M rows)
+    output_m_stride,
+    output_n_stride,
+    a_m_stride,
+    a_k_stride,
+    w_n_stride,
+    w_k_stride,
+    # Meta-parameters
+    BLOCK_M: tl.constexpr,
+    GROUP_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+    # split k not used, not performant with activation, kept because early_config_prune is expecting it
+    SPLIT_K: tl.constexpr,
+    K_LOAD_MASK_NEEDED: tl.constexpr,
+    ACTIVATION: tl.constexpr,
+):
+    program_idx = tl.program_id(axis=0)
+
+    grid_m = (M + BLOCK_M - 1) // BLOCK_M
+    grid_n = (N + BLOCK_N - 1) // BLOCK_N
+    # re-order program ID for better L2 performance
+    width = GROUP_M * grid_n
+    group_idx = program_idx // width
+    group_size = min(grid_m - group_idx * GROUP_M, GROUP_M)
+    block_m_idx = group_idx * GROUP_M + (program_idx % group_size)
+    block_n_idx = (program_idx % width) // (group_size)
+
+    # now compute the block that each program will go through
+    # m_offs_untagged (resp. n_offs_untagged) denotes a range of indices
+    # for rows (resp. col) of C
+    m_offs_untagged = block_m_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+    n_offs_untagged = block_n_idx * BLOCK_N + tl.arange(0, BLOCK_N)
+
+    # trick to avoid masking on M and N axis
+    m_offs = tl.max_contiguous(tl.multiple_of(m_offs_untagged % M, BLOCK_M), BLOCK_M)
+    n_offs = tl.max_contiguous(tl.multiple_of(n_offs_untagged % N, BLOCK_N), BLOCK_N)
+    k_range_offs = tl.arange(0, BLOCK_K)
+
+    A = A + (m_offs[:, None] * a_m_stride + k_range_offs[None, :] * a_k_stride)
+    B = B + (k_range_offs[:, None] * w_k_stride + n_offs[None, :] * w_n_stride)
+
+    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+
+    for k in range(K, 0, -BLOCK_K):
+        if K_LOAD_MASK_NEEDED:
+            a = tl.load(A)
+            b = tl.load(B)
+        else:
+            a = tl.load(A, mask=k_range_offs[None, :] < k, other=0.0)
+            b = tl.load(B, mask=k_range_offs[:, None] < k, other=0.0)
+        acc += tl.dot(a, b)
+
+        A += BLOCK_K * a_k_stride
+        B += BLOCK_K * w_k_stride
+
+    # optional: fused activation (while the data is in shared memory)
+    if ACTIVATION != "":
+        act_in_ptrs = ACT_INPUT + m_offs[:, None] * output_m_stride + n_offs[None, :] * output_n_stride
+        act_input = tl.load(act_in_ptrs).to(acc.dtype)
+    if ACTIVATION == "tanh":
+        acc *= activation_func.tanh_grad(act_input)
+    if ACTIVATION == "gelu":
+        acc *= activation_func.gelu_grad(act_input)
+    if ACTIVATION == "fast_gelu":
+        acc *= activation_func.fast_gelu_grad(act_input)
+    if ACTIVATION == "relu":
+        acc *= activation_func.relu_grad(act_input)
+
+    # write back result
+    C = C + m_offs_untagged[:, None] * output_m_stride + n_offs_untagged[None, :] * output_n_stride
+    mask = (m_offs_untagged < M)[:, None] & (n_offs_untagged < N)[None, :]
+    tl.store(C, acc, mask=mask)
+
+
 class LinearLayer(torch.autograd.Function):
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
@@ -243,6 +364,7 @@ class LinearLayer(torch.autograd.Function):
         assert bias is None or bias.shape[0] == weight.shape[0], "Incompatible dimensions in between weight and bias"
         assert weight.is_contiguous()
 
+        ctx.activation = activation
         M, K = x_.shape
         N, K = weight.shape
 
@@ -280,6 +402,70 @@ class LinearLayer(torch.autograd.Function):
         outputs = outputs if x.ndim == 2 else outputs.reshape(x.shape[0], -1, N)
         ctx.save_for_backward(weight, bias, x)
         return outputs
+
+    @staticmethod
+    @custom_bwd
+    def backward(
+        ctx: FunctionCtx,
+        *grad_outputs: Any,
+    ) -> torch.Tensor:
+        """
+        Compute e = activation(grad_output @ weight + bias).
+        This wrapper kicks the `kernel_fwd` Triton kernel
+        :param ctx: context for autograd
+        :param grad_outputs: input tensor
+        :return: result tensor
+        """
+        weight, bias, act_inputs = ctx.saved_tensors
+        grad_outputs = grad_outputs[0]
+        batch_shape, n = grad_outputs.shape[:-1], grad_outputs.shape[-1]
+        batch_dim = batch_shape.numel()
+        grad_output_reshaped = grad_outputs.reshape(batch_dim, n)
+
+        if grad_output_reshaped.stride(0) > 1 and grad_output_reshaped.stride(1) > 1:
+            grad_output_reshaped = grad_output_reshaped.contiguous()
+        if weight.stride(0) > 1 and weight.stride(1) > 1:
+            weight = weight.contiguous()
+
+        assert (
+            grad_outputs.dtype == weight.dtype
+        ), f"grad_output and weight must have the same dtype, got {grad_outputs.dtype} and {weight.dtype}"
+        assert (
+            grad_output_reshaped.shape[1] == weight.shape[0]
+        ), f"Incompatible dimensions: {grad_output_reshaped.shape} - {weight.shape}"
+        if ctx.activation != "id":
+            assert act_inputs is not None, f"act_input is required for activation {ctx.activation}"
+
+        # M, N, K in bwd are different from M, N, K in fwd
+        M, K = grad_output_reshaped.shape
+        K, N = weight.shape
+
+        grad_input = torch.empty((M, N), device=grad_outputs.device, dtype=grad_outputs.dtype)
+
+        # 1D launch kernel where each block gets its own program.
+        grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)  # noqa
+
+        kernel_bwd[grid](
+            grad_input,
+            act_inputs,
+            grad_output_reshaped,
+            weight,  # data ptrs
+            M,  # shapes
+            N,
+            K,
+            M // 32,  # key for triton cache (limit number of compilations)
+            N // 32,
+            K // 32,
+            output_m_stride=grad_input.stride(0),  # strides
+            output_n_stride=grad_input.stride(1),
+            a_m_stride=grad_output_reshaped.stride(0),
+            a_k_stride=grad_output_reshaped.stride(1),
+            w_n_stride=weight.stride(1),
+            w_k_stride=weight.stride(0),
+            ACTIVATION=ctx.activation,  # optional fused activation
+            GROUP_M=8,  # speed optimization: group the programs
+        )
+        return grad_input.reshape(*batch_shape, grad_input.shape[-1]), None, None, None, None
 
 
 def linear_layer(
