@@ -17,11 +17,13 @@ import torch
 import triton
 import triton.language as tl
 
+from kernl.autotune import autotune
+
 
 # CREDITS: Initially inspired by the Triton tutorial
 
 
-@triton.autotune(
+@autotune(
     configs=[
         triton.Config(
             {"BLOCK_M_SIZE": 128, "BLOCK_N_SIZE": 256, "BLOCK_K_SIZE": 32, "GROUP_M_SIZE": 8}, num_stages=2, num_warps=8
@@ -55,8 +57,24 @@ import triton.language as tl
         ),
     ],
     key=["m_size", "n_size", "k_size"],
+    signature={
+        0: "*fp32",
+        1: "*fp32",
+        2: "*fp32",
+        3: "i32",
+        4: "i32",
+        5: "i32",
+        6: "i32",
+        7: "i32",
+        8: "i32",
+        9: "i32",
+        10: "i32",
+        11: "i32",
+        12: "i32",
+        13: "i32",
+        14: "i32",
+    }
 )
-@triton.jit
 def matmul_kernel(
     # Pointers to matrices
     a_ptr,
