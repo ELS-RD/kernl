@@ -1,5 +1,12 @@
 import './chart.4.0.1.js';
-import {data} from './charts-data.js';
+import {fetchData, buildDefaultData} from './charts-data-loader.js';
+
+// urls
+// prod     : https://www.kernl.ai/javascripts/benchmark.json
+// preview  : http://localhost:8000/kernl/javascripts/benchmark.json
+// static   : http://localhost:63342/kernl/site/javascripts/benchmark.json
+const url = 'https://www.kernl.ai/javascripts/benchmark.json';
+const data = await fetchData(url) || buildDefaultData();
 
 const font = {
     family: 'Poppins',
